@@ -1,0 +1,36 @@
+# Issue 07 — `RestycHandler` — Offline Queue Path
+
+## Summary
+
+Implement the offline branch inside `RestycHandler`: when the device has no connectivity, serialise the request into the local store, publish `OnQueued`, and return a synthetic "queued" response to the caller.
+
+## Background
+
+When `IConnectivityService.IsConnected` is `false`, Restyc must not drop the request. Instead, the envelope is persisted to the outbox so the sync flush (issue #11) can replay it when connectivity returns.
+
+## Behaviour (Offline Path)
+
+1. `RestycHandler.SendAsync` checks `IConnectivityService.IsConnected`.
+2. If **offline**:
+   - Create an `Envelope` via `Envelope.ForRequest(request)`.
+   - Persist it to `ISyncStore` with `IsSynced = false`.
+   - Publish `OnQueued` via `SyncEventStream`.
+   - Return a synthetic `HttpResponseMessage` to the caller (e.g. `503 Service Unavailable` with a `X-Restyc-Status: Queued` header), so the calling code does not throw an unhandled exception.
+3. For **read requests** (GET/HEAD/OPTIONS) while offline:
+   - Check the cache first; if a response exists (even if stale), return it.
+   - If no cache entry exists, return the synthetic queued/unavailable response.
+   - Read requests are **not** added to the outbox.
+
+## Acceptance Criteria
+
+- [ ] Offline write path persists the envelope and publishes `OnQueued`.
+- [ ] Offline read path serves from cache when available.
+- [ ] Synthetic response returned for offline writes (caller does not throw on the handler level).
+- [ ] Offline read with no cache returns a distinct synthetic `HttpResponseMessage` (e.g. `503` with `X-Restyc-Status: Offline`).
+- [ ] Unit tests use `InMemorySyncStore` and a mock `IConnectivityService` (online = false).
+- [ ] Tests cover: offline write added to outbox, offline GET with cached response returns cache, offline GET without cache returns 503, `OnQueued` event published.
+
+## Notes
+
+- The exact HTTP status code and headers for synthetic responses should be decided consistently (consider a `RestycResponseFactory` internal helper).
+- Callers are expected to inspect the `X-Restyc-Status` header if they want to know whether a response came from the queue or the network.

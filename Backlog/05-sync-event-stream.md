@@ -1,0 +1,37 @@
+# Issue 05 — `SyncEventStream` — Hand-Rolled `IObservable<SyncEvent>`
+
+## Summary
+
+Implement `SyncEventStream`, Restyc's internal reactive event publisher, without taking a dependency on `System.Reactive`.
+
+## Background
+
+Restyc exposes sync lifecycle events as `IObservable<SyncEvent>`. The `IObservable<T>` interface is part of the BCL (`System`), so no third-party package is required for production. A minimal hand-rolled subject is sufficient; consumers who want Rx operators (`.Where()`, `.Throttle()`, etc.) add `System.Reactive` themselves.
+
+Plain .NET events are not exposed — `IObservable<T>` is strictly more capable and consumers can achieve event-style consumption with a one-line `.Subscribe(...)` call.
+
+## Event Types
+
+| `SyncEventType` | Trigger |
+|---|---|
+| `OnQueued` | Request persisted to outbox (offline) |
+| `OnRetrying` | Retry attempt initiated |
+| `OnSynced` | Outbound request successfully delivered |
+| `OnFailed` | Request moved to dead-letter after max retries |
+| `OnUpdated` | Cached response refreshed from API |
+
+## Acceptance Criteria
+
+- [ ] `SyncEventStream` class implemented in `src/Restyc` with no dependency on `System.Reactive`.
+- [ ] Implements a minimal subject: observers can subscribe, receive events, and unsubscribe.
+- [ ] Thread-safe: multiple subscribers receiving events concurrently do not corrupt state.
+- [ ] Subscriptions return an `IDisposable` that removes the subscriber on `Dispose()`.
+- [ ] `SyncEventStream.Publish(SyncEvent)` is internal; only `RestycHandler` and the sync orchestrator call it.
+- [ ] `IRestyc.SyncEvents` exposes the `IObservable<SyncEvent>` publicly (read-only projection).
+- [ ] A `OnCompleted` is called on all subscribers when the stream is disposed.
+- [ ] Unit tests cover: subscribe/receive, unsubscribe, multi-subscriber fan-out, dispose behaviour.
+
+## Notes
+
+- Exceptions inside a subscriber's `OnNext` must not propagate to other subscribers or crash the pipeline.
+- Errors in the stream itself call `OnError` on all current subscribers.
