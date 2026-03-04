@@ -76,8 +76,8 @@ public interface IRestyc
 
 ## Acceptance Criteria
 
-- [ ] All interfaces above are defined in `src/Restyc` with correct namespacing.
-- [ ] Supporting types (`CacheStrategy`, `RetryOptions`, `SyncEvent`, `SyncEventType`) are defined.
-- [ ] All types are documented with XML `<summary>` comments.
-- [ ] No concrete implementations in this issue — interfaces and value types only.
-- [ ] Unit tests are not required here, but public API should be reviewed for ergonomic .NET naming conventions.
+- [x] All interfaces above are defined in `src/Restyc` with correct namespacing.
+- [x] Supporting types (`CacheStrategy`, `RetryOptions`, `SyncEvent`, `SyncEventType`) are defined.
+- [x] All types are documented with XML `<summary>` comments.
+- [x] No concrete implementations in this issue — interfaces and value types only.
+- [x] Unit tests are not required here, but public API should be reviewed for ergonomic .NET naming conventions.
