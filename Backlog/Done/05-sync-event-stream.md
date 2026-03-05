@@ -22,14 +22,14 @@ Plain .NET events are not exposed — `IObservable<T>` is strictly more capable 
 
 ## Acceptance Criteria
 
-- [ ] `SyncEventStream` class implemented in `src/Restyc` with no dependency on `System.Reactive`.
-- [ ] Implements a minimal subject: observers can subscribe, receive events, and unsubscribe.
-- [ ] Thread-safe: multiple subscribers receiving events concurrently do not corrupt state.
-- [ ] Subscriptions return an `IDisposable` that removes the subscriber on `Dispose()`.
-- [ ] `SyncEventStream.Publish(SyncEvent)` is internal; only `RestycHandler` and the sync orchestrator call it.
-- [ ] `IRestyc.SyncEvents` exposes the `IObservable<SyncEvent>` publicly (read-only projection).
-- [ ] A `OnCompleted` is called on all subscribers when the stream is disposed.
-- [ ] Unit tests cover: subscribe/receive, unsubscribe, multi-subscriber fan-out, dispose behaviour.
+- [x] `SyncEventStream` class implemented in `src/Restyc` with no dependency on `System.Reactive`.
+- [x] Implements a minimal subject: observers can subscribe, receive events, and unsubscribe.
+- [x] Thread-safe: multiple subscribers receiving events concurrently do not corrupt state.
+- [x] Subscriptions return an `IDisposable` that removes the subscriber on `Dispose()`.
+- [x] `SyncEventStream.Publish(SyncEvent)` is internal; only `RestycHandler` and the sync orchestrator call it.
+- [x] `IRestyc.SyncEvents` exposes the `IObservable<SyncEvent>` publicly (read-only projection).
+- [x] A `OnCompleted` is called on all subscribers when the stream is disposed.
+- [x] Unit tests cover: subscribe/receive, unsubscribe, multi-subscriber fan-out, dispose behaviour.
 
 ## Notes
 
