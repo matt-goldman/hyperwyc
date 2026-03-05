@@ -27,12 +27,12 @@ Implement the online path inside `RestycHandler`: when the device is connected, 
 
 ## Acceptance Criteria
 
-- [ ] `RestycHandler` class scaffolded in `src/Restyc`; constructor accepts `ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`, `SyncEventStream`, and `RestycOptions`.
-- [ ] Online write path implemented as described.
-- [ ] Online read path delegates to response cache (stubs acceptable; full logic in issue #09).
-- [ ] Handler correctly calls `base.SendAsync` and returns the `HttpResponseMessage` to the caller.
-- [ ] Unit tests use `InMemorySyncStore` and a mock `IConnectivityService` (online = true).
-- [ ] Tests cover: 2xx write triggers invalidation, non-2xx write does not invalidate, GET with fresh cache skips network call.
+- [x] `RestycHandler` class scaffolded in `src/Restyc`; constructor accepts `ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`, `SyncEventStream`, and `RestycOptions`.
+- [x] Online write path implemented as described.
+- [x] Online read path delegates to response cache (stubs acceptable; full logic in issue #09).
+- [x] Handler correctly calls `base.SendAsync` and returns the `HttpResponseMessage` to the caller.
+- [x] Unit tests use `InMemorySyncStore` and a mock `IConnectivityService` (online = true).
+- [x] Tests cover: 2xx write triggers invalidation, non-2xx write does not invalidate, GET with fresh cache skips network call.
 
 ## Notes
 
