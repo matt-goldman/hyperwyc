@@ -44,6 +44,7 @@ public class RestycHandlerOnlinePathTests
             Body = body,
             CachedAt = DateTimeOffset.UtcNow,
         };
+        envelope.IsSynced = true; // cached responses are already synced
         return envelope;
     }
 

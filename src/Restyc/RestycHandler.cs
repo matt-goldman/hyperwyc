@@ -62,8 +62,50 @@ public sealed class RestycHandler : DelegatingHandler
         if (_connectivity.IsConnected)
             return HandleOnlineAsync(request, cancellationToken);
 
-        // Offline path — issue #07
-        throw new NotSupportedException("Offline path not yet implemented (see issue #07).");
+        return HandleOfflineAsync(request, cancellationToken);
+    }
+
+    // -------------------------------------------------------------------------
+    // Offline paths
+    // -------------------------------------------------------------------------
+
+    private Task<HttpResponseMessage> HandleOfflineAsync(HttpRequestMessage request, CancellationToken ct) =>
+        WriteMethods.Contains(request.Method)
+            ? HandleOfflineWriteAsync(request, ct)
+            : HandleOfflineReadAsync(request, ct);
+
+    private async Task<HttpResponseMessage> HandleOfflineWriteAsync(
+        HttpRequestMessage request,
+        CancellationToken ct)
+    {
+        // Buffer content before the synchronous read inside Envelope.ForRequest.
+        if (request.Content is not null)
+            await request.Content.LoadIntoBufferAsync().ConfigureAwait(false);
+
+        var envelope = Envelope.ForRequest(request);
+        await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
+
+        _events.Publish(new SyncEvent(
+            SyncEventType.OnQueued,
+            request.RequestUri?.ToString() ?? string.Empty,
+            request.Method.Method,
+            DateTimeOffset.UtcNow));
+
+        return RestycResponseFactory.Queued();
+    }
+
+    private async Task<HttpResponseMessage> HandleOfflineReadAsync(
+        HttpRequestMessage request,
+        CancellationToken ct)
+    {
+        var url = request.RequestUri?.ToString() ?? string.Empty;
+
+        // Serve from cache even if stale — any cached data is better than nothing offline.
+        var cached = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
+        if (cached is not null)
+            return BuildResponseFromEnvelope(cached);
+
+        return RestycResponseFactory.Offline();
     }
 
     // -------------------------------------------------------------------------

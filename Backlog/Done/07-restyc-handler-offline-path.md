@@ -23,12 +23,12 @@ When `IConnectivityService.IsConnected` is `false`, Restyc must not drop the req
 
 ## Acceptance Criteria
 
-- [ ] Offline write path persists the envelope and publishes `OnQueued`.
-- [ ] Offline read path serves from cache when available.
-- [ ] Synthetic response returned for offline writes (caller does not throw on the handler level).
-- [ ] Offline read with no cache returns a distinct synthetic `HttpResponseMessage` (e.g. `503` with `X-Restyc-Status: Offline`).
-- [ ] Unit tests use `InMemorySyncStore` and a mock `IConnectivityService` (online = false).
-- [ ] Tests cover: offline write added to outbox, offline GET with cached response returns cache, offline GET without cache returns 503, `OnQueued` event published.
+- [x] Offline write path persists the envelope and publishes `OnQueued`.
+- [x] Offline read path serves from cache when available.
+- [x] Synthetic response returned for offline writes (caller does not throw on the handler level).
+- [x] Offline read with no cache returns a distinct synthetic `HttpResponseMessage` (e.g. `503` with `X-Restyc-Status: Offline`).
+- [x] Unit tests use `InMemorySyncStore` and a mock `IConnectivityService` (online = false).
+- [x] Tests cover: offline write added to outbox, offline GET with cached response returns cache, offline GET without cache returns 503, `OnQueued` event published.
 
 ## Notes
 
