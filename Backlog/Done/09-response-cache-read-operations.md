@@ -35,13 +35,13 @@ Provide a `TtlStalenessEvaluator` default implementation that uses `CachedRespon
 
 ## Acceptance Criteria
 
-- [ ] `TtlStalenessEvaluator : IStalenessEvaluator` implemented in `src/Restyc`.
-- [ ] Cache-hit path (fresh): network call not made, cached `HttpResponseMessage` returned.
-- [ ] Cache-hit path (stale): network call made, cache entry updated, `OnUpdated` published.
-- [ ] Cache-miss path: network call made, entry stored, `OnUpdated` published.
-- [ ] Non-2xx response not cached.
-- [ ] Write requests bypass this logic entirely.
-- [ ] Unit tests cover all four paths above.
+- [x] `TtlStalenessEvaluator : IStalenessEvaluator` implemented in `src/Restyc`.
+- [x] Cache-hit path (fresh): network call not made, cached `HttpResponseMessage` returned.
+- [x] Cache-hit path (stale): network call made, cache entry updated, `OnUpdated` published.
+- [x] Cache-miss path: network call made, entry stored, `OnUpdated` published.
+- [x] Non-2xx response not cached.
+- [x] Write requests bypass this logic entirely.
+- [x] Unit tests cover all four paths above.
 
 ## Notes
 

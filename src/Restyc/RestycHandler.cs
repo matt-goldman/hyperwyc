@@ -30,6 +30,7 @@ public sealed class RestycHandler : DelegatingHandler
     private readonly ISyncPolicy _policy;
     private readonly IStalenessEvaluator _stalenessEvaluator;
     private readonly SyncEventStream _events;
+    private readonly RestycOptions _options;
 
     /// <summary>
     /// Initialises a new <see cref="RestycHandler"/>.
@@ -54,6 +55,7 @@ public sealed class RestycHandler : DelegatingHandler
         _policy = policy;
         _stalenessEvaluator = stalenessEvaluator;
         _events = events;
+        _options = options;
     }
 
     /// <inheritdoc/>
@@ -160,11 +162,15 @@ public sealed class RestycHandler : DelegatingHandler
             if (response.Content is not null)
                 await response.Content.LoadIntoBufferAsync().ConfigureAwait(false);
 
-            var envelope = Envelope.ForCachedResponse(request, response);
-            await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
+            var bodyLength = response.Content?.Headers.ContentLength ?? 0;
+            if (bodyLength <= _options.MaxCachedResponseBodyBytes)
+            {
+                var envelope = Envelope.ForCachedResponse(request, response);
+                await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
 
-            _events.Publish(new SyncEvent(
-                SyncEventType.OnUpdated, url, request.Method.Method, DateTimeOffset.UtcNow));
+                _events.Publish(new SyncEvent(
+                    SyncEventType.OnUpdated, url, request.Method.Method, DateTimeOffset.UtcNow));
+            }
         }
 
         return response;
@@ -181,6 +187,12 @@ public sealed class RestycHandler : DelegatingHandler
 
         if (cached.Body is not null)
             response.Content = new StringContent(cached.Body);
+
+        foreach (var (key, value) in cached.Headers)
+        {
+            if (!response.Headers.TryAddWithoutValidation(key, value))
+                response.Content?.Headers.TryAddWithoutValidation(key, value);
+        }
 
         return response;
     }
