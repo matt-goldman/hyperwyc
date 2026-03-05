@@ -10,9 +10,9 @@ The `Restyc` core package ships without any file-based or database dependency. `
 
 ## Acceptance Criteria
 
-- [ ] `InMemorySyncStore : ISyncStore` implemented in `src/Restyc`.
-- [ ] Thread-safe; uses `SemaphoreSlim` or `ConcurrentDictionary` appropriately.
-- [ ] Implements all `ISyncStore` methods:
+- [x] `InMemorySyncStore : ISyncStore` implemented in `src/Restyc`.
+- [x] Thread-safe; uses `SemaphoreSlim` or `ConcurrentDictionary` appropriately.
+- [x] Implements all `ISyncStore` methods:
   - `GetCachedResponseAsync` — returns the envelope for a URL only if it has a `Response` and is not dead-lettered.
   - `GetPendingOutboxAsync` — returns envelopes with `IsSynced = false` and `IsDeadLettered = false`, ordered by `CreatedUtc`.
   - `GetDueForRetryAsync` — returns pending envelopes whose `NextRetryUtc <= now`.
@@ -21,7 +21,7 @@ The `Restyc` core package ships without any file-based or database dependency. `
   - `MoveToDeadLetterAsync` — sets `IsDeadLettered = true`.
   - `InvalidateCacheForPrefixAsync` — removes `Response` from any envelope whose `Url` starts with the given prefix.
   - `ResetAsync` — clears all envelopes.
-- [ ] Unit tests cover all methods including edge cases (empty store, missing ID, prefix matching).
+- [x] Unit tests cover all methods including edge cases (empty store, missing ID, prefix matching).
 
 ## Notes
 
