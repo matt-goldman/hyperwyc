@@ -96,7 +96,7 @@ public sealed class RestycHandler : DelegatingHandler
             request.Method.Method,
             DateTimeOffset.UtcNow));
 
-        return RestycResponseFactory.Queued();
+        return RestycResponseFactory.Queued(_options.OfflineResponsePolicy);
     }
 
     private async Task<HttpResponseMessage> HandleOfflineReadAsync(
@@ -110,7 +110,7 @@ public sealed class RestycHandler : DelegatingHandler
         if (cached is not null)
             return BuildResponseFromEnvelope(cached);
 
-        return RestycResponseFactory.Offline();
+        return RestycResponseFactory.Offline(_options.OfflineResponsePolicy);
     }
 
     // -------------------------------------------------------------------------

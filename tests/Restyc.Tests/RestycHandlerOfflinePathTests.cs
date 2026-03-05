@@ -14,7 +14,8 @@ public class RestycHandlerOfflinePathTests
 
     private static RestycHandler BuildOfflineHandler(
         InMemorySyncStore store,
-        SyncEventStream? events = null)
+        SyncEventStream? events = null,
+        RestycOptions? options = null)
     {
         var handler = new RestycHandler(
             store,
@@ -22,7 +23,7 @@ public class RestycHandlerOfflinePathTests
             new FakeSyncPolicy(),
             new FakeStalenessEvaluator(),
             events ?? new SyncEventStream(),
-            new RestycOptions())
+            options ?? new RestycOptions())
         {
             // Inner handler should never be reached when offline.
             InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)),
@@ -95,6 +96,20 @@ public class RestycHandlerOfflinePathTests
     {
         var store = new InMemorySyncStore();
         using var client = new HttpClient(BuildOfflineHandler(store));
+
+        var response = await client.PostAsync("https://example.com/api/orders", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.TryGetValues(RestycResponseFactory.StatusHeader, out var values));
+        Assert.Equal("Queued", values!.First());
+    }
+
+    [Fact]
+    public async Task OfflineWrite_SignalPolicy_Returns503()
+    {
+        var store = new InMemorySyncStore();
+        var options = new RestycOptions { OfflineResponsePolicy = OfflineResponsePolicy.Signal };
+        using var client = new HttpClient(BuildOfflineHandler(store, options: options));
 
         var response = await client.PostAsync("https://example.com/api/orders", content: null);
 
@@ -204,6 +219,20 @@ public class RestycHandlerOfflinePathTests
     {
         var store = new InMemorySyncStore();
         using var client = new HttpClient(BuildOfflineHandler(store));
+
+        var response = await client.GetAsync("https://example.com/api/items");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.TryGetValues(RestycResponseFactory.StatusHeader, out var values));
+        Assert.Equal("Offline", values!.First());
+    }
+
+    [Fact]
+    public async Task OfflineRead_NoCacheAvailable_SignalPolicy_Returns503()
+    {
+        var store = new InMemorySyncStore();
+        var options = new RestycOptions { OfflineResponsePolicy = OfflineResponsePolicy.Signal };
+        using var client = new HttpClient(BuildOfflineHandler(store, options: options));
 
         var response = await client.GetAsync("https://example.com/api/items");
 

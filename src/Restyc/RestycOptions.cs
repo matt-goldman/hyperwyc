@@ -59,6 +59,15 @@ public sealed class RestycOptions
     public TimeSpan DefaultCacheTtl { get; set; } = TimeSpan.FromMinutes(5);
 
     /// <summary>
+    /// Controls the HTTP status code returned by Restyc when it handles a
+    /// request offline.  Defaults to <see cref="OfflineResponsePolicy.Transparent"/>
+    /// (200 OK) so app code never needs to branch on connectivity status —
+    /// matching the Service Worker pattern used in progressive web apps.
+    /// </summary>
+    public OfflineResponsePolicy OfflineResponsePolicy { get; set; } =
+        OfflineResponsePolicy.Transparent;
+
+    /// <summary>
     /// Maximum response body size (in bytes) that will be written to the cache.
     /// Responses larger than this are returned to the caller but not stored.
     /// Defaults to 524 288 bytes (512 KB).
