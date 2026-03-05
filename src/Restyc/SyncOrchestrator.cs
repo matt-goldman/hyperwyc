@@ -1,3 +1,5 @@
+using Polly;
+using Polly.Retry;
 using Restyc.Interfaces;
 using Restyc.Models;
 
@@ -18,7 +20,7 @@ public sealed class SyncOrchestrator : IAsyncDisposable
     private const string IdempotencyKeyHeader = "Idempotency-Key";
 
     private readonly ISyncStore _store;
-    private readonly ISyncPolicy _policy;
+    private readonly Interfaces.ISyncPolicy _policy;
     private readonly IConnectivityService _connectivity;
     private readonly SyncEventStream _events;
     private readonly RestycOptions _options;
@@ -44,7 +46,7 @@ public sealed class SyncOrchestrator : IAsyncDisposable
     /// </param>
     public SyncOrchestrator(
         ISyncStore store,
-        ISyncPolicy policy,
+        Interfaces.ISyncPolicy policy,
         IConnectivityService connectivity,
         SyncEventStream events,
         RestycOptions options,
@@ -102,63 +104,48 @@ public sealed class SyncOrchestrator : IAsyncDisposable
     }
 
     // -------------------------------------------------------------------------
-    // Send + retry loop
+    // Send + Polly retry pipeline
     // -------------------------------------------------------------------------
 
     private async Task SendWithRetryAsync(Envelope envelope, CancellationToken ct)
     {
-        // Determine retry configuration from the policy using a representative request.
+        // Determine retry configuration from the policy once per envelope.
         var probeRequest = BuildRequest(envelope);
         var retryOptions = _policy.GetRetryOptions(probeRequest);
         probeRequest.Dispose();
 
-        bool succeeded = false;
+        var pipeline = BuildRetryPipeline(retryOptions, envelope);
 
-        for (int attempt = 0; attempt <= retryOptions.MaxRetries; attempt++)
+        HttpResponseMessage? finalResponse = null;
+        try
         {
-            if (attempt > 0)
+            finalResponse = await pipeline.ExecuteAsync(async token =>
             {
-                _events.Publish(new SyncEvent(
-                    SyncEventType.OnRetrying,
-                    envelope.Url,
-                    envelope.Method,
-                    DateTimeOffset.UtcNow));
-
-                var delay = retryOptions.InitialDelay.TotalMilliseconds
-                    * Math.Pow(retryOptions.BackoffMultiplier, attempt - 1);
-                await Task.Delay(TimeSpan.FromMilliseconds(delay), ct).ConfigureAwait(false);
-            }
-
-            var request = BuildRequest(envelope);
-            try
-            {
-                var response = await _invoker.SendAsync(request, ct).ConfigureAwait(false);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    await _store.MarkSyncedAsync(envelope.Id, ct).ConfigureAwait(false);
-
-                    _events.Publish(new SyncEvent(
-                        SyncEventType.OnSynced,
-                        envelope.Url,
-                        envelope.Method,
-                        DateTimeOffset.UtcNow));
-
-                    if (_policy.ShouldInvalidateCacheOnWrite(request))
-                    {
-                        var prefix = RestycHandler.DeriveInvalidationPrefix(request.RequestUri);
-                        await _store.InvalidateCacheForPrefixAsync(prefix, ct).ConfigureAwait(false);
-                    }
-
-                    succeeded = true;
-                    break;
-                }
-            }
-            catch (HttpRequestException) { /* transient — retry */ }
-            catch (TaskCanceledException) when (!ct.IsCancellationRequested) { /* timeout — retry */ }
+                var request = BuildRequest(envelope);
+                return await _invoker.SendAsync(request, token).ConfigureAwait(false);
+            }, ct).ConfigureAwait(false);
         }
+        catch (HttpRequestException) { /* all retries exhausted on exception */ }
 
-        if (!succeeded)
+        if (finalResponse?.IsSuccessStatusCode == true)
+        {
+            await _store.MarkSyncedAsync(envelope.Id, ct).ConfigureAwait(false);
+
+            _events.Publish(new SyncEvent(
+                SyncEventType.OnSynced,
+                envelope.Url,
+                envelope.Method,
+                DateTimeOffset.UtcNow));
+
+            var lastRequest = BuildRequest(envelope);
+            if (_policy.ShouldInvalidateCacheOnWrite(lastRequest))
+            {
+                var prefix = RestycHandler.DeriveInvalidationPrefix(lastRequest.RequestUri);
+                await _store.InvalidateCacheForPrefixAsync(prefix, ct).ConfigureAwait(false);
+            }
+            lastRequest.Dispose();
+        }
+        else
         {
             await _store.MoveToDeadLetterAsync(envelope.Id, ct).ConfigureAwait(false);
 
@@ -168,6 +155,41 @@ public sealed class SyncOrchestrator : IAsyncDisposable
                 envelope.Method,
                 DateTimeOffset.UtcNow));
         }
+    }
+
+    private ResiliencePipeline<HttpResponseMessage> BuildRetryPipeline(
+        RetryOptions retryOptions,
+        Envelope envelope)
+    {
+        var builder = new ResiliencePipelineBuilder<HttpResponseMessage>();
+
+        // Polly requires MaxRetryAttempts >= 1; skip when no retries are configured.
+        if (retryOptions.MaxRetries >= 1)
+        {
+            builder.AddRetry(new RetryStrategyOptions<HttpResponseMessage>
+            {
+                MaxRetryAttempts = retryOptions.MaxRetries,
+                BackoffType = DelayBackoffType.Exponential,
+                UseJitter = true,
+                Delay = retryOptions.InitialDelay > TimeSpan.Zero
+                    ? retryOptions.InitialDelay
+                    : TimeSpan.FromMilliseconds(1),
+                ShouldHandle = new PredicateBuilder<HttpResponseMessage>()
+                    .Handle<HttpRequestException>()
+                    .HandleResult(r => !r.IsSuccessStatusCode),
+                OnRetry = args =>
+                {
+                    _events.Publish(new SyncEvent(
+                        SyncEventType.OnRetrying,
+                        envelope.Url,
+                        envelope.Method,
+                        DateTimeOffset.UtcNow));
+                    return default;
+                },
+            });
+        }
+
+        return builder.Build();
     }
 
     // -------------------------------------------------------------------------

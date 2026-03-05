@@ -27,15 +27,17 @@ A request can fail even when the device is technically "online" — captive port
 
 ## Acceptance Criteria
 
-- [ ] Polly retry pipeline configured in `src/Restyc` (add `Polly` NuGet dependency).
-- [ ] `RetryOptions` from `ISyncPolicy.GetRetryOptions` applied per-request.
-- [ ] `OnRetrying` published before each attempt.
-- [ ] After max retries: `MoveToDeadLetterAsync` called, `OnFailed` published.
-- [ ] Jitter applied to backoff intervals.
-- [ ] Dead-lettered envelopes are not re-enqueued on next flush.
-- [ ] Unit tests cover: success on retry N, exhaustion → dead-letter, `OnFailed` event, custom retry options.
+- [x] Polly retry pipeline configured in `src/Restyc` (add `Polly` NuGet dependency).
+- [x] `RetryOptions` from `ISyncPolicy.GetRetryOptions` applied per-request.
+- [x] `OnRetrying` published before each attempt.
+- [x] After max retries: `MoveToDeadLetterAsync` called, `OnFailed` published.
+- [x] Jitter applied to backoff intervals.
+- [x] Dead-lettered envelopes are not re-enqueued on next flush.
+- [x] Unit tests cover: success on retry N, exhaustion → dead-letter, `OnFailed` event, custom retry options.
 
 ## Notes
 
 - Consider using `Polly.Extensions.Http` or the `Polly` v8 `ResiliencePipeline` API.
 - The retry policy wraps the HTTP send step inside the flush orchestrator (issue #11), not `RestycHandler` directly.
+- Polly v8 `DelayBackoffType.Exponential` with `UseJitter = true` implements `DecorrelatedJitterBackoffV2` internally.
+- Polly requires `MaxRetryAttempts >= 1`; when `RetryOptions.MaxRetries = 0` the retry strategy is omitted and the request is attempted once with no retries.
