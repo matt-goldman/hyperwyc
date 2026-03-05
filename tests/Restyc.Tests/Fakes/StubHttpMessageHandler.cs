@@ -6,17 +6,21 @@ namespace Restyc.Tests.Fakes;
 /// </summary>
 internal sealed class StubHttpMessageHandler : HttpMessageHandler
 {
-    private readonly Func<HttpRequestMessage, HttpResponseMessage> _factory;
+    private readonly Func<HttpRequestMessage, Task<HttpResponseMessage>> _factory;
 
     public int CallCount { get; private set; }
     public HttpRequestMessage? LastRequest { get; private set; }
 
     /// <summary>Returns <paramref name="response"/> for every request.</summary>
     public StubHttpMessageHandler(HttpResponseMessage response)
-        : this(_ => response) { }
+        : this(_ => Task.FromResult(response)) { }
 
-    /// <summary>Delegates each call to <paramref name="factory"/>.</summary>
+    /// <summary>Delegates each call to the synchronous <paramref name="factory"/>.</summary>
     public StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> factory)
+        : this(req => Task.FromResult(factory(req))) { }
+
+    /// <summary>Delegates each call to the asynchronous <paramref name="factory"/>.</summary>
+    public StubHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> factory)
         => _factory = factory;
 
     protected override Task<HttpResponseMessage> SendAsync(
@@ -25,6 +29,6 @@ internal sealed class StubHttpMessageHandler : HttpMessageHandler
     {
         LastRequest = request;
         CallCount++;
-        return Task.FromResult(_factory(request));
+        return _factory(request);
     }
 }

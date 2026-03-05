@@ -32,14 +32,14 @@ When a device regains connectivity, all envelopes queued in the outbox must be r
 
 ## Acceptance Criteria
 
-- [ ] `SyncOrchestrator` (or similar name) implemented in `src/Restyc`.
-- [ ] Subscribes to `IConnectivityService.ConnectivityChanged`; debounce configurable.
-- [ ] Semaphore prevents concurrent flushes.
-- [ ] Envelopes processed in `CreatedUtc` ascending order.
-- [ ] `OnSynced` published on each successful delivery.
-- [ ] `OnRetrying` published before each retry attempt.
-- [ ] Implements `IDisposable` / `IAsyncDisposable` to release the connectivity subscription.
-- [ ] Unit tests cover: flush on connect, no double flush, ordering, `OnSynced` event, semaphore guard.
+- [x] `SyncOrchestrator` (or similar name) implemented in `src/Restyc`.
+- [x] Subscribes to `IConnectivityService.ConnectivityChanged`; debounce configurable.
+- [x] Semaphore prevents concurrent flushes.
+- [x] Envelopes processed in `CreatedUtc` ascending order.
+- [x] `OnSynced` published on each successful delivery.
+- [x] `OnRetrying` published before each retry attempt.
+- [x] Implements `IDisposable` / `IAsyncDisposable` to release the connectivity subscription.
+- [x] Unit tests cover: flush on connect, no double flush, ordering, `OnSynced` event, semaphore guard.
 
 ## Notes
 
