@@ -119,6 +119,66 @@ public class RestycHandlerOnlinePathTests
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
 
+    [Fact]
+    public async Task OnlineWrite_2xx_NumericId_InvalidatesCollectionAndResourceCache()
+    {
+        var store = new InMemorySyncStore();
+        // Both the collection and the specific resource are cached.
+        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/orders"));
+        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/orders/42"));
+
+        var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
+        using var client = MakeClient(BuildHandler(store, stub, shouldInvalidate: true));
+
+        await client.PutAsync("https://example.com/api/orders/42", content: null);
+
+        // Both collection and resource entries should be invalidated via the
+        // derived prefix "https://example.com/api/orders".
+        Assert.Null(await store.GetCachedResponseAsync("https://example.com/api/orders"));
+        Assert.Null(await store.GetCachedResponseAsync("https://example.com/api/orders/42"));
+    }
+
+    [Fact]
+    public async Task OnlineWrite_2xx_GuidId_InvalidatesCollectionCache()
+    {
+        var store = new InMemorySyncStore();
+        var id = "550e8400-e29b-41d4-a716-446655440000";
+        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/notes"));
+        await store.UpsertAsync(SeedCachedEnvelope($"https://example.com/api/notes/{id}"));
+
+        var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.NoContent));
+        using var client = MakeClient(BuildHandler(store, stub, shouldInvalidate: true));
+
+        await client.DeleteAsync($"https://example.com/api/notes/{id}");
+
+        Assert.Null(await store.GetCachedResponseAsync("https://example.com/api/notes"));
+        Assert.Null(await store.GetCachedResponseAsync($"https://example.com/api/notes/{id}"));
+    }
+
+    [Fact]
+    public async Task DeriveInvalidationPrefix_NonIdSegment_ReturnsFullPath()
+    {
+        var uri = new Uri("https://example.com/api/orders");
+        var prefix = RestycHandler.DeriveInvalidationPrefix(uri);
+        Assert.Equal("https://example.com/api/orders", prefix);
+    }
+
+    [Fact]
+    public async Task DeriveInvalidationPrefix_NumericSegment_ReturnsParentPath()
+    {
+        var uri = new Uri("https://example.com/api/orders/42");
+        var prefix = RestycHandler.DeriveInvalidationPrefix(uri);
+        Assert.Equal("https://example.com/api/orders", prefix);
+    }
+
+    [Fact]
+    public async Task DeriveInvalidationPrefix_GuidSegment_ReturnsParentPath()
+    {
+        var uri = new Uri("https://example.com/api/notes/550e8400-e29b-41d4-a716-446655440000");
+        var prefix = RestycHandler.DeriveInvalidationPrefix(uri);
+        Assert.Equal("https://example.com/api/notes", prefix);
+    }
+
     // -------------------------------------------------------------------------
     // Write path — non-2xx
     // -------------------------------------------------------------------------

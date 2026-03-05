@@ -134,7 +134,10 @@ public sealed class RestycHandler : DelegatingHandler
             var url = request.RequestUri?.ToString() ?? string.Empty;
 
             if (_policy.ShouldInvalidateCacheOnWrite(request))
-                await _store.InvalidateCacheForPrefixAsync(url, ct).ConfigureAwait(false);
+            {
+                var prefix = DeriveInvalidationPrefix(request.RequestUri);
+                await _store.InvalidateCacheForPrefixAsync(prefix, ct).ConfigureAwait(false);
+            }
 
             _events.Publish(new SyncEvent(
                 SyncEventType.OnSynced, url, request.Method.Method, DateTimeOffset.UtcNow));
@@ -206,5 +209,33 @@ public sealed class RestycHandler : DelegatingHandler
     {
         if (!request.Headers.Contains(IdempotencyKeyHeader))
             request.Headers.TryAddWithoutValidation(IdempotencyKeyHeader, Guid.NewGuid().ToString());
+    }
+
+    /// <summary>
+    /// Derives the cache-invalidation prefix from the request URI.
+    /// If the last path segment is a numeric ID or GUID (i.e. an individual
+    /// resource identifier), the prefix is the parent collection path so that
+    /// all related cached entries are invalidated together.
+    /// </summary>
+    internal static string DeriveInvalidationPrefix(Uri? requestUri)
+    {
+        if (requestUri is null)
+            return string.Empty;
+
+        var path = requestUri.AbsolutePath.TrimEnd('/');
+        var lastSlash = path.LastIndexOf('/');
+
+        if (lastSlash > 0)
+        {
+            var lastSegment = path[(lastSlash + 1)..];
+            if (long.TryParse(lastSegment, out _) || Guid.TryParse(lastSegment, out _))
+            {
+                var parentPath = path[..lastSlash];
+                return requestUri.GetLeftPart(UriPartial.Authority) + parentPath;
+            }
+        }
+
+        // No resource-identifier suffix — use the full URL (without query string).
+        return requestUri.GetLeftPart(UriPartial.Authority) + path;
     }
 }

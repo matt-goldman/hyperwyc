@@ -6,7 +6,7 @@ Implement `CabinetSyncStore`, the default durable `ISyncStore` backed by Cabinet
 
 ## Background
 
-Cabinet is a .NET document store with pluggable index providers. It is a natural fit for Restyc's envelope model: each envelope is a self-contained document, and Cabinet's custom index support maps directly onto the query patterns Restyc needs.
+[Cabinet](https://github.com/matt-goldman/cabinet) is a .NET document store with pluggable index providers. It is a natural fit for Restyc's envelope model: each envelope is a self-contained document, and Cabinet's custom index support maps directly onto the query patterns Restyc needs.
 
 ## Cabinet Indexing Strategy
 

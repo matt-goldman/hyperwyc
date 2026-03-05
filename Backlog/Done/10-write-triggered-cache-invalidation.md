@@ -27,11 +27,11 @@ Examples:
 
 ## Acceptance Criteria
 
-- [ ] Invalidation triggered after every successful 2xx write.
-- [ ] Invalidation does not run if `ISyncPolicy.ShouldInvalidateCacheOnWrite` returns `false`.
-- [ ] `InvalidateCacheForPrefixAsync` is called with the correct prefix.
-- [ ] Invalidation does not affect non-cached envelopes (i.e. pending outbox entries without a `Response`).
-- [ ] Unit tests cover: invalidation on success, no invalidation on failure, policy suppression, prefix matching.
+- [x] Invalidation triggered after every successful 2xx write.
+- [x] Invalidation does not run if `ISyncPolicy.ShouldInvalidateCacheOnWrite` returns `false`.
+- [x] `InvalidateCacheForPrefixAsync` is called with the correct prefix.
+- [x] Invalidation does not affect non-cached envelopes (i.e. pending outbox entries without a `Response`).
+- [x] Unit tests cover: invalidation on success, no invalidation on failure, policy suppression, prefix matching.
 
 ## Notes
 
