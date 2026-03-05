@@ -1,18 +1,22 @@
 # Restyc
 
-> **Core Philosophy:** Restyc removes the complexity of handling online/offline state from your application logic. Whether you're connected or not, requests are sent when possible and responses are returned when possible — without requiring you to change anything else in your app. You can control caching and replay rules if you want, or just enjoy sensible defaults. This makes it ideal for scenarios where the likelihood of data conflicts is low, or where you already have your own resolution logic in place.
+> **A service-worker-inspired HTTP handler for .NET** — your app code never needs to know whether it's online or offline.
 
-Restyc is a backend-agnostic, HTTP-based resilience layer for .NET applications. It intercepts API calls made via `HttpClient`, persists them locally, and ensures delivery or refresh once connectivity is available. It provides reliable offline support and cache-aware fetch semantics without dictating how you structure your app, models, or storage.
+Restyc sits in the `HttpClient` pipeline and transparently handles caching, queuing, and replay. Like a [Service Worker](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API) in a PWA, it intercepts outgoing HTTP requests and returns normal-looking responses regardless of connectivity. Your existing `HttpClient` code doesn't change. The `X-Restyc-Status` header is always present on synthetic responses for code that *wants* to know.
+
+Restyc is backend-agnostic, storage-pluggable, and designed for scenarios where data conflicts are rare or handled server-side.
 
 ---
 
 ## Features
 
+- ✅ **Service-worker-inspired** — transparent 200 OK responses by default; callers never branch on connectivity
 - ✅ Backend-agnostic HTTP caching and replay layer (REST/JSON over HTTP/1.x; v1.0)
 - ✅ Offline request queue with retry
 - ✅ Idempotency-Key injection on all mutating requests
 - ✅ Response cache with expiry policies
 - ✅ Write-triggered GET cache invalidation
+- ✅ Configurable offline response policy (transparent 200 or explicit 503)
 - ✅ Pluggable policies (connectivity, staleness, retry)
 - ✅ Observables for sync lifecycle events
 - ✅ Works with any `HttpClient`, minimal blast radius
@@ -44,10 +48,11 @@ services.AddRestyc(options =>
 
 ## When to Use
 
-- You need offline resilience in a .NET app
-- You want API calls to work seamlessly online or offline
-- You want transport-level durability, not a storage-first sync framework
-- Your app already has a stable API contract and you don't want to rearchitect around a sync engine
+- You want a **service-worker-like** drop-in resilience layer for .NET HTTP clients
+- You need offline resilience without rewriting your app around a sync framework
+- You want API calls to look and feel the same online or offline
+- You want transport-level durability, not a storage-first sync engine
+- Your app already has a stable API contract and you don't want to rearchitect
 
 ## What It Doesn't Do
 
@@ -60,13 +65,16 @@ services.AddRestyc(options =>
 
 ## How It Works
 
-Restyc sits in your `HttpClient` pipeline as a `DelegatingHandler`. It transparently intercepts all outgoing requests:
+Restyc sits in your `HttpClient` pipeline as a `DelegatingHandler` — the same interception point that a Service Worker occupies for browser `fetch()`. It transparently handles all outgoing requests:
 
 - **Online:** Requests are sent immediately. Responses are optionally cached according to your staleness policy.
-- **Offline:** Requests are serialised and queued locally. When connectivity is restored, they are replayed in order.
-- **Read requests (GET/HEAD/OPTIONS):** Served from cache if available and fresh; fetched from the API if stale or missing.
+- **Offline writes:** Requests are serialised and queued locally. The caller receives a `200 OK` (by default) with an `X-Restyc-Status: Queued` header. When connectivity is restored, the queue is replayed in order.
+- **Offline reads:** Served from cache if available (even if stale — any data is better than no data offline). If no cache exists, the caller receives a `200 OK` with `X-Restyc-Status: Offline`.
+- **Online reads (GET/HEAD/OPTIONS):** Served from cache if fresh; fetched from the API if stale or missing.
 
 The app doesn't need to know the difference. Your existing code doesn't change.
+
+> **Opt-in signalling:** Set `OfflineResponsePolicy = OfflineResponsePolicy.Signal` to return `503 Service Unavailable` instead, for routes where your app needs to handle the offline state explicitly. Per-route policies are planned for v1.0.
 
 ---
 

@@ -30,7 +30,7 @@
 - [ ] `MaxCachedResponseBodyBytes` configuration option (makes MVP default cap configurable)
 - [ ] `Date` header rewriting when serving responses from cache
 - [ ] In-app diagnostics view — list unsynced and dead-lettered records
-- [ ] Fine-grained per-endpoint TTL overrides
+- [ ] Fine-grained per-route policies (TTL, cache strategy, offline response policy)
 - [ ] Dead-letter queue management UI (view, requeue, dismiss)
 
 ---

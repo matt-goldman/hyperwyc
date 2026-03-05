@@ -2,18 +2,21 @@
 
 ## Overview
 
-Restyc is an offline-resilient HTTP request/response caching and replay engine. It intercepts API calls made via `HttpClient`, persists them to a local store, and ensures delivery or refresh once connectivity is available. Its core design prioritises agnosticism — it is not a data synchronisation framework, but a drop-in reliability layer that allows applications to behave consistently regardless of connectivity.
+Restyc is a service-worker-inspired HTTP handler for .NET. Like a [Service Worker](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API) in a progressive web app, it intercepts outgoing HTTP requests and returns normal-looking responses to the caller regardless of connectivity state. Requests are cached, queued, and replayed transparently — the consuming code never needs to branch on online/offline status.
+
+Its core design prioritises invisibility: offline writes return `200 OK` by default (with an `X-Restyc-Status: Queued` header for code that wants to know), and cached reads are served with their original status codes. An opt-in `OfflineResponsePolicy.Signal` mode returns `503` for routes that need explicit offline handling.
 
 ---
 
 ## Core Principles
 
-1. **Transport-level durability** — Operates at the HTTP layer, not the data model layer.
-2. **Backend agnostic** — Works with any REST API over HTTP/1.x. GraphQL (mutation-vs-query ambiguity on POST) and gRPC (binary framing, HTTP/2 semantics) are deferred to a future version.
-3. **Storage pluggability** — The core package ships with interfaces only; store providers are separate, explicitly installed packages.
-4. **No architectural imposition** — Developers do not need to alter their domain models or API design.
-5. **Composability** — Integrates via `DelegatingHandler` and works seamlessly with other handlers like auth or logging.
-6. **Predictable behaviour** — Requests sent when possible, responses returned when possible, following cache and retry policies.
+1. **Transparent by default** — Like a Service Worker, the handler is invisible to callers. Responses look normal (200 OK) regardless of connectivity; the `X-Restyc-Status` header is the opt-in escape hatch.
+2. **Transport-level durability** — Operates at the HTTP layer, not the data model layer.
+3. **Backend agnostic** — Works with any REST API over HTTP/1.x. GraphQL (mutation-vs-query ambiguity on POST) and gRPC (binary framing, HTTP/2 semantics) are deferred to a future version.
+4. **Storage pluggability** — The core package ships with interfaces only; store providers are separate, explicitly installed packages.
+5. **No architectural imposition** — Developers do not need to alter their domain models or API design.
+6. **Composability** — Integrates via `DelegatingHandler` and works seamlessly with other handlers like auth or logging.
+7. **Predictable behaviour** — Requests sent when possible, responses returned when possible, following cache and retry policies.
 
 ---
 
@@ -47,6 +50,7 @@ Future provider packages follow the same pattern: `Restyc.LiteDb`, `Restyc.Index
 3. If **offline**:
    - Serialises the request into a local store document (envelope).
    - Marks as `IsSynced = false`.
+   - Returns a synthetic response to the caller: `200 OK` by default (`OfflineResponsePolicy.Transparent`) with `X-Restyc-Status: Queued`, or `503 Service Unavailable` if `OfflineResponsePolicy.Signal` is configured.
    - Publishes `OnQueued` via the reactive stream.
 4. If **online**:
    - Sends the request immediately.
@@ -60,6 +64,7 @@ Future provider packages follow the same pattern: `Restyc.LiteDb`, `Restyc.Index
    - Checks local cache first if the cache policy allows.
    - If cached and not stale: returns the cached response immediately. The `Date` header is rewritten to the current time; all other headers reflect the originally cached values.
    - If stale or missing: fetches from the API, updates the cache, publishes `OnUpdated`.
+   - If offline and no cache is available: returns a synthetic response (`200 OK` by default, or `503` with `Signal` policy) with `X-Restyc-Status: Offline`.
 2. TTL-based cache invalidation is handled via `IStalenessEvaluator` (pluggable).
 3. Write-triggered invalidation: when a mutating request succeeds, cached GET responses for the same URL prefix are invalidated. On by default; configurable via `ISyncPolicy`.
 
@@ -215,7 +220,7 @@ services.AddRestyc(options =>
 
 - `Restyc.IndexedDb` — Blazor WASM store provider
 - Background sync scheduler
-- Fine-grained per-endpoint TTL configuration
+- Fine-grained per-route policy configuration (TTL, cache strategy, offline response policy)
 - In-app diagnostics view for unsynced and errored records
 - User-scoped store (identity-partitioned cache isolation)
 
@@ -240,16 +245,16 @@ services.AddRestyc(options =>
 
 ### Restyc (Differentiation)
 
-- **Philosophy:** Transport-level durability — request/response caching and replay, not table/entity synchronisation.
+- **Philosophy:** Service-worker-inspired HTTP handler — transparent request/response caching and replay at the transport layer. The caller receives normal-looking responses regardless of connectivity state.
 - **Server coupling:** None — works with any HTTP backend (REST, GraphQL, gRPC, streaming APIs).
 - **Domain model:** Fully independent; no schema mirroring, no requirement to align API surface with storage.
 - **Integration:** Drop-in `DelegatingHandler`; can be added to any existing app without restructuring.
 - **Use case fit:** Ideal for apps where API contracts are already stable, or where data conflicts are rare or handled server-side.
 
-In essence, Datasync and Realm require you to architect your app *around* their sync model. Restyc fits *into* your existing architecture — it's additive, not invasive.
+In essence, Datasync and Realm require you to architect your app *around* their sync model. Restyc fits *into* your existing architecture — like adding a Service Worker to a web app: invisible by default, powerful when you need it.
 
 ---
 
 ## Summary
 
-**Restyc** is a lightweight, backend-agnostic HTTP caching and replay system for .NET. It ensures reliable network behaviour, offline operation, and controlled retry mechanisms — all without imposing data models or framework dependencies. Its composable handler-based design guarantees minimal intrusion into existing app architecture, and its Cabinet storage foundation provides fast, dependency-free persistence with a flexible indexing model tailored to the HTTP envelope pattern.
+**Restyc** is a service-worker-inspired HTTP handler for .NET. It provides transparent caching, offline queuing, and controlled retry — all without imposing data models or framework dependencies. Like a Service Worker in a PWA, it’s invisible to callers by default: requests go out, responses come back, and the app never needs to know whether the network was involved. Its composable handler-based design guarantees minimal intrusion into existing app architecture, and its Cabinet storage foundation provides fast, dependency-free persistence with a flexible indexing model tailored to the HTTP envelope pattern.
