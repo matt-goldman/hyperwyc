@@ -15,6 +15,8 @@ namespace Restyc;
 /// </remarks>
 public sealed class RestycHandler : DelegatingHandler
 {
+    private const string IdempotencyKeyHeader = "Idempotency-Key";
+
     private static readonly HashSet<HttpMethod> WriteMethods =
     [
         HttpMethod.Post,
@@ -82,6 +84,7 @@ public sealed class RestycHandler : DelegatingHandler
         if (request.Content is not null)
             await request.Content.LoadIntoBufferAsync().ConfigureAwait(false);
 
+        EnsureIdempotencyKey(request);
         var envelope = Envelope.ForRequest(request);
         await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
 
@@ -121,6 +124,7 @@ public sealed class RestycHandler : DelegatingHandler
         HttpRequestMessage request,
         CancellationToken ct)
     {
+        EnsureIdempotencyKey(request);
         var response = await base.SendAsync(request, ct).ConfigureAwait(false);
 
         if (response.IsSuccessStatusCode)
@@ -179,5 +183,16 @@ public sealed class RestycHandler : DelegatingHandler
             response.Content = new StringContent(cached.Body);
 
         return response;
+    }
+
+    /// <summary>
+    /// Ensures a stable <c>Idempotency-Key</c> header exists on
+    /// <paramref name="request"/>. If the caller already supplied one it is
+    /// left unchanged; otherwise a fresh GUID is injected.
+    /// </summary>
+    private static void EnsureIdempotencyKey(HttpRequestMessage request)
+    {
+        if (!request.Headers.Contains(IdempotencyKeyHeader))
+            request.Headers.TryAddWithoutValidation(IdempotencyKeyHeader, Guid.NewGuid().ToString());
     }
 }

@@ -104,8 +104,14 @@ public sealed class Envelope
                 headers[key] = value;
         }
 
+        // Honour a pre-set Idempotency-Key so that replayed requests carry the same Id.
+        var idempotencyKey = request.Headers.TryGetValues("Idempotency-Key", out var keyValues)
+            ? keyValues.First()
+            : null;
+
         return new Envelope
         {
+            Id = idempotencyKey ?? Guid.NewGuid().ToString(),
             Url = request.RequestUri?.ToString() ?? string.Empty,
             Method = request.Method.Method,
             RequestHeaders = headers,

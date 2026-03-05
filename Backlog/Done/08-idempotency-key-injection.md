@@ -18,12 +18,12 @@ Replayed requests must be safe to deliver more than once. Injecting a stable `Id
 
 ## Acceptance Criteria
 
-- [ ] `Idempotency-Key` header injected on all mutating requests before `base.SendAsync(...)` is called.
-- [ ] The header value matches `envelope.Id` exactly.
-- [ ] If the caller pre-sets `Idempotency-Key`, it is not overwritten; the envelope `Id` is set to the caller-supplied value instead.
-- [ ] On replay (sync flush), the same `Idempotency-Key` is re-injected from the stored envelope.
-- [ ] No `Idempotency-Key` header on read requests.
-- [ ] Unit tests cover: header absent → injected, header present → preserved, replayed envelope → same key, GET → no header.
+- [x] `Idempotency-Key` header injected on all mutating requests before `base.SendAsync(...)` is called.
+- [x] The header value matches `envelope.Id` exactly.
+- [x] If the caller pre-sets `Idempotency-Key`, it is not overwritten; the envelope `Id` is set to the caller-supplied value instead.
+- [x] On replay (sync flush), the same `Idempotency-Key` is re-injected from the stored envelope.
+- [x] No `Idempotency-Key` header on read requests.
+- [x] Unit tests cover: header absent → injected, header present → preserved, replayed envelope → same key, GET → no header.
 
 ## Notes
 
