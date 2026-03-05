@@ -16,7 +16,7 @@ namespace Restyc;
 /// </example>
 public static class SyncPolicy
 {
-    private static readonly RetryOptions DefaultRetry =
+    private static readonly RetryOptions _defaultRetry =
         new(MaxRetries: 5, InitialDelay: TimeSpan.FromSeconds(2), BackoffMultiplier: 2.0);
 
     /// <summary>
@@ -67,6 +67,6 @@ public static class SyncPolicy
 
         public bool ShouldInvalidateCacheOnWrite(HttpRequestMessage request) => shouldInvalidate;
 
-        public RetryOptions GetRetryOptions(HttpRequestMessage request) => DefaultRetry;
+        public RetryOptions GetRetryOptions(HttpRequestMessage request) => _defaultRetry;
     }
 }

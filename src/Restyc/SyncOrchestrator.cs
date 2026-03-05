@@ -17,7 +17,7 @@ namespace Restyc;
 /// </remarks>
 public sealed class SyncOrchestrator : IAsyncDisposable
 {
-    private const string IdempotencyKeyHeader = "Idempotency-Key";
+    private const string _idempotencyKeyHeader = "Idempotency-Key";
 
     private readonly ISyncStore _store;
     private readonly Interfaces.ISyncPolicy _policy;
@@ -208,8 +208,8 @@ public sealed class SyncOrchestrator : IAsyncDisposable
         }
 
         // Re-inject the idempotency key from the envelope ID so retries are idempotent.
-        if (!request.Headers.Contains(IdempotencyKeyHeader))
-            request.Headers.TryAddWithoutValidation(IdempotencyKeyHeader, envelope.Id);
+        if (!request.Headers.Contains(_idempotencyKeyHeader))
+            request.Headers.TryAddWithoutValidation(_idempotencyKeyHeader, envelope.Id);
 
         if (envelope.RequestBody is not null)
             request.Content = new StringContent(envelope.RequestBody);

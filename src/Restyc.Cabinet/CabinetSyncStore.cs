@@ -74,10 +74,9 @@ public sealed class CabinetSyncStore : ISyncStore
     public async Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default)
     {
         var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
-        return all
+        return [.. all
             .Where(e => !e.IsSynced && !e.IsDeadLettered)
-            .OrderBy(e => e.CreatedUtc)
-            .ToList();
+            .OrderBy(e => e.CreatedUtc)];
     }
 
     /// <inheritdoc/>
@@ -86,10 +85,9 @@ public sealed class CabinetSyncStore : ISyncStore
         CancellationToken ct = default)
     {
         var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
-        return all
+        return [.. all
             .Where(e => !e.IsSynced && !e.IsDeadLettered && e.NextRetryUtc <= now)
-            .OrderBy(e => e.CreatedUtc)
-            .ToList();
+            .OrderBy(e => e.CreatedUtc)];
     }
 
     /// <inheritdoc/>

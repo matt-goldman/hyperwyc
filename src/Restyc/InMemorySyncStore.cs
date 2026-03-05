@@ -38,10 +38,9 @@ public sealed class InMemorySyncStore : ISyncStore
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            return _store.Values
+            return [.. _store.Values
                 .Where(e => !e.IsSynced && !e.IsDeadLettered)
-                .OrderBy(e => e.CreatedUtc)
-                .ToList();
+                .OrderBy(e => e.CreatedUtc)];
         }
         finally
         {
@@ -55,10 +54,9 @@ public sealed class InMemorySyncStore : ISyncStore
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            return _store.Values
+            return [.. _store.Values
                 .Where(e => !e.IsSynced && !e.IsDeadLettered && e.NextRetryUtc <= now)
-                .OrderBy(e => e.CreatedUtc)
-                .ToList();
+                .OrderBy(e => e.CreatedUtc)];
         }
         finally
         {

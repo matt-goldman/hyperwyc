@@ -15,9 +15,9 @@ namespace Restyc;
 /// </remarks>
 public sealed class RestycHandler : DelegatingHandler
 {
-    private const string IdempotencyKeyHeader = "Idempotency-Key";
+    private const string _idempotencyKeyHeader = "Idempotency-Key";
 
-    private static readonly HashSet<HttpMethod> WriteMethods =
+    private static readonly HashSet<HttpMethod> _writeMethods =
     [
         HttpMethod.Post,
         HttpMethod.Put,
@@ -74,7 +74,7 @@ public sealed class RestycHandler : DelegatingHandler
     // -------------------------------------------------------------------------
 
     private Task<HttpResponseMessage> HandleOfflineAsync(HttpRequestMessage request, CancellationToken ct) =>
-        WriteMethods.Contains(request.Method)
+        _writeMethods.Contains(request.Method)
             ? HandleOfflineWriteAsync(request, ct)
             : HandleOfflineReadAsync(request, ct);
 
@@ -84,7 +84,7 @@ public sealed class RestycHandler : DelegatingHandler
     {
         // Buffer content before the synchronous read inside Envelope.ForRequest.
         if (request.Content is not null)
-            await request.Content.LoadIntoBufferAsync().ConfigureAwait(false);
+            await request.Content.LoadIntoBufferAsync(ct).ConfigureAwait(false);
 
         EnsureIdempotencyKey(request);
         var envelope = Envelope.ForRequest(request);
@@ -118,7 +118,7 @@ public sealed class RestycHandler : DelegatingHandler
     // -------------------------------------------------------------------------
 
     private Task<HttpResponseMessage> HandleOnlineAsync(HttpRequestMessage request, CancellationToken ct) =>
-        WriteMethods.Contains(request.Method)
+        _writeMethods.Contains(request.Method)
             ? HandleOnlineWriteAsync(request, ct)
             : HandleOnlineReadAsync(request, ct);
 
@@ -163,7 +163,7 @@ public sealed class RestycHandler : DelegatingHandler
             // Buffer content so ForCachedResponse can read it synchronously and
             // the caller can still read the body afterwards.
             if (response.Content is not null)
-                await response.Content.LoadIntoBufferAsync().ConfigureAwait(false);
+                await response.Content.LoadIntoBufferAsync(ct).ConfigureAwait(false);
 
             var bodyLength = response.Content?.Headers.ContentLength ?? 0;
             if (bodyLength <= _options.MaxCachedResponseBodyBytes)
@@ -207,8 +207,8 @@ public sealed class RestycHandler : DelegatingHandler
     /// </summary>
     private static void EnsureIdempotencyKey(HttpRequestMessage request)
     {
-        if (!request.Headers.Contains(IdempotencyKeyHeader))
-            request.Headers.TryAddWithoutValidation(IdempotencyKeyHeader, Guid.NewGuid().ToString());
+        if (!request.Headers.Contains(_idempotencyKeyHeader))
+            request.Headers.TryAddWithoutValidation(_idempotencyKeyHeader, Guid.NewGuid().ToString());
     }
 
     /// <summary>

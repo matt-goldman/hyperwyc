@@ -21,7 +21,7 @@ namespace Restyc;
 /// </remarks>
 public sealed class SyncEventStream : IObservable<SyncEvent>, IDisposable
 {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private List<IObserver<SyncEvent>> _observers = [];
     private bool _disposed;
 
@@ -129,7 +129,7 @@ public sealed class SyncEventStream : IObservable<SyncEvent>, IDisposable
     {
         lock (_gate)
         {
-            _observers = _observers.Where(o => !ReferenceEquals(o, observer)).ToList();
+            _observers = [.. _observers.Where(o => !ReferenceEquals(o, observer))];
         }
     }
 
