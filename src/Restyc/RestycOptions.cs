@@ -1,14 +1,56 @@
+using Restyc.Interfaces;
+using Restyc.Models;
+
 namespace Restyc;
 
 /// <summary>
 /// Configuration options for <see cref="RestycHandler"/> and <see cref="SyncOrchestrator"/>.
 /// </summary>
 /// <remarks>
-/// Extended by later issues (#15 DI extensions, #17 max body size, #20
-/// per-endpoint TTL overrides, etc.).
+/// Extended by later issues (#17 max body size, #20 per-endpoint TTL overrides, etc.).
+/// Set properties on this class and call <c>AddRestyc(options => ...)</c> to
+/// register Restyc with a .NET DI container.
 /// </remarks>
 public sealed class RestycOptions
 {
+    // -------------------------------------------------------------------------
+    // Core policy / infrastructure
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// The default caching and sync policy applied to all requests unless
+    /// overridden per-endpoint. Defaults to <see cref="SyncPolicy.CacheFirst"/>
+    /// with a 1-day TTL.
+    /// </summary>
+    public ISyncPolicy DefaultPolicy { get; set; } =
+        SyncPolicy.CacheFirst(TimeSpan.FromDays(1));
+
+    /// <summary>
+    /// The backing store for outbox entries and cached responses.
+    /// Defaults to <see cref="InMemorySyncStore"/>; replace with
+    /// <c>CabinetSyncStore</c> for durable persistence.
+    /// </summary>
+    public ISyncStore Store { get; set; } = new InMemorySyncStore();
+
+    /// <summary>
+    /// Provides network reachability information. Defaults to
+    /// <see cref="AlwaysOnlineConnectivityService"/>; replace with a
+    /// platform-specific implementation (e.g. <c>MauiConnectivityService</c>).
+    /// </summary>
+    public IConnectivityService Connectivity { get; set; } =
+        new AlwaysOnlineConnectivityService();
+
+    /// <summary>
+    /// Determines whether a cached response is still fresh. Defaults to
+    /// <see cref="TtlStalenessEvaluator"/> using <see cref="DefaultCacheTtl"/>.
+    /// </summary>
+    public IStalenessEvaluator StalenessEvaluator { get; set; } =
+        new TtlStalenessEvaluator(TimeSpan.FromMinutes(5));
+
+    // -------------------------------------------------------------------------
+    // Cache settings
+    // -------------------------------------------------------------------------
+
     /// <summary>
     /// How long a cached response is considered fresh before
     /// <see cref="TtlStalenessEvaluator"/> marks it stale.
@@ -23,6 +65,10 @@ public sealed class RestycOptions
     /// </summary>
     public int MaxCachedResponseBodyBytes { get; set; } = 512 * 1024;
 
+    // -------------------------------------------------------------------------
+    // Orchestrator settings
+    // -------------------------------------------------------------------------
+
     /// <summary>
     /// How long to wait after a connectivity-restored event before triggering
     /// a flush, to avoid redundant concurrent flushes during rapid toggling.
@@ -36,4 +82,12 @@ public sealed class RestycOptions
     /// Defaults to <see langword="true"/>.
     /// </summary>
     public bool FlushOnStartup { get; set; } = true;
+
+    /// <summary>
+    /// Default retry configuration applied to outbox entries when
+    /// <see cref="ISyncPolicy.GetRetryOptions"/> is not otherwise overridden.
+    /// Defaults to 5 retries with 2-second initial delay and exponential backoff.
+    /// </summary>
+    public RetryOptions DefaultRetryOptions { get; set; } =
+        new(MaxRetries: 5, InitialDelay: TimeSpan.FromSeconds(2), BackoffMultiplier: 2.0);
 }
