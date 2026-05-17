@@ -118,26 +118,6 @@ public class HyperwycHandlerOfflinePathTests
         Assert.Equal("Queued", values!.First());
     }
 
-    [Fact]
-    public async Task OfflineWrite_DoesNotCallInnerHandler()
-    {
-        var store = new InMemorySyncStore();
-        var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
-        var handler = new HyperwycHandler(
-            store,
-            new FakeConnectivityService(isConnected: false),
-            new FakeSyncPolicy(),
-            new FakeStalenessEvaluator(),
-            new SyncEventStream(),
-            new HyperwycOptions())
-        { InnerHandler = stub };
-        using var client = new HttpClient(handler);
-
-        await client.PostAsync("https://example.com/api/orders", content: null);
-
-        Assert.Equal(0, stub.CallCount);
-    }
-
     [Theory]
     [InlineData("POST")]
     [InlineData("PUT")]

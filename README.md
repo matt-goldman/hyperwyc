@@ -105,6 +105,8 @@ Hyperwyc does not manage authentication. When placing handlers, order matters:
 .AddHttpMessageHandler<AuthHandler>()     // adds fresh token at send time
 ```
 
+> **Note — Hyperwyc short-circuits the pipeline when offline.** Synthetic responses (`Queued`, `Offline`) are returned directly from the handler, so any `DelegatingHandler` placed *after* `HyperwycHandler` is **not** invoked on the offline path. This is by design — there is no outbound request to authenticate or otherwise mutate — but it means downstream handlers should not be relied upon for side effects that need to occur on every logical request (logging, telemetry, header stamping). For cross-cutting concerns that must run regardless of connectivity, place the handler **before** `HyperwycHandler` in the pipeline.
+
 ---
 
 ## Lifecycle Events
