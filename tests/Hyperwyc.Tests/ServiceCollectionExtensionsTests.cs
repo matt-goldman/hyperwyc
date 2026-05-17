@@ -17,7 +17,7 @@ public sealed class ServiceCollectionExtensionsTests
 
         var hyperwyc = sp.GetService<IHyperwyc>();
 
-        Assert.NotNull(Hyperwyc);
+        Assert.NotNull(hyperwyc);
     }
 
     [Fact]

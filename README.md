@@ -68,13 +68,27 @@ services.AddHyperwyc(options =>
 Hyperwyc sits in your `HttpClient` pipeline as a `DelegatingHandler` — the same interception point that a Service Worker occupies for browser `fetch()`. It transparently handles all outgoing requests:
 
 - **Online:** Requests are sent immediately. Responses are optionally cached according to your staleness policy.
-- **Offline writes:** Requests are serialised and queued locally. The caller receives a `200 OK` (by default) with an `X-Hyperwyc-Status: Queued` header. When connectivity is restored, the queue is replayed in order.
-- **Offline reads:** Served from cache if available (even if stale — any data is better than no data offline). If no cache exists, the caller receives a `200 OK` with `X-Hyperwyc-Status: Offline`.
+- **Offline writes:** Requests are serialised and queued locally. The caller receives a `202 Accepted` (by default) with an `X-Hyperwyc-Status: Queued` header. When connectivity is restored, the queue is replayed in order. `202` is used rather than `200` because the request has been accepted for later processing but not yet performed against the origin server — once sync-status inspection lands, callers will be able to confirm the eventual outcome.
+- **Offline reads:** Served from cache if available (even if stale — any data is better than no data offline). If no cache exists, the caller receives a `200 OK` with `X-Hyperwyc-Status: Offline` and an empty body.
 - **Online reads (GET/HEAD/OPTIONS):** Served from cache if fresh; fetched from the API if stale or missing.
 
 The app doesn't need to know the difference. Your existing code doesn't change.
 
-> **Opt-in signalling:** Set `OfflineResponsePolicy = OfflineResponsePolicy.Signal` to return `503 Service Unavailable` instead, for routes where your app needs to handle the offline state explicitly. Per-route policies are planned for v1.0.
+> **Why "no data" instead of "no connection"?** Connectivity is an infrastructure concern, not an application one. Your code already has to handle the empty-result path (a search with no matches, a feed with no items); offline simply produces the same shape. If that mindset shift doesn't fit a particular route, set `OfflineResponsePolicy = OfflineResponsePolicy.Signal` to receive `503 Service Unavailable` instead. Per-route policies are planned for v1.0.
+
+### Designing your responses
+
+Transparent offline reads can return a `200 OK` with an empty body. How (and whether) that affects your code depends on how you deserialise responses:
+
+- **Using `HttpClientJsonExtensions` (e.g. `GetFromJsonAsync<T>`, `ReadFromJsonAsync<T>`).** The empty body throws a `JsonException` from inside the extension, so the call site must wrap the whole chain in a `try`/`catch` that distinguishes "deserialisation failure" from "genuine API error" — typically by also re-checking the HTTP status code, which the extension has already discarded. This is awkward, so the recommended approach is to adopt an **envelope or result pattern** in your API responses (see for example [`Ardalis.Result`](https://github.com/ardalis/Result), or a small hand-rolled `ApiResponse<T>`). An empty body then deserialises to `null` or a default, which application code can handle uniformly online and offline.
+- **Calling `SendAsync` / `GetAsync` and deserialising the response yourself.** No library change is needed: wrap just the deserialisation step in a `try`/`catch` (or check `Content.Headers.ContentLength`) and treat "no body" as "no data". The envelope pattern is still a nice-to-have but no longer load-bearing.
+- **Per-route opt-out.** If neither option fits a particular route, set `OfflineResponsePolicy.Signal` on it and branch on `503`. Per-route policies are planned for v1.0.
+
+A future per-route option will let Hyperwyc return a caller-supplied default body (e.g. `"[]"`) on offline reads so that even `GetFromJsonAsync<List<T>>` works without an envelope — tracked in the roadmap.
+
+### Current limitations
+
+- **Text bodies only.** v0.1 handles string request and response bodies. Binary payloads (file uploads, image downloads, protobuf, etc.) are on the roadmap.
 
 ---
 

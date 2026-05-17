@@ -41,7 +41,7 @@ options.RoutePolicy = new RoutePolicyMap()
 ## Acceptance Criteria
 
 - [ ] `RoutePolicyMap` (or equivalent) allows URL-pattern-to-policy mappings.
-- [ ] Per-route configuration supports at minimum: `ISyncPolicy`, `OfflineResponsePolicy`, and cache TTL override.
+- [ ] Per-route configuration supports at minimum: `ISyncPolicy`, `OfflineResponsePolicy`, cache TTL override, and an optional `EmptyOfflineBody` (string + content type) returned when the route is read offline with no cached response (see issue #26).
 - [ ] Patterns support wildcard suffix matching (e.g. `/api/notes/*`).
 - [ ] Most-specific match wins when multiple patterns could apply.
 - [ ] Falls back to `HyperwycOptions.DefaultPolicy` / `HyperwycOptions.OfflineResponsePolicy` when no pattern matches.

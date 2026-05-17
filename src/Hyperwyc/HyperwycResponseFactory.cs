@@ -30,10 +30,16 @@ internal static class HyperwycResponseFactory
     /// persisted to the outbox and will be flushed when connectivity is
     /// restored.
     /// </summary>
+    /// <remarks>
+    /// Under <see cref="OfflineResponsePolicy.Transparent"/> this returns
+    /// <c>202 Accepted</c> rather than <c>200 OK</c>: the request has been
+    /// accepted for later processing but has not yet been performed against
+    /// the origin server.
+    /// </remarks>
     internal static HttpResponseMessage Queued(OfflineResponsePolicy policy)
     {
         var statusCode = policy == OfflineResponsePolicy.Transparent
-            ? HttpStatusCode.OK
+            ? HttpStatusCode.Accepted
             : HttpStatusCode.ServiceUnavailable;
         var response = new HttpResponseMessage(statusCode);
         response.Headers.TryAddWithoutValidation(StatusHeader, "Queued");

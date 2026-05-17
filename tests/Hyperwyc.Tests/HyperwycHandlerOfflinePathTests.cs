@@ -99,7 +99,7 @@ public class HyperwycHandlerOfflinePathTests
 
         var response = await client.PostAsync("https://example.com/api/orders", content: null);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         Assert.True(response.Headers.TryGetValues(HyperwycResponseFactory.StatusHeader, out var values));
         Assert.Equal("Queued", values!.First());
     }

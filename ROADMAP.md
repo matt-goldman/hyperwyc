@@ -30,8 +30,9 @@
 - [ ] `MaxCachedResponseBodyBytes` configuration option (makes MVP default cap configurable)
 - [ ] `Date` header rewriting when serving responses from cache
 - [ ] In-app diagnostics view — list unsynced and dead-lettered records
-- [ ] Fine-grained per-route policies (TTL, cache strategy, offline response policy)
+- [ ] Fine-grained per-route policies (TTL, cache strategy, offline response policy, empty-offline body)
 - [ ] Dead-letter queue management UI (view, requeue, dismiss)
+- [ ] Binary request and response bodies (lift current text-only limitation)
 
 ---
 
@@ -47,6 +48,7 @@
 - [ ] Smart paging support — cache-aware handling of paginated responses
 - [ ] Request grouping and bulk sync — batch multiple queued writes into a single operation
 - [ ] GraphQL support — read-intent POST disambiguation
+- [ ] **Under consideration:** Typed-response shaping for offline reads (source generator) — make `GetFromJsonAsync<T>` return a deserialisable default body offline without requiring an application-level response envelope
 
 ---
 
