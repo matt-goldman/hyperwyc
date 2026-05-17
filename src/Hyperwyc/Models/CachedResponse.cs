@@ -1,4 +1,4 @@
-namespace hyperwyc.Models;
+namespace Hyperwyc.Models;
 
 /// <summary>
 /// Represents a cached HTTP response associated with an <see cref="Envelope"/>.

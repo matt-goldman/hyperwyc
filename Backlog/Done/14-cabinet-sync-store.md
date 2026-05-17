@@ -1,12 +1,12 @@
-# Issue 14 — `hyperwyc.Cabinet` — `CabinetSyncStore` Provider Package
+# Issue 14 — `Hyperwyc.Cabinet` — `CabinetSyncStore` Provider Package
 
 ## Summary
 
-Implement `CabinetSyncStore`, the default durable `ISyncStore` backed by Cabinet, shipping in the separate `hyperwyc.Cabinet` NuGet package.
+Implement `CabinetSyncStore`, the default durable `ISyncStore` backed by Cabinet, shipping in the separate `Hyperwyc.Cabinet` NuGet package.
 
 ## Background
 
-[Cabinet](https://github.com/matt-goldman/cabinet) is a .NET document store with pluggable index providers. It is a natural fit for hyperwyc's envelope model: each envelope is a self-contained document, and Cabinet's custom index support maps directly onto the query patterns hyperwyc needs.
+[Cabinet](https://github.com/matt-goldman/cabinet) is a .NET document store with pluggable index providers. It is a natural fit for Hyperwyc's envelope model: each envelope is a self-contained document, and Cabinet's custom index support maps directly onto the query patterns Hyperwyc needs.
 
 ## Cabinet Indexing Strategy
 
@@ -26,11 +26,11 @@ This enables efficient answers to:
 
 ## Acceptance Criteria
 
-- [x] `hyperwyc.Cabinet` project created (see issue #01); references `hyperwyc` and the Cabinet NuGet package.
+- [x] `Hyperwyc.Cabinet` project created (see issue #01); references `Hyperwyc` and the Cabinet NuGet package.
 - [x] `CabinetSyncStore : ISyncStore` implements all `ISyncStore` methods using Cabinet.
 - [x] Cabinet indexes configured as shown above.
-- [x] Database file path configurable via constructor: `new CabinetSyncStore("hyperwyc.db")`.
-- [x] `ResetAsync` deletes or truncates all hyperwyc-managed collections.
+- [x] Database file path configurable via constructor: `new CabinetSyncStore("Hyperwyc.db")`.
+- [x] `ResetAsync` deletes or truncates all Hyperwyc-managed collections.
 - [x] `InvalidateCacheForPrefixAsync` clears `Response` on all envelopes whose `Url` starts with the given prefix.
 - [x] `GetPendingOutboxAsync` returns envelopes ordered by `CreatedUtc` ascending.
 - [x] Integration tests (using a real Cabinet in-process instance) cover all store methods.

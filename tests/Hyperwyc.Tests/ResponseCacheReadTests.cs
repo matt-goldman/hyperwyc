@@ -1,8 +1,8 @@
 using System.Net;
-using hyperwyc.Models;
+using Hyperwyc.Models;
 using Xunit;
 
-namespace hyperwyc.Tests;
+namespace Hyperwyc.Tests;
 
 public class TtlStalenessEvaluatorTests
 {
@@ -53,7 +53,7 @@ public class TtlStalenessEvaluatorTests
     [Fact]
     public void UsesDefaultCacheTtlFromOptions()
     {
-        var options = new hyperwycOptions { DefaultCacheTtl = TimeSpan.FromSeconds(10) };
+        var options = new HyperwycOptions { DefaultCacheTtl = TimeSpan.FromSeconds(10) };
         var evaluator = new TtlStalenessEvaluator(options);
         var cachedAt = DateTimeOffset.UtcNow.AddSeconds(-5);
 
@@ -67,14 +67,14 @@ public class ResponseCacheReadTests
     // Helpers
     // -------------------------------------------------------------------------
 
-    private static hyperwycHandler BuildHandler(
+    private static HyperwycHandler BuildHandler(
         InMemorySyncStore store,
         Fakes.StubHttpMessageHandler inner,
         bool cacheIsStale,
         int maxBodyBytes = 512 * 1024)
     {
-        var options = new hyperwycOptions { MaxCachedResponseBodyBytes = maxBodyBytes };
-        return new hyperwycHandler(
+        var options = new HyperwycOptions { MaxCachedResponseBodyBytes = maxBodyBytes };
+        return new HyperwycHandler(
             store,
             new Fakes.FakeConnectivityService(isConnected: true),
             new Fakes.FakeSyncPolicy(),
@@ -175,8 +175,8 @@ public class ResponseCacheReadTests
         SyncEvent? received = null;
         events.Subscribe(new DelegateObserver<SyncEvent>(e => received = e));
 
-        var options = new hyperwycOptions();
-        var handler = new hyperwycHandler(
+        var options = new HyperwycOptions();
+        var handler = new HyperwycHandler(
             store,
             new Fakes.FakeConnectivityService(),
             new Fakes.FakeSyncPolicy(),

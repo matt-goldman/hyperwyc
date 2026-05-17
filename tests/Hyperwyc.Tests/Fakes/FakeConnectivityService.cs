@@ -1,6 +1,6 @@
-using hyperwyc.Interfaces;
+using Hyperwyc.Interfaces;
 
-namespace hyperwyc.Tests.Fakes;
+namespace Hyperwyc.Tests.Fakes;
 
 /// <summary>
 /// Test double for <see cref="IConnectivityService"/>.

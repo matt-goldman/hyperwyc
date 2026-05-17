@@ -1,14 +1,14 @@
-# hyperwyc — Proof of Concept
+# Hyperwyc — Proof of Concept
 
 ## Purpose
 
-Demonstrate the core functionality of hyperwyc in a realistic sample environment: an offline-capable .NET MAUI app talking to an ASP.NET Core Web API, with all HTTP traffic running through `hyperwycHandler`. The sample should illustrate hyperwyc's service-worker-inspired philosophy — the app code makes normal `HttpClient` calls and receives normal-looking responses regardless of connectivity state.
+Demonstrate the core functionality of Hyperwyc in a realistic sample environment: an offline-capable .NET MAUI app talking to an ASP.NET Core Web API, with all HTTP traffic running through `HyperwycHandler`. The sample should illustrate Hyperwyc's service-worker-inspired philosophy — the app code makes normal `HttpClient` calls and receives normal-looking responses regardless of connectivity state.
 
 ---
 
 ## Sample App — .NET MAUI
 
-A simple notes app that exercises all of hyperwyc's key behaviours:
+A simple notes app that exercises all of Hyperwyc's key behaviours:
 
 **Features:**
 - Create, update, and delete notes
@@ -18,10 +18,10 @@ A simple notes app that exercises all of hyperwyc's key behaviours:
 
 **Demonstrates:**
 - App code uses standard `HttpClient` calls — no connectivity branching
-- Writes queued transparently when the device goes offline (200 OK + `X-hyperwyc-Status: Queued`)
+- Writes queued transparently when the device goes offline (200 OK + `X-Hyperwyc-Status: Queued`)
 - Automatic replay when connectivity is restored
 - Stale cache served for read operations while offline
-- `X-hyperwyc-Status` header inspected in UI to show sync state
+- `X-Hyperwyc-Status` header inspected in UI to show sync state
 - Dead-letter state surfaced in UI on persistent failure
 
 ---
@@ -45,7 +45,7 @@ A minimal REST API that serves as the target backend.
 ## Solution Structure
 
 ```
-hyperwyc.Sample
+Hyperwyc.Sample
 ├── MauiApp          # .NET MAUI client application
 ├── WebApi           # ASP.NET Core backend
 └── Shared           # DTOs shared between client and API
@@ -59,7 +59,7 @@ hyperwyc.Sample
 [User Action]
       │
       ▼
-hyperwycHandler (in HttpClient pipeline)
+HyperwycHandler (in HttpClient pipeline)
       │
       ├── Online?  ──Yes──▶ Send to API ──▶ Cache response ──▶ OnSynced
       │
@@ -95,11 +95,11 @@ hyperwycHandler (in HttpClient pipeline)
 
 ```bash
 # Start the API
-cd hyperwyc.Sample/WebApi
+cd Hyperwyc.Sample/WebApi
 dotnet run
 
 # Run the MAUI app (Android emulator, iOS simulator, or desktop)
-cd hyperwyc.Sample/MauiApp
+cd Hyperwyc.Sample/MauiApp
 dotnet run -f net10.0-android   # or net10.0-ios / net10.0-maccatalyst / net10.0-windows
 ```
 

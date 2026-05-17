@@ -1,9 +1,9 @@
 using Cabinet.Core;
 using Cabinet.Security;
-using hyperwyc.Interfaces;
-using hyperwyc.Models;
+using Hyperwyc.Interfaces;
+using Hyperwyc.Models;
 
-namespace hyperwyc.Cabinet;
+namespace Hyperwyc.Cabinet;
 
 /// <summary>
 /// A durable <see cref="ISyncStore"/> backed by Cabinet, suitable for production

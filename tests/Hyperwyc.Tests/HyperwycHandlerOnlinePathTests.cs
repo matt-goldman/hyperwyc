@@ -1,36 +1,36 @@
 using System.Net;
-using hyperwyc.Models;
-using hyperwyc.Tests.Fakes;
+using Hyperwyc.Models;
+using Hyperwyc.Tests.Fakes;
 using Xunit;
 
-namespace hyperwyc.Tests;
+namespace Hyperwyc.Tests;
 
-public class hyperwycHandlerOnlinePathTests
+public class HyperwycHandlerOnlinePathTests
 {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
-    private static hyperwycHandler BuildHandler(
+    private static HyperwycHandler BuildHandler(
         InMemorySyncStore store,
         StubHttpMessageHandler inner,
         bool shouldInvalidate = true,
         bool cacheIsStale = true)
     {
-        var handler = new hyperwycHandler(
+        var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: true),
             new FakeSyncPolicy(shouldInvalidate: shouldInvalidate),
             new FakeStalenessEvaluator(isStale: cacheIsStale),
             new SyncEventStream(),
-            new hyperwycOptions())
+            new HyperwycOptions())
         {
             InnerHandler = inner,
         };
         return handler;
     }
 
-    private static HttpClient MakeClient(hyperwycHandler handler) => new(handler);
+    private static HttpClient MakeClient(HyperwycHandler handler) => new(handler);
 
     private static Envelope SeedCachedEnvelope(
         string url,
@@ -76,13 +76,13 @@ public class hyperwycHandlerOnlinePathTests
         events.Subscribe(new DelegateObserver<SyncEvent>(e => received = e));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.Created));
-        var handler = new hyperwycHandler(
+        var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(),
             new FakeSyncPolicy(),
             new FakeStalenessEvaluator(),
             events,
-            new hyperwycOptions())
+            new HyperwycOptions())
         { InnerHandler = stub };
         using var client = new HttpClient(handler);
 
@@ -159,7 +159,7 @@ public class hyperwycHandlerOnlinePathTests
     public async Task DeriveInvalidationPrefix_NonIdSegment_ReturnsFullPath()
     {
         var uri = new Uri("https://example.com/api/orders");
-        var prefix = hyperwycHandler.DeriveInvalidationPrefix(uri);
+        var prefix = HyperwycHandler.DeriveInvalidationPrefix(uri);
         Assert.Equal("https://example.com/api/orders", prefix);
     }
 
@@ -167,7 +167,7 @@ public class hyperwycHandlerOnlinePathTests
     public async Task DeriveInvalidationPrefix_NumericSegment_ReturnsParentPath()
     {
         var uri = new Uri("https://example.com/api/orders/42");
-        var prefix = hyperwycHandler.DeriveInvalidationPrefix(uri);
+        var prefix = HyperwycHandler.DeriveInvalidationPrefix(uri);
         Assert.Equal("https://example.com/api/orders", prefix);
     }
 
@@ -175,7 +175,7 @@ public class hyperwycHandlerOnlinePathTests
     public async Task DeriveInvalidationPrefix_GuidSegment_ReturnsParentPath()
     {
         var uri = new Uri("https://example.com/api/notes/550e8400-e29b-41d4-a716-446655440000");
-        var prefix = hyperwycHandler.DeriveInvalidationPrefix(uri);
+        var prefix = HyperwycHandler.DeriveInvalidationPrefix(uri);
         Assert.Equal("https://example.com/api/notes", prefix);
     }
 
@@ -207,13 +207,13 @@ public class hyperwycHandlerOnlinePathTests
         events.Subscribe(new DelegateObserver<SyncEvent>(received.Add));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.BadRequest));
-        var handler = new hyperwycHandler(
+        var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(),
             new FakeSyncPolicy(),
             new FakeStalenessEvaluator(),
             events,
-            new hyperwycOptions())
+            new HyperwycOptions())
         { InnerHandler = stub };
         using var client = new HttpClient(handler);
 
@@ -321,13 +321,13 @@ public class hyperwycHandlerOnlinePathTests
         {
             Content = new StringContent("{}"),
         });
-        var handler = new hyperwycHandler(
+        var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(),
             new FakeSyncPolicy(),
             new FakeStalenessEvaluator(isStale: true),
             events,
-            new hyperwycOptions())
+            new HyperwycOptions())
         { InnerHandler = stub };
         using var client = new HttpClient(handler);
 

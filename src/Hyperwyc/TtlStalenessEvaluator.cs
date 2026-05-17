@@ -1,7 +1,7 @@
-using hyperwyc.Interfaces;
-using hyperwyc.Models;
+using Hyperwyc.Interfaces;
+using Hyperwyc.Models;
 
-namespace hyperwyc;
+namespace Hyperwyc;
 
 /// <summary>
 /// Default <see cref="IStalenessEvaluator"/> that considers a cached response
@@ -15,7 +15,7 @@ public sealed class TtlStalenessEvaluator : IStalenessEvaluator
     /// <summary>
     /// Initialises the evaluator with the TTL from <paramref name="options"/>.
     /// </summary>
-    public TtlStalenessEvaluator(hyperwycOptions options)
+    public TtlStalenessEvaluator(HyperwycOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
         _ttl = options.DefaultCacheTtl;

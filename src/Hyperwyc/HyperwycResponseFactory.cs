@@ -1,15 +1,15 @@
 using System.Net;
-using hyperwyc.Models;
+using Hyperwyc.Models;
 
-namespace hyperwyc;
+namespace Hyperwyc;
 
 /// <summary>
 /// Builds synthetic <see cref="HttpResponseMessage"/> instances returned to
-/// callers when a request is handled offline by hyperwyc.
+/// callers when a request is handled offline by Hyperwyc.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The <c>X-hyperwyc-Status</c> response header is always present on synthetic
+/// The <c>X-Hyperwyc-Status</c> response header is always present on synthetic
 /// responses regardless of the <see cref="OfflineResponsePolicy"/>.
 /// </para>
 /// <para>
@@ -20,10 +20,10 @@ namespace hyperwyc;
 /// so callers can detect the offline state through standard HTTP semantics.
 /// </para>
 /// </remarks>
-internal static class hyperwycResponseFactory
+internal static class HyperwycResponseFactory
 {
-    /// <summary>Header name added to every synthetic hyperwyc response.</summary>
-    internal const string StatusHeader = "X-hyperwyc-Status";
+    /// <summary>Header name added to every synthetic Hyperwyc response.</summary>
+    internal const string StatusHeader = "X-Hyperwyc-Status";
 
     /// <summary>
     /// Returns a synthetic response indicating that the write request was

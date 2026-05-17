@@ -1,8 +1,8 @@
-namespace hyperwyc.Models;
+namespace Hyperwyc.Models;
 
 /// <summary>
 /// Discriminates the kind of sync lifecycle event emitted on
-/// <see cref="Interfaces.Ihyperwyc.SyncEvents"/>.
+/// <see cref="Interfaces.IHyperwyc.SyncEvents"/>.
 /// </summary>
 public enum SyncEventType
 {

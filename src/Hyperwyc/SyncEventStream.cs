@@ -1,6 +1,6 @@
-using hyperwyc.Models;
+using Hyperwyc.Models;
 
-namespace hyperwyc;
+namespace Hyperwyc;
 
 /// <summary>
 /// A minimal hand-rolled hot observable subject that broadcasts
@@ -10,7 +10,7 @@ namespace hyperwyc;
 /// <remarks>
 /// <para>
 /// Expose the instance as <see cref="IObservable{SyncEvent}"/> via
-/// <c>Ihyperwyc.SyncEvents</c>. Only <c>hyperwycHandler</c> and the sync
+/// <c>IHyperwyc.SyncEvents</c>. Only <c>HyperwycHandler</c> and the sync
 /// orchestrator should call <see cref="Publish"/> — it is marked
 /// <see langword="internal"/>.
 /// </para>

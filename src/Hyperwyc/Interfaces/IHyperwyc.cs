@@ -1,12 +1,12 @@
-using hyperwyc.Models;
+using Hyperwyc.Models;
 
-namespace hyperwyc.Interfaces;
+namespace Hyperwyc.Interfaces;
 
 /// <summary>
-/// Top-level interface for the hyperwyc service. Exposes the real-time sync event
+/// Top-level interface for the Hyperwyc service. Exposes the real-time sync event
 /// stream and allows callers to fully reset the underlying store.
 /// </summary>
-public interface Ihyperwyc
+public interface IHyperwyc
 {
     /// <summary>
     /// A hot observable that emits a <see cref="SyncEvent"/> each time a request

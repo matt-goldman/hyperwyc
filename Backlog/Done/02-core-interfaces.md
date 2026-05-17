@@ -2,7 +2,7 @@
 
 ## Summary
 
-Define the public interface contracts that form hyperwyc's extensibility surface. These types live in the `hyperwyc` core package and are the seams against which every other component is written and tested.
+Define the public interface contracts that form Hyperwyc's extensibility surface. These types live in the `Hyperwyc` core package and are the seams against which every other component is written and tested.
 
 ## Interfaces to Define
 
@@ -56,11 +56,11 @@ public interface IStalenessEvaluator
 }
 ```
 
-### `Ihyperwyc`
-Top-level interface for the hyperwyc service, primarily exposing the event stream and store reset.
+### `IHyperwyc`
+Top-level interface for the Hyperwyc service, primarily exposing the event stream and store reset.
 
 ```csharp
-public interface Ihyperwyc
+public interface IHyperwyc
 {
     IObservable<SyncEvent> SyncEvents { get; }
     Task ResetStoreAsync(CancellationToken ct = default);
@@ -76,7 +76,7 @@ public interface Ihyperwyc
 
 ## Acceptance Criteria
 
-- [x] All interfaces above are defined in `src/hyperwyc` with correct namespacing.
+- [x] All interfaces above are defined in `src/Hyperwyc` with correct namespacing.
 - [x] Supporting types (`CacheStrategy`, `RetryOptions`, `SyncEvent`, `SyncEventType`) are defined.
 - [x] All types are documented with XML `<summary>` comments.
 - [x] No concrete implementations in this issue — interfaces and value types only.

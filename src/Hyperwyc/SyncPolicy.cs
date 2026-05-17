@@ -1,14 +1,14 @@
-using hyperwyc.Interfaces;
-using hyperwyc.Models;
+using Hyperwyc.Interfaces;
+using Hyperwyc.Models;
 
-namespace hyperwyc;
+namespace Hyperwyc;
 
 /// <summary>
 /// Factory for common <see cref="ISyncPolicy"/> presets.
 /// </summary>
 /// <example>
 /// <code>
-/// services.Addhyperwyc(options =>
+/// services.AddHyperwyc(options =>
 /// {
 ///     options.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromDays(1));
 /// });
@@ -26,8 +26,8 @@ public static class SyncPolicy
     /// </summary>
     /// <param name="ttl">
     /// How long a cached response is considered fresh.
-    /// Also applied as <see cref="hyperwycOptions.DefaultCacheTtl"/> when this
-    /// policy is set as <see cref="hyperwycOptions.DefaultPolicy"/>.
+    /// Also applied as <see cref="HyperwycOptions.DefaultCacheTtl"/> when this
+    /// policy is set as <see cref="HyperwycOptions.DefaultPolicy"/>.
     /// </param>
     public static ISyncPolicy CacheFirst(TimeSpan ttl) =>
         new PresetSyncPolicy(CacheStrategy.CacheFirst, shouldInvalidate: true, ttl);
@@ -60,7 +60,7 @@ public static class SyncPolicy
         bool shouldInvalidate,
         TimeSpan? ttl) : ISyncPolicy
     {
-        /// <summary>Optional TTL to propagate to hyperwycOptions.DefaultCacheTtl.</summary>
+        /// <summary>Optional TTL to propagate to HyperwycOptions.DefaultCacheTtl.</summary>
         internal TimeSpan? Ttl { get; } = ttl;
 
         public CacheStrategy GetStrategy(HttpRequestMessage request) => strategy;

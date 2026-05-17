@@ -1,6 +1,6 @@
-using hyperwyc.Models;
+using Hyperwyc.Models;
 
-namespace hyperwyc.Interfaces;
+namespace Hyperwyc.Interfaces;
 
 /// <summary>
 /// Persistence layer for request/response envelopes. Implementations provide

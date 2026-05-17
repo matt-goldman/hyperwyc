@@ -1,18 +1,18 @@
-using hyperwyc.Interfaces;
-using hyperwyc.Models;
+using Hyperwyc.Interfaces;
+using Hyperwyc.Models;
 
-namespace hyperwyc;
+namespace Hyperwyc;
 
 /// <summary>
-/// Default implementation of <see cref="Ihyperwyc"/>. Exposes the sync event
+/// Default implementation of <see cref="IHyperwyc"/>. Exposes the sync event
 /// stream and delegates store reset to the configured <see cref="ISyncStore"/>.
 /// </summary>
-internal sealed class hyperwycService : Ihyperwyc
+internal sealed class HyperwycService : IHyperwyc
 {
     private readonly SyncEventStream _events;
     private readonly ISyncStore _store;
 
-    internal hyperwycService(SyncEventStream events, ISyncStore store)
+    internal HyperwycService(SyncEventStream events, ISyncStore store)
     {
         ArgumentNullException.ThrowIfNull(events);
         ArgumentNullException.ThrowIfNull(store);

@@ -15,8 +15,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\hyperwyc.Cabinet\hyperwyc.Cabinet.csproj" />
-    <ProjectReference Include="..\..\src\hyperwyc\hyperwyc.csproj" />
+    <ProjectReference Include="..\..\src\Hyperwyc.Cabinet\Hyperwyc.Cabinet.csproj" />
+    <ProjectReference Include="..\..\src\Hyperwyc\Hyperwyc.csproj" />
   </ItemGroup>
 
 </Project>

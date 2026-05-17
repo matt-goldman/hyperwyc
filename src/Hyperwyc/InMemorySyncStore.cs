@@ -1,7 +1,7 @@
-using hyperwyc.Interfaces;
-using hyperwyc.Models;
+using Hyperwyc.Interfaces;
+using Hyperwyc.Models;
 
-namespace hyperwyc;
+namespace Hyperwyc;
 
 /// <summary>
 /// An in-process, non-persistent <see cref="ISyncStore"/> backed by a
@@ -10,7 +10,7 @@ namespace hyperwyc;
 /// </summary>
 /// <remarks>
 /// All state is lost when the process exits. For durable persistence use
-/// <c>hyperwyc.Cabinet</c> instead.
+/// <c>Hyperwyc.Cabinet</c> instead.
 /// </remarks>
 public sealed class InMemorySyncStore : ISyncStore
 {

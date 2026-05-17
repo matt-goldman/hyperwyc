@@ -1,17 +1,17 @@
-using hyperwyc.Interfaces;
-using hyperwyc.Models;
+using Hyperwyc.Interfaces;
+using Hyperwyc.Models;
 
-namespace hyperwyc;
+namespace Hyperwyc;
 
 /// <summary>
-/// Configuration options for <see cref="hyperwycHandler"/> and <see cref="SyncOrchestrator"/>.
+/// Configuration options for <see cref="HyperwycHandler"/> and <see cref="SyncOrchestrator"/>.
 /// </summary>
 /// <remarks>
 /// Extended by later issues (#17 max body size, #20 per-endpoint TTL overrides, etc.).
-/// Set properties on this class and call <c>Addhyperwyc(options => ...)</c> to
-/// register hyperwyc with a .NET DI container.
+/// Set properties on this class and call <c>AddHyperwyc(options => ...)</c> to
+/// register Hyperwyc with a .NET DI container.
 /// </remarks>
-public sealed class hyperwycOptions
+public sealed class HyperwycOptions
 {
     // -------------------------------------------------------------------------
     // Core policy / infrastructure
@@ -59,7 +59,7 @@ public sealed class hyperwycOptions
     public TimeSpan DefaultCacheTtl { get; set; } = TimeSpan.FromMinutes(5);
 
     /// <summary>
-    /// Controls the HTTP status code returned by hyperwyc when it handles a
+    /// Controls the HTTP status code returned by Hyperwyc when it handles a
     /// request offline.  Defaults to <see cref="OfflineResponsePolicy.Transparent"/>
     /// (200 OK) so app code never needs to branch on connectivity status —
     /// matching the Service Worker pattern used in progressive web apps.

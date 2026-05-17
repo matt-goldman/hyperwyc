@@ -1,45 +1,45 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using hyperwyc.Interfaces;
+using Hyperwyc.Interfaces;
 
-namespace hyperwyc;
+namespace Hyperwyc;
 
 /// <summary>
-/// Extension methods for registering hyperwyc with a .NET DI container.
+/// Extension methods for registering Hyperwyc with a .NET DI container.
 /// </summary>
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers hyperwyc services with the <see cref="IServiceCollection"/>.
+    /// Registers Hyperwyc services with the <see cref="IServiceCollection"/>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Use the returned <see cref="IServiceCollection"/> to add hyperwyc handlers
+    /// Use the returned <see cref="IServiceCollection"/> to add Hyperwyc handlers
     /// to named HTTP clients:
     /// </para>
     /// <code>
     /// services.AddHttpClient("MyApi")
-    ///     .AddHttpMessageHandler&lt;hyperwycHandler&gt;();
+    ///     .AddHttpMessageHandler&lt;HyperwycHandler&gt;();
     ///
-    /// services.Addhyperwyc(options =>
+    /// services.AddHyperwyc(options =>
     /// {
     ///     options.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromDays(1));
-    ///     options.Store = new CabinetSyncStore("hyperwyc.db");
+    ///     options.Store = new CabinetSyncStore("Hyperwyc.db");
     ///     options.Connectivity = new MauiConnectivityService();
     /// });
     /// </code>
     /// </remarks>
     /// <param name="services">The service collection to register with.</param>
-    /// <param name="configure">Optional delegate to configure <see cref="hyperwycOptions"/>.</param>
+    /// <param name="configure">Optional delegate to configure <see cref="HyperwycOptions"/>.</param>
     /// <returns>The original <paramref name="services"/> for chaining.</returns>
-    public static IServiceCollection Addhyperwyc(
+    public static IServiceCollection AddHyperwyc(
         this IServiceCollection services,
-        Action<hyperwycOptions>? configure = null)
+        Action<HyperwycOptions>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        var options = new hyperwycOptions();
+        var options = new HyperwycOptions();
         configure?.Invoke(options);
 
         // If the default policy carries a TTL, propagate it to DefaultCacheTtl
@@ -47,7 +47,7 @@ public static class ServiceCollectionExtensions
         if (options.DefaultPolicy is SyncPolicy.PresetSyncPolicy { Ttl: { } policyTtl })
             options.DefaultCacheTtl = policyTtl;
 
-        // Register the options object itself as a singleton so hyperwycHandler
+        // Register the options object itself as a singleton so HyperwycHandler
         // and SyncOrchestrator can receive it via constructor injection.
         services.AddSingleton(options);
 
@@ -60,7 +60,7 @@ public static class ServiceCollectionExtensions
         // Core singletons.
         services.TryAddSingleton<SyncEventStream>();
 
-        services.TryAddSingleton<Ihyperwyc>(sp => new hyperwycService(
+        services.TryAddSingleton<IHyperwyc>(sp => new HyperwycService(
             sp.GetRequiredService<SyncEventStream>(),
             sp.GetRequiredService<ISyncStore>()));
 
@@ -69,15 +69,15 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<ISyncPolicy>(),
             sp.GetRequiredService<IConnectivityService>(),
             sp.GetRequiredService<SyncEventStream>(),
-            sp.GetRequiredService<hyperwycOptions>(),
+            sp.GetRequiredService<HyperwycOptions>(),
             new HttpClientHandler()));
 
-        // hyperwycHandler is transient — each named HTTP client pipeline gets its own instance.
-        services.TryAddTransient<hyperwycHandler>();
+        // HyperwycHandler is transient — each named HTTP client pipeline gets its own instance.
+        services.TryAddTransient<HyperwycHandler>();
 
         // Startup flush hosted service.
         if (options.FlushOnStartup)
-            services.AddHostedService<hyperwycHostedService>();
+            services.AddHostedService<HyperwycHostedService>();
 
         return services;
     }

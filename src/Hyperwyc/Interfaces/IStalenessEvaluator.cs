@@ -1,6 +1,6 @@
-using hyperwyc.Models;
+using Hyperwyc.Models;
 
-namespace hyperwyc.Interfaces;
+namespace Hyperwyc.Interfaces;
 
 /// <summary>
 /// Determines whether a cached response is still considered fresh and may be

@@ -1,8 +1,8 @@
-namespace hyperwyc.Models;
+namespace Hyperwyc.Models;
 
 /// <summary>
-/// An event emitted by hyperwyc as requests move through their sync lifecycle.
-/// Subscribe via <see cref="Interfaces.Ihyperwyc.SyncEvents"/>.
+/// An event emitted by Hyperwyc as requests move through their sync lifecycle.
+/// Subscribe via <see cref="Interfaces.IHyperwyc.SyncEvents"/>.
 /// </summary>
 /// <param name="Type">The kind of lifecycle transition that occurred.</param>
 /// <param name="Url">The URL of the request that triggered the event.</param>

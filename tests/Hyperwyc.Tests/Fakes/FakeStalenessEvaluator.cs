@@ -1,7 +1,7 @@
-using hyperwyc.Interfaces;
-using hyperwyc.Models;
+using Hyperwyc.Interfaces;
+using Hyperwyc.Models;
 
-namespace hyperwyc.Tests.Fakes;
+namespace Hyperwyc.Tests.Fakes;
 
 /// <summary>
 /// Test double for <see cref="IStalenessEvaluator"/>.

@@ -1,4 +1,4 @@
-namespace hyperwyc.Models;
+namespace Hyperwyc.Models;
 
 /// <summary>
 /// Configures the retry behaviour for a queued outbox request.

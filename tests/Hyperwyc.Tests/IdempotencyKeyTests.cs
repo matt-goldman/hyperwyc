@@ -1,10 +1,10 @@
 using System.Net;
 using System.Text;
-using hyperwyc.Models;
-using hyperwyc.Tests.Fakes;
+using Hyperwyc.Models;
+using Hyperwyc.Tests.Fakes;
 using Xunit;
 
-namespace hyperwyc.Tests;
+namespace Hyperwyc.Tests;
 
 public class IdempotencyKeyTests
 {
@@ -14,30 +14,30 @@ public class IdempotencyKeyTests
     // Helpers
     // -------------------------------------------------------------------------
 
-    private static (hyperwycHandler handler, StubHttpMessageHandler stub) BuildOnlineHandler(
+    private static (HyperwycHandler handler, StubHttpMessageHandler stub) BuildOnlineHandler(
         InMemorySyncStore? store = null)
     {
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
-        var handler = new hyperwycHandler(
+        var handler = new HyperwycHandler(
             store ?? new InMemorySyncStore(),
             new FakeConnectivityService(isConnected: true),
             new FakeSyncPolicy(),
             new FakeStalenessEvaluator(),
             new SyncEventStream(),
-            new hyperwycOptions())
+            new HyperwycOptions())
         { InnerHandler = stub };
         return (handler, stub);
     }
 
-    private static hyperwycHandler BuildOfflineHandler(InMemorySyncStore store)
+    private static HyperwycHandler BuildOfflineHandler(InMemorySyncStore store)
     {
-        return new hyperwycHandler(
+        return new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: false),
             new FakeSyncPolicy(),
             new FakeStalenessEvaluator(),
             new SyncEventStream(),
-            new hyperwycOptions())
+            new HyperwycOptions())
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
     }
 

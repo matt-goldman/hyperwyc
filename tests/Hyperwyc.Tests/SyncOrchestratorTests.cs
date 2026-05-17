@@ -1,9 +1,9 @@
 using System.Net;
-using hyperwyc.Models;
-using hyperwyc.Tests.Fakes;
+using Hyperwyc.Models;
+using Hyperwyc.Tests.Fakes;
 using Xunit;
 
-namespace hyperwyc.Tests;
+namespace Hyperwyc.Tests;
 
 public class SyncOrchestratorTests
 {
@@ -23,7 +23,7 @@ public class SyncOrchestratorTests
             policy ?? new FakeSyncPolicy(),
             new FakeConnectivityService(connected),
             events ?? new SyncEventStream(),
-            new hyperwycOptions { ConnectivityDebounceDelay = TimeSpan.Zero },
+            new HyperwycOptions { ConnectivityDebounceDelay = TimeSpan.Zero },
             transport);
     }
 

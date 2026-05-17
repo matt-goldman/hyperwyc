@@ -1,7 +1,7 @@
-using hyperwyc.Models;
+using Hyperwyc.Models;
 using Xunit;
 
-namespace hyperwyc.Tests;
+namespace Hyperwyc.Tests;
 
 public class SyncEventStreamTests
 {

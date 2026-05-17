@@ -1,14 +1,14 @@
 using Microsoft.Extensions.Hosting;
-using hyperwyc.Interfaces;
+using Hyperwyc.Interfaces;
 
-namespace hyperwyc;
+namespace Hyperwyc;
 
 /// <summary>
 /// An <see cref="IHostedService"/> that triggers an outbox flush on application
-/// startup when <see cref="hyperwycOptions.FlushOnStartup"/> is <see langword="true"/>
+/// startup when <see cref="HyperwycOptions.FlushOnStartup"/> is <see langword="true"/>
 /// and the device is currently online.
 /// </summary>
-internal sealed class hyperwycHostedService(
+internal sealed class HyperwycHostedService(
     SyncOrchestrator orchestrator,
     IConnectivityService connectivity) : IHostedService
 {

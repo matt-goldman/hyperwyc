@@ -2,11 +2,11 @@
 
 ## Summary
 
-Define the `Envelope` document type that hyperwyc uses to persist both outbound (queued write) and inbound (cached response) data in the store.
+Define the `Envelope` document type that Hyperwyc uses to persist both outbound (queued write) and inbound (cached response) data in the store.
 
 ## Background
 
-Every request/response pair hyperwyc manages is stored as a single `Envelope` document. The same type covers both outbox entries (pending writes waiting for connectivity) and cache entries (GET responses stored for offline reads).
+Every request/response pair Hyperwyc manages is stored as a single `Envelope` document. The same type covers both outbox entries (pending writes waiting for connectivity) and cache entries (GET responses stored for offline reads).
 
 ## Envelope Schema
 
@@ -39,7 +39,7 @@ public sealed class CachedResponse
 
 ## Acceptance Criteria
 
-- [ ] `Envelope` and `CachedResponse` defined in `src/hyperwyc`.
+- [ ] `Envelope` and `CachedResponse` defined in `src/Hyperwyc`.
 - [ ] All properties have XML `<summary>` doc comments.
 - [ ] `Envelope` is serialisable to/from JSON without custom converters (use `System.Text.Json`-friendly property types).
 - [ ] A helper factory method `Envelope.ForRequest(HttpRequestMessage)` creates an unsent envelope from an `HttpRequestMessage`.

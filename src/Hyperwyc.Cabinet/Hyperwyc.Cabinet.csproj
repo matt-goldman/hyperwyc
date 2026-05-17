@@ -5,7 +5,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\hyperwyc\hyperwyc.csproj" />
+    <ProjectReference Include="..\..\src\Hyperwyc\Hyperwyc.csproj" />
   </ItemGroup>
 
 </Project>

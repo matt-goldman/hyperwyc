@@ -1,11 +1,11 @@
-using hyperwyc.Models;
+using Hyperwyc.Models;
 
-namespace hyperwyc.Interfaces;
+namespace Hyperwyc.Interfaces;
 
 /// <summary>
 /// Provides per-request caching rules. Implement this interface to customise
 /// which endpoints are cached, which use network-only semantics, and how
-/// aggressively hyperwyc retries failed writes.
+/// aggressively Hyperwyc retries failed writes.
 /// </summary>
 public interface ISyncPolicy
 {

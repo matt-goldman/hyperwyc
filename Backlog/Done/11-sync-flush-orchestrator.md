@@ -12,7 +12,7 @@ When a device regains connectivity, all envelopes queued in the outbox must be r
 
 ### Connectivity event debounce
 - Subscribe to `IConnectivityService.ConnectivityChanged`.
-- Debounce `true` (connected) events by 2 seconds (configurable via `hyperwycOptions.ConnectivityDebounceDelay`).
+- Debounce `true` (connected) events by 2 seconds (configurable via `HyperwycOptions.ConnectivityDebounceDelay`).
 - On debounced "connected" event, trigger a flush.
 
 ### Flush loop
@@ -32,7 +32,7 @@ When a device regains connectivity, all envelopes queued in the outbox must be r
 
 ## Acceptance Criteria
 
-- [x] `SyncOrchestrator` (or similar name) implemented in `src/hyperwyc`.
+- [x] `SyncOrchestrator` (or similar name) implemented in `src/Hyperwyc`.
 - [x] Subscribes to `IConnectivityService.ConnectivityChanged`; debounce configurable.
 - [x] Semaphore prevents concurrent flushes.
 - [x] Envelopes processed in `CreatedUtc` ascending order.
@@ -43,5 +43,5 @@ When a device regains connectivity, all envelopes queued in the outbox must be r
 
 ## Notes
 
-- The orchestrator should also be triggerable manually (e.g. from `Ihyperwyc` for a UI-initiated sync button).
-- App-start flush (trigger flush on startup if online) can be a configuration flag in `hyperwycOptions`.
+- The orchestrator should also be triggerable manually (e.g. from `IHyperwyc` for a UI-initiated sync button).
+- App-start flush (trigger flush on startup if online) can be a configuration flag in `HyperwycOptions`.

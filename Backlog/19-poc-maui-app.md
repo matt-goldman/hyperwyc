@@ -2,21 +2,21 @@
 
 ## Summary
 
-Build the .NET MAUI client application that exercises hyperwyc's core behaviours end-to-end against the sample API (issue #18).
+Build the .NET MAUI client application that exercises Hyperwyc's core behaviours end-to-end against the sample API (issue #18).
 
 ## Background
 
-The MAUI app is the primary POC surface. It gives developers a concrete reference for wiring hyperwyc into a real app and demonstrates every major feature: online sync, offline queue, retry, dead-letter, and event observation.
+The MAUI app is the primary POC surface. It gives developers a concrete reference for wiring Hyperwyc into a real app and demonstrates every major feature: online sync, offline queue, retry, dead-letter, and event observation.
 
 ## Features
 
-| Feature | hyperwyc Behaviour Demonstrated |
+| Feature | Hyperwyc Behaviour Demonstrated |
 |---|---|
 | Create / update / delete notes | Mutating requests; online and offline paths |
 | Per-item sync state badge | `OnQueued`, `OnSynced`, `OnFailed` events |
 | Live sync event log panel | Full `SyncEvents` subscription |
-| "Sync Now" button | Manual flush trigger via `Ihyperwyc` |
-| "Logout / Clear Cache" button | `Ihyperwyc.ResetStoreAsync()` |
+| "Sync Now" button | Manual flush trigger via `IHyperwyc` |
+| "Logout / Clear Cache" button | `IHyperwyc.ResetStoreAsync()` |
 | Offline simulation instructions | README note on using emulator network toggle |
 
 ## Wiring
@@ -24,9 +24,9 @@ The MAUI app is the primary POC surface. It gives developers a concrete referenc
 ```csharp
 // MauiProgram.cs
 builder.Services.AddHttpClient("NotesApi", c => c.BaseAddress = new Uri("http://localhost:5000"))
-    .AddHttpMessageHandler<hyperwycHandler>();
+    .AddHttpMessageHandler<HyperwycHandler>();
 
-builder.Services.Addhyperwyc(options =>
+builder.Services.AddHyperwyc(options =>
 {
     options.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromMinutes(5));
     options.Store = new CabinetSyncStore("notes.db");
@@ -36,12 +36,12 @@ builder.Services.Addhyperwyc(options =>
 
 ## Acceptance Criteria
 
-- [ ] `hyperwyc.Sample/MauiApp` project created; target `net10.0-android` and `net10.0-windows` at minimum.
+- [ ] `Hyperwyc.Sample/MauiApp` project created; target `net10.0-android` and `net10.0-windows` at minimum.
 - [ ] `NoteListPage` showing all notes with sync-state badges.
 - [ ] Create/edit/delete notes flow fully functional.
-- [ ] Live event log panel subscribes to `Ihyperwyc.SyncEvents` and appends entries.
+- [ ] Live event log panel subscribes to `IHyperwyc.SyncEvents` and appends entries.
 - [ ] "Sync Now" button calls the orchestrator flush manually.
-- [ ] "Logout" button calls `Ihyperwyc.ResetStoreAsync()` and clears the note list.
+- [ ] "Logout" button calls `IHyperwyc.ResetStoreAsync()` and clears the note list.
 - [ ] App runs offline: notes created while offline appear with "Queued" badge.
 - [ ] On reconnect, queued notes sync and badges update to "Synced".
 - [ ] A note that fails all retries shows a "Failed" badge.

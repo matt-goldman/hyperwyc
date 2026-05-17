@@ -1,29 +1,29 @@
 using System.Net;
 using System.Text;
-using hyperwyc.Models;
-using hyperwyc.Tests.Fakes;
+using Hyperwyc.Models;
+using Hyperwyc.Tests.Fakes;
 using Xunit;
 
-namespace hyperwyc.Tests;
+namespace Hyperwyc.Tests;
 
-public class hyperwycHandlerOfflinePathTests
+public class HyperwycHandlerOfflinePathTests
 {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
-    private static hyperwycHandler BuildOfflineHandler(
+    private static HyperwycHandler BuildOfflineHandler(
         InMemorySyncStore store,
         SyncEventStream? events = null,
-        hyperwycOptions? options = null)
+        HyperwycOptions? options = null)
     {
-        var handler = new hyperwycHandler(
+        var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: false),
             new FakeSyncPolicy(),
             new FakeStalenessEvaluator(),
             events ?? new SyncEventStream(),
-            options ?? new hyperwycOptions())
+            options ?? new HyperwycOptions())
         {
             // Inner handler should never be reached when offline.
             InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)),
@@ -100,7 +100,7 @@ public class hyperwycHandlerOfflinePathTests
         var response = await client.PostAsync("https://example.com/api/orders", content: null);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.True(response.Headers.TryGetValues(hyperwycResponseFactory.StatusHeader, out var values));
+        Assert.True(response.Headers.TryGetValues(HyperwycResponseFactory.StatusHeader, out var values));
         Assert.Equal("Queued", values!.First());
     }
 
@@ -108,13 +108,13 @@ public class hyperwycHandlerOfflinePathTests
     public async Task OfflineWrite_SignalPolicy_Returns503()
     {
         var store = new InMemorySyncStore();
-        var options = new hyperwycOptions { OfflineResponsePolicy = OfflineResponsePolicy.Signal };
+        var options = new HyperwycOptions { OfflineResponsePolicy = OfflineResponsePolicy.Signal };
         using var client = new HttpClient(BuildOfflineHandler(store, options: options));
 
         var response = await client.PostAsync("https://example.com/api/orders", content: null);
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-        Assert.True(response.Headers.TryGetValues(hyperwycResponseFactory.StatusHeader, out var values));
+        Assert.True(response.Headers.TryGetValues(HyperwycResponseFactory.StatusHeader, out var values));
         Assert.Equal("Queued", values!.First());
     }
 
@@ -123,13 +123,13 @@ public class hyperwycHandlerOfflinePathTests
     {
         var store = new InMemorySyncStore();
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
-        var handler = new hyperwycHandler(
+        var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: false),
             new FakeSyncPolicy(),
             new FakeStalenessEvaluator(),
             new SyncEventStream(),
-            new hyperwycOptions())
+            new HyperwycOptions())
         { InnerHandler = stub };
         using var client = new HttpClient(handler);
 
@@ -193,13 +193,13 @@ public class hyperwycHandlerOfflinePathTests
         await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", "stale-data"));
 
         // Even a strictly-stale evaluator should not prevent cache serving when offline.
-        var handler = new hyperwycHandler(
+        var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: false),
             new FakeSyncPolicy(),
             new FakeStalenessEvaluator(isStale: true),   // would be stale online
             new SyncEventStream(),
-            new hyperwycOptions())
+            new HyperwycOptions())
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
         using var client = new HttpClient(handler);
 
@@ -223,7 +223,7 @@ public class hyperwycHandlerOfflinePathTests
         var response = await client.GetAsync("https://example.com/api/items");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.True(response.Headers.TryGetValues(hyperwycResponseFactory.StatusHeader, out var values));
+        Assert.True(response.Headers.TryGetValues(HyperwycResponseFactory.StatusHeader, out var values));
         Assert.Equal("Offline", values!.First());
     }
 
@@ -231,13 +231,13 @@ public class hyperwycHandlerOfflinePathTests
     public async Task OfflineRead_NoCacheAvailable_SignalPolicy_Returns503()
     {
         var store = new InMemorySyncStore();
-        var options = new hyperwycOptions { OfflineResponsePolicy = OfflineResponsePolicy.Signal };
+        var options = new HyperwycOptions { OfflineResponsePolicy = OfflineResponsePolicy.Signal };
         using var client = new HttpClient(BuildOfflineHandler(store, options: options));
 
         var response = await client.GetAsync("https://example.com/api/items");
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-        Assert.True(response.Headers.TryGetValues(hyperwycResponseFactory.StatusHeader, out var values));
+        Assert.True(response.Headers.TryGetValues(HyperwycResponseFactory.StatusHeader, out var values));
         Assert.Equal("Offline", values!.First());
     }
 

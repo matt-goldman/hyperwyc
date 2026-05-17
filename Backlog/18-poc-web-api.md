@@ -2,11 +2,11 @@
 
 ## Summary
 
-Build the minimal ASP.NET Core Web API that serves as the backend for the hyperwyc proof-of-concept. This API is the target server for all requests made by the MAUI sample app (issue #19).
+Build the minimal ASP.NET Core Web API that serves as the backend for the Hyperwyc proof-of-concept. This API is the target server for all requests made by the MAUI sample app (issue #19).
 
 ## Background
 
-The POC demonstrates all of hyperwyc's key behaviours in a realistic end-to-end scenario. The backend is a simple notes CRUD API; it is intentionally minimal so the behaviour under test is hyperwyc's, not the API's.
+The POC demonstrates all of Hyperwyc's key behaviours in a realistic end-to-end scenario. The backend is a simple notes CRUD API; it is intentionally minimal so the behaviour under test is Hyperwyc's, not the API's.
 
 ## Endpoints
 
@@ -27,7 +27,7 @@ The POC demonstrates all of hyperwyc's key behaviours in a realistic end-to-end 
 ## Solution Structure
 
 ```
-hyperwyc.Sample/
+Hyperwyc.Sample/
 ├── WebApi/           ← this issue
 ├── MauiApp/          ← issue #19
 └── Shared/           ← DTOs (NoteDto, etc.)
@@ -35,10 +35,10 @@ hyperwyc.Sample/
 
 ## Acceptance Criteria
 
-- [ ] `hyperwyc.Sample/WebApi` project created and runs with `dotnet run`.
+- [ ] `Hyperwyc.Sample/WebApi` project created and runs with `dotnet run`.
 - [ ] All four CRUD endpoints functional.
 - [ ] `Idempotency-Key` deduplication implemented on `POST /api/notes`.
-- [ ] Shared `NoteDto` in `hyperwyc.Sample/Shared`.
+- [ ] Shared `NoteDto` in `Hyperwyc.Sample/Shared`.
 - [ ] CORS configured for local MAUI/desktop clients.
 - [ ] `README` or inline comments document how to run the API alongside the MAUI app.
 

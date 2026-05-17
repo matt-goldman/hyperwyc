@@ -1,9 +1,9 @@
 using System.Net.Http.Headers;
 
-namespace hyperwyc.Models;
+namespace Hyperwyc.Models;
 
 /// <summary>
-/// Represents a request/response pair persisted by hyperwyc.
+/// Represents a request/response pair persisted by Hyperwyc.
 /// Covers both outbox entries (pending writes awaiting connectivity) and
 /// cache entries (GET responses stored for offline reads).
 /// </summary>

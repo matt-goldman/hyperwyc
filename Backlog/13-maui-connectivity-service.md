@@ -6,7 +6,7 @@ Provide `MauiConnectivityService`, the default `IConnectivityService` implementa
 
 ## Background
 
-`IConnectivityService` is a pluggable interface defined in the `hyperwyc` core. The MAUI-specific implementation belongs in `hyperwyc` itself (behind a conditional compilation target) or in a thin helper — to be decided during implementation. The goal is that MAUI developers get a working connectivity service with minimal wiring.
+`IConnectivityService` is a pluggable interface defined in the `Hyperwyc` core. The MAUI-specific implementation belongs in `Hyperwyc` itself (behind a conditional compilation target) or in a thin helper — to be decided during implementation. The goal is that MAUI developers get a working connectivity service with minimal wiring.
 
 ## Behaviour
 
@@ -20,11 +20,11 @@ Provide `MauiConnectivityService`, the default `IConnectivityService` implementa
 - [ ] `IsConnected` uses `Connectivity.Current.NetworkAccess`.
 - [ ] `ConnectivityChanged` observable raises `true`/`false` matching MAUI's connectivity events.
 - [ ] Class is only compiled when the MAUI target framework is active (use `#if` or target framework condition).
-- [ ] `MauiConnectivityService` is registered automatically when `Addhyperwyc()` detects a MAUI context, or documented as a manual registration step.
+- [ ] `MauiConnectivityService` is registered automatically when `AddHyperwyc()` detects a MAUI context, or documented as a manual registration step.
 - [ ] Unit-testable alternative: `StaticConnectivityService` (takes a constructor bool + manual raise) is provided for tests.
 - [ ] XML doc comments on all public members.
 
 ## Notes
 
 - For non-MAUI targets (ASP.NET Core, console), developers implement `IConnectivityService` themselves or use a provided `AlwaysOnlineConnectivityService` stub.
-- `StaticConnectivityService` for testing can live in `hyperwyc` directly; it is useful beyond just this issue.
+- `StaticConnectivityService` for testing can live in `Hyperwyc` directly; it is useful beyond just this issue.

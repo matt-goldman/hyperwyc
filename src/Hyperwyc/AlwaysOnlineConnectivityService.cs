@@ -1,6 +1,6 @@
-using hyperwyc.Interfaces;
+using Hyperwyc.Interfaces;
 
-namespace hyperwyc;
+namespace Hyperwyc;
 
 /// <summary>
 /// An <see cref="IConnectivityService"/> that always reports the device as

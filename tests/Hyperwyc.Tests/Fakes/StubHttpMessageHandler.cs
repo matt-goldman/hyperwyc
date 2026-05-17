@@ -1,4 +1,4 @@
-namespace hyperwyc.Tests.Fakes;
+namespace Hyperwyc.Tests.Fakes;
 
 /// <summary>
 /// An <see cref="HttpMessageHandler"/> that returns a pre-configured response

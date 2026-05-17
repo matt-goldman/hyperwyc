@@ -1,8 +1,8 @@
-using hyperwyc.Cabinet;
-using hyperwyc.Models;
+using Hyperwyc.Cabinet;
+using Hyperwyc.Models;
 using Xunit;
 
-namespace hyperwyc.Cabinet.Tests;
+namespace Hyperwyc.Cabinet.Tests;
 
 /// <summary>
 /// Integration tests for <see cref="CabinetSyncStore"/> using a real Cabinet
@@ -12,14 +12,14 @@ public class CabinetSyncStoreTests : IDisposable
 {
     // A fixed 32-byte test key (NOT for production use).
     private static readonly byte[] TestKey =
-        System.Security.Cryptography.SHA256.HashData("hyperwyc-test"u8.ToArray());
+        System.Security.Cryptography.SHA256.HashData("Hyperwyc-test"u8.ToArray());
 
     private readonly string _tempDir;
     private readonly CabinetSyncStore _store;
 
     public CabinetSyncStoreTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"hyperwyc-tests-{Guid.NewGuid()}");
+        _tempDir = Path.Combine(Path.GetTempPath(), $"Hyperwyc-tests-{Guid.NewGuid()}");
         Directory.CreateDirectory(_tempDir);
         _store = new CabinetSyncStore(_tempDir, TestKey);
     }

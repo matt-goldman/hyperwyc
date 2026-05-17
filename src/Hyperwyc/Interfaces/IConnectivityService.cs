@@ -1,4 +1,4 @@
-namespace hyperwyc.Interfaces;
+namespace Hyperwyc.Interfaces;
 
 /// <summary>
 /// Abstracts platform-specific network reachability so that the core library

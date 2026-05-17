@@ -6,7 +6,7 @@ Implement the read-side cache: store GET/HEAD/OPTIONS responses, serve them when
 
 ## Background
 
-hyperwyc caches responses to read requests so that the app can continue operating while offline or while a network round-trip is in progress. The cache is keyed by URL (normalised). Staleness is evaluated by `IStalenessEvaluator`.
+Hyperwyc caches responses to read requests so that the app can continue operating while offline or while a network round-trip is in progress. The cache is keyed by URL (normalised). Staleness is evaluated by `IStalenessEvaluator`.
 
 ## Cache Flow
 
@@ -26,7 +26,7 @@ Incoming GET/HEAD/OPTIONS request
 - **Cache key:** The full request URL (query string included). URL normalisation (e.g. trailing slash) can be deferred to a later issue.
 - **Serving from cache:** Construct an `HttpResponseMessage` from `Envelope.Response`. All original headers are preserved. The `Date` header rewriting is a v1.0 feature (issue #21).
 - **Cache miss or stale:** Call `base.SendAsync`, then call `ISyncStore.UpsertAsync` with the new `CachedResponse`.
-- **Body size limit:** Responses exceeding `hyperwycOptions.MaxCachedResponseBodyBytes` (default 512 KB) are **not** stored but are still returned to the caller. See issue #17.
+- **Body size limit:** Responses exceeding `HyperwycOptions.MaxCachedResponseBodyBytes` (default 512 KB) are **not** stored but are still returned to the caller. See issue #17.
 - **Non-2xx responses:** Not cached.
 
 ## Default `IStalenessEvaluator`
@@ -35,7 +35,7 @@ Provide a `TtlStalenessEvaluator` default implementation that uses `CachedRespon
 
 ## Acceptance Criteria
 
-- [x] `TtlStalenessEvaluator : IStalenessEvaluator` implemented in `src/hyperwyc`.
+- [x] `TtlStalenessEvaluator : IStalenessEvaluator` implemented in `src/Hyperwyc`.
 - [x] Cache-hit path (fresh): network call not made, cached `HttpResponseMessage` returned.
 - [x] Cache-hit path (stale): network call made, cache entry updated, `OnUpdated` published.
 - [x] Cache-miss path: network call made, entry stored, `OnUpdated` published.
@@ -45,5 +45,5 @@ Provide a `TtlStalenessEvaluator` default implementation that uses `CachedRespon
 
 ## Notes
 
-- `IStalenessEvaluator` is pluggable; the default uses TTL from `hyperwycOptions`.
+- `IStalenessEvaluator` is pluggable; the default uses TTL from `HyperwycOptions`.
 - Per-endpoint TTL overrides are a v1.0 feature (issue #22).

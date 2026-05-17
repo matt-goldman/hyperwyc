@@ -1,9 +1,9 @@
 using Polly;
 using Polly.Retry;
-using hyperwyc.Interfaces;
-using hyperwyc.Models;
+using Hyperwyc.Interfaces;
+using Hyperwyc.Models;
 
-namespace hyperwyc;
+namespace Hyperwyc;
 
 /// <summary>
 /// Listens for connectivity restoration, drains the outbox in order, and
@@ -13,7 +13,7 @@ namespace hyperwyc;
 /// Call <see cref="FlushAsync"/> directly to trigger a manual sync (e.g. from
 /// a UI "sync now" button). The orchestrator also reacts automatically to
 /// <see cref="IConnectivityService.ConnectivityChanged"/> events with a
-/// configurable debounce delay (<see cref="hyperwycOptions.ConnectivityDebounceDelay"/>).
+/// configurable debounce delay (<see cref="HyperwycOptions.ConnectivityDebounceDelay"/>).
 /// </remarks>
 public sealed class SyncOrchestrator : IAsyncDisposable
 {
@@ -23,7 +23,7 @@ public sealed class SyncOrchestrator : IAsyncDisposable
     private readonly Interfaces.ISyncPolicy _policy;
     private readonly IConnectivityService _connectivity;
     private readonly SyncEventStream _events;
-    private readonly hyperwycOptions _options;
+    private readonly HyperwycOptions _options;
     private readonly HttpMessageInvoker _invoker;
 
     private readonly SemaphoreSlim _flushGate = new(1, 1);
@@ -42,14 +42,14 @@ public sealed class SyncOrchestrator : IAsyncDisposable
     /// <param name="options">Runtime configuration options.</param>
     /// <param name="transport">
     /// The inner <see cref="HttpMessageHandler"/> used to send outbox requests.
-    /// This should be a bare transport handler that bypasses <see cref="hyperwycHandler"/>.
+    /// This should be a bare transport handler that bypasses <see cref="HyperwycHandler"/>.
     /// </param>
     public SyncOrchestrator(
         ISyncStore store,
         Interfaces.ISyncPolicy policy,
         IConnectivityService connectivity,
         SyncEventStream events,
-        hyperwycOptions options,
+        HyperwycOptions options,
         HttpMessageHandler transport)
     {
         ArgumentNullException.ThrowIfNull(store);
@@ -140,7 +140,7 @@ public sealed class SyncOrchestrator : IAsyncDisposable
             var lastRequest = BuildRequest(envelope);
             if (_policy.ShouldInvalidateCacheOnWrite(lastRequest))
             {
-                var prefix = hyperwycHandler.DeriveInvalidationPrefix(lastRequest.RequestUri);
+                var prefix = HyperwycHandler.DeriveInvalidationPrefix(lastRequest.RequestUri);
                 await _store.InvalidateCacheForPrefixAsync(prefix, ct).ConfigureAwait(false);
             }
             lastRequest.Dispose();

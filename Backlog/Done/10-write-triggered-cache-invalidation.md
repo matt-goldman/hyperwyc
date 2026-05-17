@@ -6,7 +6,7 @@ When a mutating request (POST, PUT, PATCH, DELETE) succeeds, automatically inval
 
 ## Background
 
-After a successful write, the cached read data for the affected resource is likely stale. hyperwyc invalidates these entries by default so that the next GET returns fresh data rather than a now-incorrect cached response.
+After a successful write, the cached read data for the affected resource is likely stale. Hyperwyc invalidates these entries by default so that the next GET returns fresh data rather than a now-incorrect cached response.
 
 ## Behaviour
 

@@ -1,19 +1,19 @@
-using hyperwyc.Interfaces;
-using hyperwyc.Models;
+using Hyperwyc.Interfaces;
+using Hyperwyc.Models;
 
-namespace hyperwyc;
+namespace Hyperwyc;
 
 /// <summary>
-/// <see cref="DelegatingHandler"/> that routes HTTP requests through hyperwyc's
+/// <see cref="DelegatingHandler"/> that routes HTTP requests through Hyperwyc's
 /// caching and offline-sync pipeline.
 /// </summary>
 /// <remarks>
 /// This handler must be placed inside the <see cref="HttpClient"/> pipeline
 /// (i.e. closer to the transport than auth handlers). Assign an
 /// <see cref="System.Net.Http.HttpMessageHandler.InnerHandler"/> or use the DI
-/// extension from <c>hyperwyc.Extensions</c> which wires this up automatically.
+/// extension from <c>Hyperwyc.Extensions</c> which wires this up automatically.
 /// </remarks>
-public sealed class hyperwycHandler : DelegatingHandler
+public sealed class HyperwycHandler : DelegatingHandler
 {
     private const string _idempotencyKeyHeader = "Idempotency-Key";
 
@@ -30,18 +30,18 @@ public sealed class hyperwycHandler : DelegatingHandler
     private readonly ISyncPolicy _policy;
     private readonly IStalenessEvaluator _stalenessEvaluator;
     private readonly SyncEventStream _events;
-    private readonly hyperwycOptions _options;
+    private readonly HyperwycOptions _options;
 
     /// <summary>
-    /// Initialises a new <see cref="hyperwycHandler"/>.
+    /// Initialises a new <see cref="HyperwycHandler"/>.
     /// </summary>
-    public hyperwycHandler(
+    public HyperwycHandler(
         ISyncStore store,
         IConnectivityService connectivity,
         ISyncPolicy policy,
         IStalenessEvaluator stalenessEvaluator,
         SyncEventStream events,
-        hyperwycOptions options)
+        HyperwycOptions options)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(connectivity);
@@ -96,7 +96,7 @@ public sealed class hyperwycHandler : DelegatingHandler
             request.Method.Method,
             DateTimeOffset.UtcNow));
 
-        return hyperwycResponseFactory.Queued(_options.OfflineResponsePolicy);
+        return HyperwycResponseFactory.Queued(_options.OfflineResponsePolicy);
     }
 
     private async Task<HttpResponseMessage> HandleOfflineReadAsync(
@@ -110,7 +110,7 @@ public sealed class hyperwycHandler : DelegatingHandler
         if (cached is not null)
             return BuildResponseFromEnvelope(cached);
 
-        return hyperwycResponseFactory.Offline(_options.OfflineResponsePolicy);
+        return HyperwycResponseFactory.Offline(_options.OfflineResponsePolicy);
     }
 
     // -------------------------------------------------------------------------
