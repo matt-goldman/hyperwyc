@@ -14,7 +14,7 @@
   <PropertyGroup Condition="'$(IsTestProject)' != 'true'">
     <Authors>Matt Goldman</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/matt-goldman/restyc</RepositoryUrl>
+    <RepositoryUrl>https://github.com/matt-goldman/hyperwyc</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 

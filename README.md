@@ -1,10 +1,10 @@
-# Restyc
+# Hyperwyc
 
 > **A service-worker-inspired HTTP handler for .NET** — your app code never needs to know whether it's online or offline.
 
-Restyc sits in the `HttpClient` pipeline and transparently handles caching, queuing, and replay. Like a [Service Worker](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API) in a PWA, it intercepts outgoing HTTP requests and returns normal-looking responses regardless of connectivity. Your existing `HttpClient` code doesn't change. The `X-Restyc-Status` header is always present on synthetic responses for code that *wants* to know.
+Hyperwyc sits in the `HttpClient` pipeline and transparently handles caching, queuing, and replay. Like a [Service Worker](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API) in a PWA, it intercepts outgoing HTTP requests and returns normal-looking responses regardless of connectivity. Your existing `HttpClient` code doesn't change. The `X-Hyperwyc-Status` header is always present on synthetic responses for code that *wants* to know.
 
-Restyc is backend-agnostic, storage-pluggable, and designed for scenarios where data conflicts are rare or handled server-side.
+Hyperwyc is backend-agnostic, storage-pluggable, and designed for scenarios where data conflicts are rare or handled server-side.
 
 ---
 
@@ -26,20 +26,20 @@ Restyc is backend-agnostic, storage-pluggable, and designed for scenarios where 
 ## Quick Start
 
 ```bash
-dotnet add package Restyc.Cabinet
+dotnet add package Hyperwyc.Cabinet
 ```
 
-`Restyc.Cabinet` depends on `Restyc`, so the core arrives transitively. To use a different store, or implement your own, install only `Restyc`.
+`Hyperwyc.Cabinet` depends on `Hyperwyc`, so the core arrives transitively. To use a different store, or implement your own, install only `Hyperwyc`.
 
 ```csharp
 services.AddHttpClient("MyApi")
-    .AddHttpMessageHandler<RestycHandler>()
+    .AddHttpMessageHandler<HyperwycHandler>()
     .AddHttpMessageHandler<AuthHandler>();
 
-services.AddRestyc(options =>
+services.AddHyperwyc(options =>
 {
     options.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromDays(1));
-    options.Store = new CabinetSyncStore("restyc.db");
+    options.Store = new CabinetSyncStore("Hyperwyc.db");
     options.Connectivity = new MauiConnectivityService();
 });
 ```
@@ -56,7 +56,7 @@ services.AddRestyc(options =>
 
 ## What It Doesn't Do
 
-- Doesn't handle auth or token refresh (your own handler should — place it after `RestycHandler`)
+- Doesn't handle auth or token refresh (your own handler should — place it after `HyperwycHandler`)
 - Doesn't dictate your data model
 - Doesn't replace your local database
 - Doesn't resolve data conflicts — it's designed for scenarios where conflicts are rare or handled server-side
@@ -65,11 +65,11 @@ services.AddRestyc(options =>
 
 ## How It Works
 
-Restyc sits in your `HttpClient` pipeline as a `DelegatingHandler` — the same interception point that a Service Worker occupies for browser `fetch()`. It transparently handles all outgoing requests:
+Hyperwyc sits in your `HttpClient` pipeline as a `DelegatingHandler` — the same interception point that a Service Worker occupies for browser `fetch()`. It transparently handles all outgoing requests:
 
 - **Online:** Requests are sent immediately. Responses are optionally cached according to your staleness policy.
-- **Offline writes:** Requests are serialised and queued locally. The caller receives a `200 OK` (by default) with an `X-Restyc-Status: Queued` header. When connectivity is restored, the queue is replayed in order.
-- **Offline reads:** Served from cache if available (even if stale — any data is better than no data offline). If no cache exists, the caller receives a `200 OK` with `X-Restyc-Status: Offline`.
+- **Offline writes:** Requests are serialised and queued locally. The caller receives a `200 OK` (by default) with an `X-Hyperwyc-Status: Queued` header. When connectivity is restored, the queue is replayed in order.
+- **Offline reads:** Served from cache if available (even if stale — any data is better than no data offline). If no cache exists, the caller receives a `200 OK` with `X-Hyperwyc-Status: Offline`.
 - **Online reads (GET/HEAD/OPTIONS):** Served from cache if fresh; fetched from the API if stale or missing.
 
 The app doesn't need to know the difference. Your existing code doesn't change.
@@ -80,14 +80,14 @@ The app doesn't need to know the difference. Your existing code doesn't change.
 
 ## Auth Handler Placement
 
-Restyc does not manage authentication. When placing handlers, order matters:
+Hyperwyc does not manage authentication. When placing handlers, order matters:
 
-- **Expiring tokens** (e.g. OAuth/JWT): Place `RestycHandler` **before** your auth handler so that replayed requests pick up fresh tokens.
+- **Expiring tokens** (e.g. OAuth/JWT): Place `HyperwycHandler` **before** your auth handler so that replayed requests pick up fresh tokens.
 - **Non-expiring tokens** (e.g. API keys): Order is flexible.
 
 ```csharp
 // Correct order for expiring auth:
-.AddHttpMessageHandler<RestycHandler>()   // queues and replays
+.AddHttpMessageHandler<HyperwycHandler>()   // queues and replays
 .AddHttpMessageHandler<AuthHandler>()     // adds fresh token at send time
 ```
 
@@ -98,7 +98,7 @@ Restyc does not manage authentication. When placing handlers, order matters:
 Subscribe to `IObservable<SyncEvent>` to observe state changes:
 
 ```csharp
-restyc.SyncEvents.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
+Hyperwyc.SyncEvents.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
 ```
 
 | Event | Meaning |

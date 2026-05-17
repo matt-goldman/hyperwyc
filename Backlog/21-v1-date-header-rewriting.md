@@ -6,24 +6,24 @@ When serving a response from the local cache, rewrite the `Date` header to the c
 
 ## Background
 
-An HTTP response served from Restyc's cache carries headers from when the response was first received. The `Date` header in particular reflects the original server-response time. Callers that inspect `Date` expecting it to represent "now" would see a stale timestamp. Rewriting it prevents subtle bugs.
+An HTTP response served from hyperwyc's cache carries headers from when the response was first received. The `Date` header in particular reflects the original server-response time. Callers that inspect `Date` expecting it to represent "now" would see a stale timestamp. Rewriting it prevents subtle bugs.
 
 ## Behaviour
 
-- When `RestycHandler` constructs an `HttpResponseMessage` from a cached `Envelope.Response`, set the `Date` header to `DateTimeOffset.UtcNow`.
+- When `hyperwycHandler` constructs an `HttpResponseMessage` from a cached `Envelope.Response`, set the `Date` header to `DateTimeOffset.UtcNow`.
 - All other headers from the cached response are preserved unchanged.
 - Requests actually sent to the network are not affected — only cache-served responses.
-- A custom header (e.g. `X-Restyc-Cached-At`) should be added with the original `CachedAt` timestamp so callers who need it can access it.
+- A custom header (e.g. `X-hyperwyc-Cached-At`) should be added with the original `CachedAt` timestamp so callers who need it can access it.
 
 ## Acceptance Criteria
 
 - [ ] `Date` header on cache-served responses is the current time (within a small tolerance).
-- [ ] `X-Restyc-Cached-At` header is added with the original `CachedResponse.CachedAt` value.
+- [ ] `X-hyperwyc-Cached-At` header is added with the original `CachedResponse.CachedAt` value.
 - [ ] Headers from the original response are otherwise unchanged.
 - [ ] Network-fetched responses are not modified.
-- [ ] Unit tests cover: `Date` header value, `X-Restyc-Cached-At` header present, non-cached response unmodified.
+- [ ] Unit tests cover: `Date` header value, `X-hyperwyc-Cached-At` header present, non-cached response unmodified.
 
 ## Notes
 
-- The header name `X-Restyc-Cached-At` is a proposal; finalise during implementation.
+- The header name `X-hyperwyc-Cached-At` is a proposal; finalise during implementation.
 - This change is intentionally deferred from v0.1 to avoid premature commitment to the header naming convention.

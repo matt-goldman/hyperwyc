@@ -2,23 +2,23 @@
 
 ## Summary
 
-Create the repository, solution file, and project structure for Restyc. This establishes the foundation all other issues build on.
+Create the repository, solution file, and project structure for hyperwyc. This establishes the foundation all other issues build on.
 
 ## Background
 
-Restyc ships as two NuGet packages:
-- **`Restyc`** — core package with interfaces, handler, and in-memory store. No storage dependency.
-- **`Restyc.Cabinet`** — storage provider backed by Cabinet. Depends on `Restyc`.
+hyperwyc ships as two NuGet packages:
+- **`hyperwyc`** — core package with interfaces, handler, and in-memory store. No storage dependency.
+- **`hyperwyc.Cabinet`** — storage provider backed by Cabinet. Depends on `hyperwyc`.
 
-A sample solution (`Restyc.Sample`) is also needed for the POC but is tracked separately.
+A sample solution (`hyperwyc.Sample`) is also needed for the POC but is tracked separately.
 
 ## Acceptance Criteria
 
-- [x] Solution file `Restyc.sln` exists at the repo root.
-- [x] `src/Restyc/Restyc.csproj` — class library targeting `netstandard2.1` and/or `net10.0` (TBD).
-- [x] `src/Restyc.Cabinet/Restyc.Cabinet.csproj` — class library; project reference to `Restyc`.
-- [x] `tests/Restyc.Tests/Restyc.Tests.csproj` — xUnit test project; project reference to `Restyc`.
-- [x] `tests/Restyc.Cabinet.Tests/Restyc.Cabinet.Tests.csproj` — xUnit test project; project reference to `Restyc.Cabinet`.
+- [x] Solution file `hyperwyc.sln` exists at the repo root.
+- [x] `src/hyperwyc/hyperwyc.csproj` — class library targeting `netstandard2.1` and/or `net10.0` (TBD).
+- [x] `src/hyperwyc.Cabinet/hyperwyc.Cabinet.csproj` — class library; project reference to `hyperwyc`.
+- [x] `tests/hyperwyc.Tests/hyperwyc.Tests.csproj` — xUnit test project; project reference to `hyperwyc`.
+- [x] `tests/hyperwyc.Cabinet.Tests/hyperwyc.Cabinet.Tests.csproj` — xUnit test project; project reference to `hyperwyc.Cabinet`.
 - [x] `.editorconfig` and `Directory.Build.props` for consistent build settings.
 - [x] `.gitignore` appropriate for a .NET solution.
 - [x] `README.md` at the repo root (can start as a copy of the design-doc version).
@@ -27,4 +27,4 @@ A sample solution (`Restyc.Sample`) is also needed for the POC but is tracked se
 ## Notes
 
 - Target framework choices should support .NET MAUI, Blazor WASM, and plain ASP.NET Core where practical.
-- The `Restyc` package must have **no** transitive dependency on Cabinet or any storage library.
+- The `hyperwyc` package must have **no** transitive dependency on Cabinet or any storage library.

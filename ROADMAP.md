@@ -1,4 +1,4 @@
-# Restyc — Roadmap
+# hyperwyc — Roadmap
 
 ---
 
@@ -6,19 +6,19 @@
 
 > **Goal:** Working offline queue and response cache via the HTTP pipeline
 
-- [ ] `RestycHandler` — core `DelegatingHandler`
-- [ ] `Restyc` core package: `RestycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `IRestyc`, `InMemorySyncStore`
-- [ ] `Restyc.Cabinet` provider package: `CabinetSyncStore`
+- [ ] `hyperwycHandler` — core `DelegatingHandler`
+- [ ] `hyperwyc` core package: `hyperwycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `Ihyperwyc`, `InMemorySyncStore`
+- [ ] `hyperwyc.Cabinet` provider package: `CabinetSyncStore`
 - [ ] `IConnectivityService` with default implementation using MAUI Essentials
 - [ ] Configurable policies: cache-first / API-first, expiry TTL
 - [ ] Idempotency-Key header injection on all mutating requests
 - [ ] Write-triggered GET cache invalidation on write success (same URL prefix; configurable via `ISyncPolicy`)
 - [ ] Default response body cache cap enforced (512 KB hardcoded; configurable in v1.0)
 - [ ] Replay semaphore (single concurrent flush) and connectivity event debounce
-- [ ] `IRestyc.ResetStoreAsync()` for user logout / cache clearing
+- [ ] `Ihyperwyc.ResetStoreAsync()` for user logout / cache clearing
 - [ ] Polly-based retry with exponential backoff; default + per-endpoint override
 - [ ] Reactive sync event stream (`IObservable<SyncEvent>`)
-- [ ] `AddRestyc()` DI extension for configuration
+- [ ] `Addhyperwyc()` DI extension for configuration
 - [ ] Sample .NET MAUI app (see [POC.md](POC.md))
 
 ---
@@ -39,8 +39,8 @@
 
 > **Goal:** Broader platform support and advanced scenarios
 
-- [ ] `Restyc.IndexedDb` — Blazor WASM store provider
-- [ ] Additional store providers (`Restyc.LiteDb`, `Restyc.Sqlite`)
+- [ ] `hyperwyc.IndexedDb` — Blazor WASM store provider
+- [ ] Additional store providers (`hyperwyc.LiteDb`, `hyperwyc.Sqlite`)
 - [ ] User-scoped store — identity-partitioned cache isolation
 - [ ] Background sync scheduler — time-based and app-start replay triggers
 - [ ] Prefetch on boot or connectivity restoration — pre-warm cache for key routes
@@ -52,10 +52,10 @@
 
 ## Out of Scope
 
-The following were explored in earlier planning but are intentionally excluded from Restyc's scope:
+The following were explored in earlier planning but are intentionally excluded from hyperwyc's scope:
 
 | Item | Reason |
 |------|--------|
-| Conflict resolution (`IConflictResolver`) | Restyc is designed for low-conflict scenarios; resolution is the responsibility of the backend or the consuming application |
-| Entity/table synchronisation | Restyc operates at the transport layer, not the data model layer |
+| Conflict resolution (`IConflictResolver`) | hyperwyc is designed for low-conflict scenarios; resolution is the responsibility of the backend or the consuming application |
+| Entity/table synchronisation | hyperwyc operates at the transport layer, not the data model layer |
 | Auth / token management | Auth is the responsibility of a separate `DelegatingHandler` in the pipeline |

@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/hyperwyc.Cabinet/hyperwyc.Cabinet.csproj" />
+    <Project Path="src/hyperwyc/hyperwyc.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/hyperwyc.Cabinet.Tests/hyperwyc.Cabinet.Tests.csproj" />
+    <Project Path="tests/hyperwyc.Tests/hyperwyc.Tests.csproj" />
+  </Folder>
+</Solution>

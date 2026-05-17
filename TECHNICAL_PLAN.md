@@ -1,16 +1,16 @@
-# Restyc — Technical Plan
+# hyperwyc — Technical Plan
 
 ## Overview
 
-Restyc is a service-worker-inspired HTTP handler for .NET. Like a [Service Worker](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API) in a progressive web app, it intercepts outgoing HTTP requests and returns normal-looking responses to the caller regardless of connectivity state. Requests are cached, queued, and replayed transparently — the consuming code never needs to branch on online/offline status.
+hyperwyc is a service-worker-inspired HTTP handler for .NET. Like a [Service Worker](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API) in a progressive web app, it intercepts outgoing HTTP requests and returns normal-looking responses to the caller regardless of connectivity state. Requests are cached, queued, and replayed transparently — the consuming code never needs to branch on online/offline status.
 
-Its core design prioritises invisibility: offline writes return `200 OK` by default (with an `X-Restyc-Status: Queued` header for code that wants to know), and cached reads are served with their original status codes. An opt-in `OfflineResponsePolicy.Signal` mode returns `503` for routes that need explicit offline handling.
+Its core design prioritises invisibility: offline writes return `200 OK` by default (with an `X-hyperwyc-Status: Queued` header for code that wants to know), and cached reads are served with their original status codes. An opt-in `OfflineResponsePolicy.Signal` mode returns `503` for routes that need explicit offline handling.
 
 ---
 
 ## Core Principles
 
-1. **Transparent by default** — Like a Service Worker, the handler is invisible to callers. Responses look normal (200 OK) regardless of connectivity; the `X-Restyc-Status` header is the opt-in escape hatch.
+1. **Transparent by default** — Like a Service Worker, the handler is invisible to callers. Responses look normal (200 OK) regardless of connectivity; the `X-hyperwyc-Status` header is the opt-in escape hatch.
 2. **Transport-level durability** — Operates at the HTTP layer, not the data model layer.
 3. **Backend agnostic** — Works with any REST API over HTTP/1.x. GraphQL (mutation-vs-query ambiguity on POST) and gRPC (binary framing, HTTP/2 semantics) are deferred to a future version.
 4. **Storage pluggability** — The core package ships with interfaces only; store providers are separate, explicitly installed packages.
@@ -24,10 +24,10 @@ Its core design prioritises invisibility: offline writes return `200 OK` by defa
 
 | Package | Contents |
 |---------|----------|
-| `Restyc` | Core: `RestycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `SyncEventStream`, `IRestyc`, `InMemorySyncStore`. No storage dependency. |
-| `Restyc.Cabinet` | `CabinetSyncStore` — `ISyncStore` implementation backed by [Cabinet](https://github.com/mattgoldman/cabinet). Depends on `Restyc`; installing this package delivers the core transitively. |
+| `hyperwyc` | Core: `hyperwycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `SyncEventStream`, `Ihyperwyc`, `InMemorySyncStore`. No storage dependency. |
+| `hyperwyc.Cabinet` | `CabinetSyncStore` — `ISyncStore` implementation backed by [Cabinet](https://github.com/mattgoldman/cabinet). Depends on `hyperwyc`; installing this package delivers the core transitively. |
 
-Future provider packages follow the same pattern: `Restyc.LiteDb`, `Restyc.IndexedDb`, etc. Developers who want to implement their own store install only `Restyc`.
+Future provider packages follow the same pattern: `hyperwyc.LiteDb`, `hyperwyc.IndexedDb`, etc. Developers who want to implement their own store install only `hyperwyc`.
 
 ---
 
@@ -35,10 +35,10 @@ Future provider packages follow the same pattern: `Restyc.LiteDb`, `Restyc.Index
 
 ### 1. Pipeline Integration
 
-- **Entry point:** `RestycHandler : DelegatingHandler`
+- **Entry point:** `hyperwycHandler : DelegatingHandler`
 - **Usage:** Added to the `HttpClient` pipeline via `IHttpClientFactory`.
 - **Processing order:**
-  - Place `RestycHandler` **before** authentication handlers for expiring tokens, so replayed requests pick up fresh tokens.
+  - Place `hyperwycHandler` **before** authentication handlers for expiring tokens, so replayed requests pick up fresh tokens.
   - For non-expiring auth (e.g. API keys), order is flexible.
 
 ### 2. Request Handling Logic
@@ -50,7 +50,7 @@ Future provider packages follow the same pattern: `Restyc.LiteDb`, `Restyc.Index
 3. If **offline**:
    - Serialises the request into a local store document (envelope).
    - Marks as `IsSynced = false`.
-   - Returns a synthetic response to the caller: `200 OK` by default (`OfflineResponsePolicy.Transparent`) with `X-Restyc-Status: Queued`, or `503 Service Unavailable` if `OfflineResponsePolicy.Signal` is configured.
+   - Returns a synthetic response to the caller: `200 OK` by default (`OfflineResponsePolicy.Transparent`) with `X-hyperwyc-Status: Queued`, or `503 Service Unavailable` if `OfflineResponsePolicy.Signal` is configured.
    - Publishes `OnQueued` via the reactive stream.
 4. If **online**:
    - Sends the request immediately.
@@ -64,7 +64,7 @@ Future provider packages follow the same pattern: `Restyc.LiteDb`, `Restyc.Index
    - Checks local cache first if the cache policy allows.
    - If cached and not stale: returns the cached response immediately. The `Date` header is rewritten to the current time; all other headers reflect the originally cached values.
    - If stale or missing: fetches from the API, updates the cache, publishes `OnUpdated`.
-   - If offline and no cache is available: returns a synthetic response (`200 OK` by default, or `503` with `Signal` policy) with `X-Restyc-Status: Offline`.
+   - If offline and no cache is available: returns a synthetic response (`200 OK` by default, or `503` with `Signal` policy) with `X-hyperwyc-Status: Offline`.
 2. TTL-based cache invalidation is handled via `IStalenessEvaluator` (pluggable).
 3. Write-triggered invalidation: when a mutating request succeeds, cached GET responses for the same URL prefix are invalidated. On by default; configurable via `ISyncPolicy`.
 
@@ -93,7 +93,7 @@ Future provider packages follow the same pattern: `Restyc.LiteDb`, `Restyc.Index
 
 | Component | Responsibility |
 |-----------|----------------|
-| `RestycHandler` | Intercepts and persists HTTP requests/responses; central pipeline entry point |
+| `hyperwycHandler` | Intercepts and persists HTTP requests/responses; central pipeline entry point |
 | `ISyncStore` | Defines CRUD operations for stored request envelopes; pluggable |
 | `CabinetSyncStore` | Default `ISyncStore` implementation using Cabinet |
 | `IConnectivityService` | Reports current online/offline state and raises change events |
@@ -105,16 +105,16 @@ Future provider packages follow the same pattern: `Restyc.LiteDb`, `Restyc.Index
 
 ### 5. Storage — Cabinet
 
-Restyc uses **Cabinet** as its default `ISyncStore` implementation. Cabinet's document-oriented model and flexible index system make it a natural fit for storing HTTP request/response envelopes.
+hyperwyc uses **Cabinet** as its default `ISyncStore` implementation. Cabinet's document-oriented model and flexible index system make it a natural fit for storing HTTP request/response envelopes.
 
 #### Key Advantages
 
-- **Custom index providers** — Restyc indexes envelopes by route, HTTP method, sync state, expiry, or any metadata field.
+- **Custom index providers** — hyperwyc indexes envelopes by route, HTTP method, sync state, expiry, or any metadata field.
 - **Route-based indexing** — The request URL (or normalised route pattern) is the primary index, enabling fast lookup of cached `GET` results and selective replay of outbound writes.
 - **Fits the envelope model** — Each envelope is a standalone document; no schema rigidity.
 - **Optimised for .NET** — Pure managed code, mobile-safe, no native library dependencies.
 
-#### Cabinet Indexing Strategy for Restyc
+#### Cabinet Indexing Strategy for hyperwyc
 
 ```csharp
 new EnvelopeIndex()
@@ -124,7 +124,7 @@ new EnvelopeIndex()
     .WithKey(e => e.Method);        // filter by HTTP verb
 ```
 
-This enables Restyc to efficiently answer:
+This enables hyperwyc to efficiently answer:
 
 - Get the cached response for `GET /api/notes`
 - Get all unsynced outbound envelopes
@@ -162,7 +162,7 @@ Request and response bodies are stored as strings within the envelope. A configu
 
 ### 6. Reactive Event Stream
 
-Restyc exposes sync lifecycle changes as `IObservable<SyncEvent>`:
+hyperwyc exposes sync lifecycle changes as `IObservable<SyncEvent>`:
 
 ```csharp
 IObservable<SyncEvent> SyncEvents { get; }
@@ -186,13 +186,13 @@ Plain .NET events are not exposed. `IObservable<T>` is strictly more capable; co
 
 ```csharp
 services.AddHttpClient("MyApi")
-    .AddHttpMessageHandler<RestycHandler>()
+    .AddHttpMessageHandler<hyperwycHandler>()
     .AddHttpMessageHandler<AuthHandler>();
 
-services.AddRestyc(options =>
+services.Addhyperwyc(options =>
 {
     options.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromDays(1));
-    options.Store = new CabinetSyncStore("restyc.db");
+    options.Store = new CabinetSyncStore("hyperwyc.db");
     options.Connectivity = new MauiConnectivityService();
 });
 ```
@@ -212,13 +212,13 @@ services.AddRestyc(options =>
 - Sensitive headers (e.g. `Authorization`) are **excluded** from persisted envelopes by default.
 - Encryption-at-rest is configurable via Cabinet's storage options.
 - Developers can opt into full request persistence (including headers) via a config flag.
-- **Multi-user / cache isolation:** The store is not scoped to a user identity by default. On user logout or account switch, applications should call `IRestyc.ResetStoreAsync()` to clear all cached data. This method is part of the `IRestyc` interface. A user-scoped store with automatic partitioning is a future enhancement.
+- **Multi-user / cache isolation:** The store is not scoped to a user identity by default. On user logout or account switch, applications should call `Ihyperwyc.ResetStoreAsync()` to clear all cached data. This method is part of the `Ihyperwyc` interface. A user-scoped store with automatic partitioning is a future enhancement.
 
 ---
 
 ### 10. Future Enhancements
 
-- `Restyc.IndexedDb` — Blazor WASM store provider
+- `hyperwyc.IndexedDb` — Blazor WASM store provider
 - Background sync scheduler
 - Fine-grained per-route policy configuration (TTL, cache strategy, offline response policy)
 - In-app diagnostics view for unsynced and errored records
@@ -243,7 +243,7 @@ services.AddRestyc(options =>
 - **Domain model:** Heavily coupled to the Realm storage format and object model.
 - **Drawback:** Tight backend lock-in and schema mirroring; unsuitable for REST- or GraphQL-based APIs.
 
-### Restyc (Differentiation)
+### hyperwyc (Differentiation)
 
 - **Philosophy:** Service-worker-inspired HTTP handler — transparent request/response caching and replay at the transport layer. The caller receives normal-looking responses regardless of connectivity state.
 - **Server coupling:** None — works with any HTTP backend (REST, GraphQL, gRPC, streaming APIs).
@@ -251,10 +251,10 @@ services.AddRestyc(options =>
 - **Integration:** Drop-in `DelegatingHandler`; can be added to any existing app without restructuring.
 - **Use case fit:** Ideal for apps where API contracts are already stable, or where data conflicts are rare or handled server-side.
 
-In essence, Datasync and Realm require you to architect your app *around* their sync model. Restyc fits *into* your existing architecture — like adding a Service Worker to a web app: invisible by default, powerful when you need it.
+In essence, Datasync and Realm require you to architect your app *around* their sync model. hyperwyc fits *into* your existing architecture — like adding a Service Worker to a web app: invisible by default, powerful when you need it.
 
 ---
 
 ## Summary
 
-**Restyc** is a service-worker-inspired HTTP handler for .NET. It provides transparent caching, offline queuing, and controlled retry — all without imposing data models or framework dependencies. Like a Service Worker in a PWA, it’s invisible to callers by default: requests go out, responses come back, and the app never needs to know whether the network was involved. Its composable handler-based design guarantees minimal intrusion into existing app architecture, and its Cabinet storage foundation provides fast, dependency-free persistence with a flexible indexing model tailored to the HTTP envelope pattern.
+**hyperwyc** is a service-worker-inspired HTTP handler for .NET. It provides transparent caching, offline queuing, and controlled retry — all without imposing data models or framework dependencies. Like a Service Worker in a PWA, it’s invisible to callers by default: requests go out, responses come back, and the app never needs to know whether the network was involved. Its composable handler-based design guarantees minimal intrusion into existing app architecture, and its Cabinet storage foundation provides fast, dependency-free persistence with a flexible indexing model tailored to the HTTP envelope pattern.

@@ -12,7 +12,7 @@ A request can fail even when the device is technically "online" — captive port
 
 ### Retry policy
 - Default: up to **5 retries** with exponential backoff starting at 2 seconds (i.e. 2s, 4s, 8s, 16s, 32s).
-- Configurable globally via `RestycOptions.DefaultRetryOptions` and per-endpoint via `ISyncPolicy.GetRetryOptions(request)`.
+- Configurable globally via `hyperwycOptions.DefaultRetryOptions` and per-endpoint via `ISyncPolicy.GetRetryOptions(request)`.
 - Jitter should be applied to avoid thundering herd (use Polly's `DecorrelatedJitterBackoffV2`).
 - Before each retry attempt, publish `OnRetrying`.
 
@@ -27,7 +27,7 @@ A request can fail even when the device is technically "online" — captive port
 
 ## Acceptance Criteria
 
-- [x] Polly retry pipeline configured in `src/Restyc` (add `Polly` NuGet dependency).
+- [x] Polly retry pipeline configured in `src/hyperwyc` (add `Polly` NuGet dependency).
 - [x] `RetryOptions` from `ISyncPolicy.GetRetryOptions` applied per-request.
 - [x] `OnRetrying` published before each attempt.
 - [x] After max retries: `MoveToDeadLetterAsync` called, `OnFailed` published.
@@ -38,6 +38,6 @@ A request can fail even when the device is technically "online" — captive port
 ## Notes
 
 - Consider using `Polly.Extensions.Http` or the `Polly` v8 `ResiliencePipeline` API.
-- The retry policy wraps the HTTP send step inside the flush orchestrator (issue #11), not `RestycHandler` directly.
+- The retry policy wraps the HTTP send step inside the flush orchestrator (issue #11), not `hyperwycHandler` directly.
 - Polly v8 `DelayBackoffType.Exponential` with `UseJitter = true` implements `DecorrelatedJitterBackoffV2` internally.
 - Polly requires `MaxRetryAttempts >= 1`; when `RetryOptions.MaxRetries = 0` the retry strategy is omitted and the request is attempted once with no retries.

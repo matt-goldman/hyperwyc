@@ -1,14 +1,14 @@
-# Restyc — Proof of Concept
+# hyperwyc — Proof of Concept
 
 ## Purpose
 
-Demonstrate the core functionality of Restyc in a realistic sample environment: an offline-capable .NET MAUI app talking to an ASP.NET Core Web API, with all HTTP traffic running through `RestycHandler`. The sample should illustrate Restyc's service-worker-inspired philosophy — the app code makes normal `HttpClient` calls and receives normal-looking responses regardless of connectivity state.
+Demonstrate the core functionality of hyperwyc in a realistic sample environment: an offline-capable .NET MAUI app talking to an ASP.NET Core Web API, with all HTTP traffic running through `hyperwycHandler`. The sample should illustrate hyperwyc's service-worker-inspired philosophy — the app code makes normal `HttpClient` calls and receives normal-looking responses regardless of connectivity state.
 
 ---
 
 ## Sample App — .NET MAUI
 
-A simple notes app that exercises all of Restyc's key behaviours:
+A simple notes app that exercises all of hyperwyc's key behaviours:
 
 **Features:**
 - Create, update, and delete notes
@@ -18,10 +18,10 @@ A simple notes app that exercises all of Restyc's key behaviours:
 
 **Demonstrates:**
 - App code uses standard `HttpClient` calls — no connectivity branching
-- Writes queued transparently when the device goes offline (200 OK + `X-Restyc-Status: Queued`)
+- Writes queued transparently when the device goes offline (200 OK + `X-hyperwyc-Status: Queued`)
 - Automatic replay when connectivity is restored
 - Stale cache served for read operations while offline
-- `X-Restyc-Status` header inspected in UI to show sync state
+- `X-hyperwyc-Status` header inspected in UI to show sync state
 - Dead-letter state surfaced in UI on persistent failure
 
 ---
@@ -45,7 +45,7 @@ A minimal REST API that serves as the target backend.
 ## Solution Structure
 
 ```
-Restyc.Sample
+hyperwyc.Sample
 ├── MauiApp          # .NET MAUI client application
 ├── WebApi           # ASP.NET Core backend
 └── Shared           # DTOs shared between client and API
@@ -59,7 +59,7 @@ Restyc.Sample
 [User Action]
       │
       ▼
-RestycHandler (in HttpClient pipeline)
+hyperwycHandler (in HttpClient pipeline)
       │
       ├── Online?  ──Yes──▶ Send to API ──▶ Cache response ──▶ OnSynced
       │
@@ -95,11 +95,11 @@ RestycHandler (in HttpClient pipeline)
 
 ```bash
 # Start the API
-cd Restyc.Sample/WebApi
+cd hyperwyc.Sample/WebApi
 dotnet run
 
 # Run the MAUI app (Android emulator, iOS simulator, or desktop)
-cd Restyc.Sample/MauiApp
+cd hyperwyc.Sample/MauiApp
 dotnet run -f net10.0-android   # or net10.0-ios / net10.0-maccatalyst / net10.0-windows
 ```
 

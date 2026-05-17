@@ -2,13 +2,13 @@
 
 ## Summary
 
-Allow dead-lettered requests to be manually requeued or dismissed, and expose this capability through `IRestyc` and (optionally) a UI in the MAUI sample app.
+Allow dead-lettered requests to be manually requeued or dismissed, and expose this capability through `Ihyperwyc` and (optionally) a UI in the MAUI sample app.
 
 ## Background
 
 After the retry budget is exhausted (issue #12), an envelope moves to dead-letter and `OnFailed` is published. Without a management API, these envelopes are stuck permanently until `ResetStoreAsync()` wipes everything. This issue adds surgical control: requeue individual items for another retry attempt, or dismiss them permanently.
 
-## `IRestyc` Extensions
+## `Ihyperwyc` Extensions
 
 ```csharp
 // Requeue: move back to the outbox with RetryCount = 0, IsSynced = false, IsDeadLettered = false
@@ -39,7 +39,7 @@ Extend `DiagnosticsPage` (issue #23) with:
 
 ## Acceptance Criteria
 
-- [ ] `RequeueDeadLetteredAsync` and `DismissDeadLetteredAsync` added to `IRestyc`.
+- [ ] `RequeueDeadLetteredAsync` and `DismissDeadLetteredAsync` added to `Ihyperwyc`.
 - [ ] `ISyncStore` extended with `RequeuAsync(string id)` and `DeleteAsync(string id)` (or equivalent).
 - [ ] Both operations implemented in `InMemorySyncStore` and `CabinetSyncStore`.
 - [ ] Requeue on an online device triggers an immediate flush.

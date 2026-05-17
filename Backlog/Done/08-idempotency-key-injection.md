@@ -10,7 +10,7 @@ Replayed requests must be safe to deliver more than once. Injecting a stable `Id
 
 ## Behaviour
 
-1. When `RestycHandler` processes a mutating request:
+1. When `hyperwycHandler` processes a mutating request:
    - If no `Idempotency-Key` header is present, inject one using the envelope's `Id`.
    - If the caller has already set an `Idempotency-Key`, preserve it and use the same value when creating/looking up the envelope.
 2. The key must be the same value on initial send **and** on every retry/replay of the same envelope.

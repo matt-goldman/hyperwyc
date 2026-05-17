@@ -1,12 +1,12 @@
-# Issue 06 — `RestycHandler` — Online Request Path
+# Issue 06 — `hyperwycHandler` — Online Request Path
 
 ## Summary
 
-Implement the online path inside `RestycHandler`: when the device is connected, route the request normally, cache the response (for reads), and invalidate stale cache entries (following writes).
+Implement the online path inside `hyperwycHandler`: when the device is connected, route the request normally, cache the response (for reads), and invalidate stale cache entries (following writes).
 
 ## Background
 
-`RestycHandler : DelegatingHandler` is the central pipeline component. This issue covers only the **online** branch; the offline/queue branch is issue #07.
+`hyperwycHandler : DelegatingHandler` is the central pipeline component. This issue covers only the **online** branch; the offline/queue branch is issue #07.
 
 ## Behaviour (Online Path)
 
@@ -27,7 +27,7 @@ Implement the online path inside `RestycHandler`: when the device is connected, 
 
 ## Acceptance Criteria
 
-- [x] `RestycHandler` class scaffolded in `src/Restyc`; constructor accepts `ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`, `SyncEventStream`, and `RestycOptions`.
+- [x] `hyperwycHandler` class scaffolded in `src/hyperwyc`; constructor accepts `ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`, `SyncEventStream`, and `hyperwycOptions`.
 - [x] Online write path implemented as described.
 - [x] Online read path delegates to response cache (stubs acceptable; full logic in issue #09).
 - [x] Handler correctly calls `base.SendAsync` and returns the `HttpResponseMessage` to the caller.
@@ -36,5 +36,5 @@ Implement the online path inside `RestycHandler`: when the device is connected, 
 
 ## Notes
 
-- `RestycHandler` depends on `IConnectivityService`; it does not subscribe to the connectivity stream directly — that is the sync flush orchestrator's job (issue #11).
+- `hyperwycHandler` depends on `IConnectivityService`; it does not subscribe to the connectivity stream directly — that is the sync flush orchestrator's job (issue #11).
 - Handler placement in the pipeline (before/after auth handlers) is documented in the README and does not affect implementation here.

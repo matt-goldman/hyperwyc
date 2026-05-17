@@ -12,11 +12,11 @@ The global `SyncPolicy.CacheFirst(TimeSpan.FromDays(1))` policy is too coarse fo
 - `/api/reference-data/*` could safely be cached for a week.
 - `/api/payments/*` should use `OfflineResponsePolicy.Signal` (503) so payment flows can handle queued state explicitly, while all other routes use `Transparent` (200).
 
-This issue expands the original TTL-only scope to cover all per-route policy dimensions, aligning with Restyc's service-worker-inspired design: routes that are safe for transparent handling get the default, routes that need special treatment opt in.
+This issue expands the original TTL-only scope to cover all per-route policy dimensions, aligning with hyperwyc's service-worker-inspired design: routes that are safe for transparent handling get the default, routes that need special treatment opt in.
 
 ## Design Options (decide during implementation)
 
-### Option A — Fluent policy map in `RestycOptions`
+### Option A — Fluent policy map in `hyperwycOptions`
 ```csharp
 options.RoutePolicy = new RoutePolicyMap()
     .For("/api/profile/*", route =>
@@ -44,7 +44,7 @@ options.RoutePolicy = new RoutePolicyMap()
 - [ ] Per-route configuration supports at minimum: `ISyncPolicy`, `OfflineResponsePolicy`, and cache TTL override.
 - [ ] Patterns support wildcard suffix matching (e.g. `/api/notes/*`).
 - [ ] Most-specific match wins when multiple patterns could apply.
-- [ ] Falls back to `RestycOptions.DefaultPolicy` / `RestycOptions.OfflineResponsePolicy` when no pattern matches.
+- [ ] Falls back to `hyperwycOptions.DefaultPolicy` / `hyperwycOptions.OfflineResponsePolicy` when no pattern matches.
 - [ ] Unit tests cover: exact match, wildcard match, fallback, most-specific wins, per-route offline response policy.
 
 ## Notes
