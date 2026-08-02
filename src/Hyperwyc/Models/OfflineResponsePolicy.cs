@@ -14,9 +14,11 @@ namespace Hyperwyc.Models;
 public enum OfflineResponsePolicy
 {
     /// <summary>
-    /// Return <c>200 OK</c> for queued writes and offline cache misses.
-    /// App code does not need to branch on connectivity status; inspect the
-    /// <c>X-Hyperwyc-Status</c> header if needed. This is the default.
+    /// Return a success status for queued writes and offline cache misses —
+    /// <c>202 Accepted</c> for a queued write, <c>200 OK</c> for an offline read
+    /// with no cached response. App code does not need to branch on connectivity
+    /// status; inspect the <c>X-Hyperwyc-Status</c> header if needed.
+    /// This is the default.
     /// </summary>
     Transparent,
 

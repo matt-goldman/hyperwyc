@@ -39,12 +39,12 @@ public sealed class CachedResponse
 
 ## Acceptance Criteria
 
-- [ ] `Envelope` and `CachedResponse` defined in `src/Hyperwyc`.
-- [ ] All properties have XML `<summary>` doc comments.
-- [ ] `Envelope` is serialisable to/from JSON without custom converters (use `System.Text.Json`-friendly property types).
-- [ ] A helper factory method `Envelope.ForRequest(HttpRequestMessage)` creates an unsent envelope from an `HttpRequestMessage`.
-- [ ] A helper `Envelope.ForCachedResponse(HttpRequestMessage, HttpResponseMessage)` creates a cache entry.
-- [ ] Unit tests cover the factory methods (round-trip serialisation, correct field mapping).
+- [x] `Envelope` and `CachedResponse` defined in `src/Hyperwyc`.
+- [x] All properties have XML `<summary>` doc comments.
+- [x] `Envelope` is serialisable to/from JSON without custom converters (use `System.Text.Json`-friendly property types).
+- [x] A helper factory method `Envelope.ForRequest(HttpRequestMessage)` creates an unsent envelope from an `HttpRequestMessage`.
+- [x] A helper `Envelope.ForCachedResponse(HttpRequestMessage, HttpResponseMessage)` creates a cache entry.
+- [x] Unit tests cover the factory methods (round-trip serialisation, correct field mapping).
 
 ## Notes
 

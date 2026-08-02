@@ -1,44 +1,62 @@
 # Hyperwyc — Roadmap
 
+Where Hyperwyc is going. For what it does *today*, see [TECHNICAL_PLAN.md](TECHNICAL_PLAN.md);
+for per-item status, priority and dependencies, see the [backlog index](Backlog/README.md).
+
+Checkboxes below reflect the state of the code, verified against `src/`. Each line links
+to its backlog item where one exists.
+
 ---
 
-## 🥇 MVP (v0.1)
+## 🥇 v0.1 — MVP
 
 > **Goal:** Working offline queue and response cache via the HTTP pipeline
 
-- [ ] `HyperwycHandler` — core `DelegatingHandler`
-- [ ] `Hyperwyc` core package: `HyperwycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `IHyperwyc`, `InMemorySyncStore`
-- [ ] `Hyperwyc.Cabinet` provider package: `CabinetSyncStore`
-- [ ] `IConnectivityService` with default implementation using MAUI Essentials
-- [ ] Configurable policies: cache-first / API-first, expiry TTL
-- [ ] Idempotency-Key header injection on all mutating requests
-- [ ] Write-triggered GET cache invalidation on write success (same URL prefix; configurable via `ISyncPolicy`)
-- [ ] Default response body cache cap enforced (512 KB hardcoded; configurable in v1.0)
-- [ ] Replay semaphore (single concurrent flush) and connectivity event debounce
-- [ ] `IHyperwyc.ResetStoreAsync()` for user logout / cache clearing
-- [ ] Polly-based retry with exponential backoff; default + per-endpoint override
-- [ ] Reactive sync event stream (`IObservable<SyncEvent>`)
-- [ ] `AddHyperwyc()` DI extension for configuration
-- [ ] Sample .NET MAUI app (see [POC.md](POC.md))
+**Shipped**
+
+- [x] `HyperwycHandler` — core `DelegatingHandler`, online and offline paths ([06](Backlog/Done/06-hyperwyc-handler-online-path.md), [07](Backlog/Done/07-hyperwyc-handler-offline-path.md))
+- [x] `Hyperwyc` core package: all interfaces, `IHyperwyc`, `InMemorySyncStore` ([02](Backlog/Done/02-core-interfaces.md), [04](Backlog/Done/04-in-memory-sync-store.md))
+- [x] `Hyperwyc.Cabinet` provider package: `CabinetSyncStore` ([14](Backlog/Done/14-cabinet-sync-store.md))
+- [x] Request/response envelope model ([03](Backlog/Done/03-envelope-model.md))
+- [x] Idempotency-Key header injection on all mutating requests ([08](Backlog/Done/08-idempotency-key-injection.md))
+- [x] Response cache with TTL staleness evaluation ([09](Backlog/Done/09-response-cache-read-operations.md))
+- [x] Write-triggered GET cache invalidation on write success ([10](Backlog/Done/10-write-triggered-cache-invalidation.md))
+- [x] Response body cache cap, 512 KB default ([17](Backlog/Done/17-max-cached-body-size.md))
+- [x] Replay semaphore (single concurrent flush) and connectivity event debounce ([11](Backlog/Done/11-sync-flush-orchestrator.md))
+- [x] Polly-based retry with exponential backoff and dead-lettering ([12](Backlog/Done/12-polly-retry-dead-letter.md))
+- [x] Reactive sync event stream (`IObservable<SyncEvent>`) ([05](Backlog/Done/05-sync-event-stream.md))
+- [x] `AddHyperwyc()` DI extension for configuration ([15](Backlog/Done/15-di-extension-and-options.md))
+
+**Remaining**
+
+- [ ] `IConnectivityService` default implementation using MAUI Essentials ([13](Backlog/13-maui-connectivity-service.md)) — only `AlwaysOnlineConnectivityService` ships today
+- [ ] `IHyperwyc.ResetStoreAsync()` — flush coordination and test coverage ([16](Backlog/16-reset-store-async.md)); the method itself exists
+- [ ] Configurable policies actually applied — `ApiFirst` / `CacheOnly` / `NetworkOnly` are currently no-ops ([27](Backlog/27-cache-strategy-not-applied.md))
+- [ ] Policy TTL reaching the staleness evaluator ([29](Backlog/29-default-ttl-propagation.md))
+- [ ] Sample ASP.NET Core Web API ([18](Backlog/18-poc-web-api.md)) and .NET MAUI app ([19](Backlog/19-poc-maui-app.md)) — see [POC.md](POC.md)
 
 ---
 
 ## 🥈 v1.0
 
-> **Goal:** Developer ergonomics and operational visibility
+> **Goal:** Correctness, developer ergonomics, and operational visibility
 
-- [ ] `MaxCachedResponseBodyBytes` configuration option (makes MVP default cap configurable)
-- [ ] `Date` header rewriting when serving responses from cache
-- [ ] In-app diagnostics view — list unsynced and dead-lettered records
-- [ ] Fine-grained per-route policies (TTL, cache strategy, offline response policy, empty-offline body)
-- [ ] Dead-letter queue management UI (view, requeue, dismiss)
-- [ ] Binary request and response bodies (lift current text-only limitation)
+- [ ] Binary request and response bodies ([25](Backlog/25-binary-request-response-bodies.md)) — lifts the current text-only limitation; breaking change to the persisted shape, so it lands first
+- [ ] Sensitive-header exclusion from persisted envelopes ([30](Backlog/30-sensitive-header-exclusion.md))
+- [ ] Persisted retry state so the retry budget survives a restart ([28](Backlog/28-persisted-retry-state.md))
+- [ ] Fine-grained per-route policies — TTL, cache strategy, offline response policy, empty-offline body ([22](Backlog/22-v1-per-route-policies.md))
+- [ ] `Date` header rewriting when serving responses from cache ([21](Backlog/21-v1-date-header-rewriting.md))
+- [ ] In-app diagnostics view — list unsynced and dead-lettered records ([23](Backlog/23-v1-diagnostics-view.md))
+- [ ] Dead-letter queue management — view, requeue, dismiss ([24](Backlog/24-v1-dead-letter-management.md))
+- [ ] `MaxCachedResponseBodyBytes` validation and public documentation ([20](Backlog/20-v1-configurable-body-cache-cap.md))
 
 ---
 
 ## 🥉 v2.0+
 
 > **Goal:** Broader platform support and advanced scenarios
+
+No backlog items written yet — these are direction, not commitments.
 
 - [ ] `Hyperwyc.IndexedDb` — Blazor WASM store provider
 - [ ] Additional store providers (`Hyperwyc.LiteDb`, `Hyperwyc.Sqlite`)
@@ -48,16 +66,18 @@
 - [ ] Smart paging support — cache-aware handling of paginated responses
 - [ ] Request grouping and bulk sync — batch multiple queued writes into a single operation
 - [ ] GraphQL support — read-intent POST disambiguation
-- [ ] **Under consideration:** Typed-response shaping for offline reads (source generator) — make `GetFromJsonAsync<T>` return a deserialisable default body offline without requiring an application-level response envelope
+- [ ] **Under consideration:** Typed-response shaping for offline reads ([26](Backlog/26-v2-typed-response-shaping.md)) — make `GetFromJsonAsync<T>` return a deserialisable default body offline without requiring an application-level response envelope
 
 ---
 
 ## Out of Scope
 
-The following were explored in earlier planning but are intentionally excluded from Hyperwyc's scope:
+Explored in earlier planning and intentionally excluded from Hyperwyc's scope:
 
 | Item | Reason |
 |------|--------|
 | Conflict resolution (`IConflictResolver`) | Hyperwyc is designed for low-conflict scenarios; resolution is the responsibility of the backend or the consuming application |
 | Entity/table synchronisation | Hyperwyc operates at the transport layer, not the data model layer |
 | Auth / token management | Auth is the responsibility of a separate `DelegatingHandler` in the pipeline |
+| Streaming request/response bodies | Buffered byte arrays only; chunked and indeterminate-length payloads are a follow-up if demand emerges (see [25](Backlog/25-binary-request-response-bodies.md)) |
+| Runtime type inference for offline response shaping | Reflection over caller types is brittle, AOT-hostile and a layering violation (see [26](Backlog/26-v2-typed-response-shaping.md)) |

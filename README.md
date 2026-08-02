@@ -129,6 +129,7 @@ Hyperwyc.SyncEvents.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
 
 ## Further Reading
 
-- [TECHNICAL_PLAN.md](TECHNICAL_PLAN.md) — Architecture, components, storage model, and design rationale
-- [ROADMAP.md](ROADMAP.md) — Milestones and planned features
+- [TECHNICAL_PLAN.md](TECHNICAL_PLAN.md) — How Hyperwyc works today: architecture, components, storage model, and design rationale
+- [ROADMAP.md](ROADMAP.md) — Where it's going: milestones and planned features
+- [Backlog/README.md](Backlog/README.md) — Per-item status, priority, and dependencies
 - [POC.md](POC.md) — Sample application and proof-of-concept setup

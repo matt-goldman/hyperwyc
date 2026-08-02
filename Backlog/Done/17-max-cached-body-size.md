@@ -20,12 +20,12 @@ Storing unbounded response bodies in a local database is a practical problem, pa
 
 ## Acceptance Criteria
 
-- [ ] Body size check implemented inside the response cache write path (issue #09).
-- [ ] Default limit `524288` bytes enforced.
-- [ ] Responses exceeding the limit are returned to the caller without caching.
-- [ ] Limit is read from `HyperwycOptions.MaxCachedResponseBodyBytes`.
-- [ ] Outbound request bodies are not subject to this limit.
-- [ ] Unit tests cover: under limit → cached, over limit → not cached but returned, exact limit → cached.
+- [x] Body size check implemented inside the response cache write path (issue #09).
+- [x] Default limit `524288` bytes enforced.
+- [x] Responses exceeding the limit are returned to the caller without caching.
+- [x] Limit is read from `HyperwycOptions.MaxCachedResponseBodyBytes`.
+- [x] Outbound request bodies are not subject to this limit.
+- [x] Unit tests cover: under limit → cached, over limit → not cached but returned, exact limit → cached.
 
 ## Notes
 
