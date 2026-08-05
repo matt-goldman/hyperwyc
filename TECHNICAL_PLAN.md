@@ -173,6 +173,36 @@ manual triggering (e.g. a "sync now" button).
 > or read them, so an interrupted flush restarts the budget. Tracked in
 > [issue 28](Backlog/28-persisted-retry-state.md).
 
+#### What triggers a flush
+
+Only two things: application startup, when `FlushOnStartup` is set and the device is online;
+and connectivity being restored while the app runs. Plus `FlushAsync` itself, for a manual
+"sync now" affordance.
+
+**Shutdown is deliberately not a trigger**, on any platform. Envelopes reach the outbox only
+via the offline write path, so a non-empty outbox means connectivity was poor — and shutting
+down does not improve connectivity. Anything still queued is replayed at next start. On mobile
+the question is moot regardless: Android and iOS terminate suspended processes without running
+disposal at all.
+
+#### Disposal
+
+`SyncOrchestrator` implements both `IDisposable` and `IAsyncDisposable`, and both mean *stop
+now*. Each cancels a lifetime token that every flush is linked to — including a manual
+`FlushAsync()` that supplied no token of its own — so the flush loop exits at its next envelope
+boundary, with any in-progress send and backoff delay cancelled. `DisposeAsync` additionally
+waits for that unwinding to complete; `Dispose` returns immediately. Neither waits for queued
+work to be sent.
+
+A cancelled envelope is left untouched: it is neither marked synced nor dead-lettered, so it
+remains in the outbox for the next start. Both paths are idempotent, and `FlushAsync` throws
+`ObjectDisposedException` afterwards.
+
+The flush semaphore and the `HttpMessageInvoker` are deliberately *not* disposed. A flush may
+still be unwinding and would fault on either, surfacing an `ObjectDisposedException` on a
+fire-and-forget task during shutdown; and neither holds a resource requiring release, since the
+semaphore's `AvailableWaitHandle` is never used and the invoker does not own its transport.
+
 ---
 
 ### 4. Core Components

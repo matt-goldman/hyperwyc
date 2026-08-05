@@ -101,25 +101,56 @@ observes it or made tolerant of the race.
 
 ## Acceptance Criteria
 
-- [ ] `SyncOrchestrator` implements `IDisposable` alongside `IAsyncDisposable`.
-- [ ] A lifetime `CancellationTokenSource` is linked into every flush, including manual
+- [x] `SyncOrchestrator` implements `IDisposable` alongside `IAsyncDisposable`.
+- [x] A lifetime `CancellationTokenSource` is linked into every flush, including manual
       `FlushAsync()` calls, and is cancelled by both disposal paths.
-- [ ] `Dispose()` signals cancellation and returns without waiting on the flush gate.
-- [ ] `DisposeAsync()` signals cancellation and awaits only the flush's acknowledgment of it,
+- [x] `Dispose()` signals cancellation and returns without waiting on the flush gate.
+- [x] `DisposeAsync()` signals cancellation and awaits only the flush's acknowledgment of it,
       not its completion. No new configuration option is introduced.
-- [ ] No `ObjectDisposedException` escapes when disposal races an in-flight flush by either
+- [x] No `ObjectDisposedException` escapes when disposal races an in-flight flush by either
       path, including from the `finally` that releases the gate.
-- [ ] Both paths are idempotent, and disposing by either route leaves `FlushAsync` throwing
+- [x] Both paths are idempotent, and disposing by either route leaves `FlushAsync` throwing
       `ObjectDisposedException` as it does today.
-- [ ] Unit test: resolve `SyncOrchestrator` from a container, dispose the provider
+- [x] Unit test: resolve `SyncOrchestrator` from a container, dispose the provider
       synchronously, no throw.
-- [ ] Unit test: dispose synchronously mid-flush; the flush stops, envelopes remain in the
+- [x] Unit test: dispose synchronously mid-flush; the flush stops, envelopes remain in the
       outbox, and no unobserved task exception is raised.
-- [ ] Unit test: dispose asynchronously mid-flush; disposal returns promptly rather than
+- [x] Unit test: dispose asynchronously mid-flush; disposal returns promptly rather than
       waiting out the retry budget.
-- [ ] Unit test: a manual `FlushAsync()` is cancelled by disposal.
-- [ ] `CabinetRegistrationTests.AddHyperwyc_NoConfiguration_RegistersCoreServices` reverted to
+- [x] Unit test: a manual `FlushAsync()` is cancelled by disposal.
+- [x] `CabinetRegistrationTests.AddHyperwyc_NoConfiguration_RegistersCoreServices` reverted to
       synchronous `using`, and its explanatory comment removed.
+
+## Resolution
+
+Implemented as decided. Notes on what the implementation settled:
+
+- **The gate and invoker are never disposed, by either path.** Disposing them is what would
+  produce the `ObjectDisposedException` this issue set out to avoid, and neither holds a
+  resource that requires release: the semaphore's `AvailableWaitHandle` is never touched, and
+  the invoker was constructed with `disposeHandler: false`. Cancellation, not teardown, is the
+  mechanism.
+- **`DisposeAsync` waits by reacquiring the flush gate.** Once cancellation has been signalled
+  that wait is inherently bounded — the loop breaks at the next envelope boundary — so it
+  needed no timeout, and no new option.
+- **A cancelled envelope is neither synced nor dead-lettered.** `SendWithRetryAsync` catches
+  only `HttpRequestException`, so `OperationCanceledException` propagates and leaves the
+  envelope untouched in the outbox. This was already true; a test now pins it, because
+  dead-lettering work merely interrupted by shutdown would be a bad failure.
+- **One test was rewritten before it shipped.** An initial version asserted `flush.IsCompleted`
+  after `DisposeAsync`, which races: the gate is released in a `finally` fractionally before the
+  task transitions to completed. It is replaced by a transport that takes a measurable moment to
+  unwind, making "returned before" and "returned after" distinguishable without depending on
+  scheduling.
+
+### Follow-up noticed while here
+
+`AddCoreServices` constructs `new HttpClientHandler()` for the orchestrator's transport and
+nothing ever disposes it — the orchestrator explicitly does not own it. In practice it is an
+application-lifetime singleton that dies with the process, so this is untidy rather than
+harmful, but ownership of that handler is undefined and worth settling. Not filed as its own
+item; it belongs with whatever revisits the orchestrator's transport, most likely issue #30,
+which already has to decide how replays acquire credentials.
 
 ## Notes
 

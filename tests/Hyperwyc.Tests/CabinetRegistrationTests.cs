@@ -32,15 +32,13 @@ public sealed class CabinetRegistrationTests : IDisposable
         Assert.IsType<CabinetSyncStore>(store);
     }
 
-    // Disposal is async because SyncOrchestrator implements only IAsyncDisposable;
-    // disposing the provider synchronously after resolving it throws. See issue #33.
     [Fact]
-    public async Task AddHyperwyc_NoConfiguration_RegistersCoreServices()
+    public void AddHyperwyc_NoConfiguration_RegistersCoreServices()
     {
         var services = new ServiceCollection();
         services.AddHyperwyc(configureStore: o => o.DirectoryPath = _tempDir);
 
-        await using var sp = services.BuildServiceProvider();
+        using var sp = services.BuildServiceProvider();
 
         Assert.NotNull(sp.GetService<IHyperwyc>());
         Assert.NotNull(sp.GetService<HyperwycHandler>());

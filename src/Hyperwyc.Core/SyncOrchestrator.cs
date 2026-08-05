@@ -15,7 +15,7 @@ namespace Hyperwyc;
 /// <see cref="IConnectivityService.ConnectivityChanged"/> events with a
 /// configurable debounce delay (<see cref="HyperwycOptions.ConnectivityDebounceDelay"/>).
 /// </remarks>
-public sealed class SyncOrchestrator : IAsyncDisposable
+public sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
 {
     private const string _idempotencyKeyHeader = "Idempotency-Key";
 
@@ -28,6 +28,12 @@ public sealed class SyncOrchestrator : IAsyncDisposable
 
     private readonly SemaphoreSlim _flushGate = new(1, 1);
     private readonly IDisposable _connectivitySubscription;
+
+    /// <summary>
+    /// Cancelled by either disposal path. Every flush links to this, so disposal
+    /// stops work started by connectivity, by startup, or by a manual call.
+    /// </summary>
+    private readonly CancellationTokenSource _lifetimeCts = new();
 
     private CancellationTokenSource? _debounceCts;
     private bool _disposed;
@@ -83,18 +89,24 @@ public sealed class SyncOrchestrator : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        // Link the caller's token with the orchestrator's lifetime so that disposal
+        // stops a flush no matter how it was started — including a manual "sync now"
+        // that passed no token of its own.
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _lifetimeCts.Token);
+        var token = linked.Token;
+
         // Non-blocking attempt: if a flush is already running, skip.
-        if (!await _flushGate.WaitAsync(0, ct).ConfigureAwait(false))
+        if (!await _flushGate.WaitAsync(0, token).ConfigureAwait(false))
             return;
 
         try
         {
-            var pending = await _store.GetPendingOutboxAsync(ct).ConfigureAwait(false);
+            var pending = await _store.GetPendingOutboxAsync(token).ConfigureAwait(false);
 
             foreach (var envelope in pending)
             {
-                if (ct.IsCancellationRequested) break;
-                await SendWithRetryAsync(envelope, ct).ConfigureAwait(false);
+                if (token.IsCancellationRequested) break;
+                await SendWithRetryAsync(envelope, token).ConfigureAwait(false);
             }
         }
         finally
@@ -243,24 +255,86 @@ public sealed class SyncOrchestrator : IAsyncDisposable
     }
 
     // -------------------------------------------------------------------------
-    // IAsyncDisposable
+    // Disposal
     // -------------------------------------------------------------------------
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Stops the orchestrator without waiting for an in-flight flush to unwind.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Shutdown is deliberately not a flush trigger. Envelopes are queued only
+    /// because connectivity was poor, and shutting down does not improve
+    /// connectivity — anything still queued is replayed at next start. An
+    /// interrupted flush therefore costs nothing but the current attempt.
+    /// </para>
+    /// <para>
+    /// This is required in addition to <see cref="DisposeAsync"/> because
+    /// Microsoft.Extensions.DependencyInjection refuses to dispose an
+    /// <see cref="IAsyncDisposable"/>-only singleton from a synchronous
+    /// <c>ServiceProvider.Dispose()</c>, which would throw at shutdown for any
+    /// application using <c>using</c> rather than <c>await using</c>.
+    /// </para>
+    /// </remarks>
+    public void Dispose() => Shutdown();
+
+    /// <summary>
+    /// Stops the orchestrator and waits for an in-flight flush to observe
+    /// cancellation before returning.
+    /// </summary>
+    /// <remarks>
+    /// The wait is bounded by cancellation, not by the retry budget: the flush
+    /// loop breaks at its next envelope boundary and any in-progress send and
+    /// backoff delay are cancelled. This does not wait for queued work to finish
+    /// sending — see <see cref="Dispose"/> for why shutdown is not a flush trigger.
+    /// </remarks>
     public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        Shutdown();
+
+        // Acquiring the gate proves no flush is running. Reached quickly because
+        // Shutdown has already cancelled it.
+        try
+        {
+            await _flushGate.WaitAsync().ConfigureAwait(false);
+            _flushGate.Release();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Raced a concurrent disposal; nothing left to wait for.
+        }
+    }
+
+    /// <summary>
+    /// The teardown both disposal paths share: stop listening, cancel everything
+    /// in flight, and mark the orchestrator disposed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Idempotent, so disposing twice — or by both routes — is safe.
+    /// </para>
+    /// <para>
+    /// Note what is deliberately <em>not</em> disposed here: <c>_flushGate</c> and
+    /// <c>_invoker</c>. A flush may still be unwinding and would fault on either,
+    /// surfacing an <see cref="ObjectDisposedException"/> on a fire-and-forget task
+    /// during shutdown. Neither holds a resource that requires release — the
+    /// semaphore's <c>AvailableWaitHandle</c> is never used, and the invoker was
+    /// constructed with <c>disposeHandler: false</c>, so it does not own its
+    /// transport.
+    /// </para>
+    /// </remarks>
+    private void Shutdown()
     {
         if (_disposed) return;
         _disposed = true;
 
         _connectivitySubscription.Dispose();
+
         _debounceCts?.Cancel();
         _debounceCts?.Dispose();
 
-        // Drain the semaphore so any in-flight flush can finish.
-        await _flushGate.WaitAsync().ConfigureAwait(false);
-        _flushGate.Release();
-        _flushGate.Dispose();
-        _invoker.Dispose();
+        _lifetimeCts.Cancel();
     }
 
     // -------------------------------------------------------------------------
