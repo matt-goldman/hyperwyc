@@ -40,9 +40,10 @@ public sealed class CabinetRegistrationTests : IDisposable
 
         using var sp = services.BuildServiceProvider();
 
+        // SyncOrchestrator is internal to the core assembly — consumers reach
+        // flushing through IHyperwyc, so that is what this asserts.
         Assert.NotNull(sp.GetService<IHyperwyc>());
         Assert.NotNull(sp.GetService<HyperwycHandler>());
-        Assert.NotNull(sp.GetService<SyncOrchestrator>());
     }
 
     [Fact]
@@ -50,13 +51,13 @@ public sealed class CabinetRegistrationTests : IDisposable
     {
         var services = new ServiceCollection();
         services.AddHyperwyc(
-            o => o.OfflineResponsePolicy = Models.OfflineResponsePolicy.Signal,
+            o => o.OfflineResponsePolicy = OfflineResponsePolicy.Signal,
             o => o.DirectoryPath = _tempDir);
 
         using var sp = services.BuildServiceProvider();
         var options = sp.GetRequiredService<HyperwycOptions>();
 
-        Assert.Equal(Models.OfflineResponsePolicy.Signal, options.OfflineResponsePolicy);
+        Assert.Equal(OfflineResponsePolicy.Signal, options.OfflineResponsePolicy);
     }
 
     [Fact]

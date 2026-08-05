@@ -10,12 +10,12 @@ namespace Hyperwyc;
 /// manages the single-flush semaphore and connectivity-event debounce.
 /// </summary>
 /// <remarks>
-/// Call <see cref="FlushAsync"/> directly to trigger a manual sync (e.g. from
-/// a UI "sync now" button). The orchestrator also reacts automatically to
+/// Internal: consumers reach flushing through <see cref="IHyperwyc.FlushAsync"/>
+/// rather than depending on this type. The orchestrator reacts automatically to
 /// <see cref="IConnectivityService.ConnectivityChanged"/> events with a
 /// configurable debounce delay (<see cref="HyperwycOptions.ConnectivityDebounceDelay"/>).
 /// </remarks>
-public sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
+internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
 {
     private const string _idempotencyKeyHeader = "Idempotency-Key";
 

@@ -121,7 +121,8 @@ public static class ServiceCollectionExtensions
 
         services.TryAddSingleton<IHyperwyc>(sp => new HyperwycService(
             sp.GetRequiredService<SyncEventStream>(),
-            sp.GetRequiredService<ISyncStore>()));
+            sp.GetRequiredService<ISyncStore>(),
+            sp.GetRequiredService<SyncOrchestrator>()));
 
         services.TryAddSingleton<SyncOrchestrator>(sp => new SyncOrchestrator(
             sp.GetRequiredService<ISyncStore>(),

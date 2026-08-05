@@ -1,4 +1,4 @@
-namespace Hyperwyc.Models;
+namespace Hyperwyc;
 
 /// <summary>
 /// Controls the HTTP status code returned to callers when Hyperwyc handles a

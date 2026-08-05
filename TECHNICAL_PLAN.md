@@ -43,7 +43,7 @@ for applications that need explicit offline handling.
 
 | Package | Assembly | Contents |
 |---------|----------|----------|
-| `Hyperwyc.Core` | `Hyperwyc.Core.dll` | `HyperwycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `SyncEventStream`, `SyncOrchestrator`, `IHyperwyc`, `InMemorySyncStore`, `AlwaysOnlineConnectivityService`, `TtlStalenessEvaluator`. Depends on `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Hosting.Abstractions` and `Polly`; no storage dependency. |
+| `Hyperwyc.Core` | `Hyperwyc.Core.dll` | `HyperwycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `SyncEventStream`, `IHyperwyc`, `InMemorySyncStore`, `AlwaysOnlineConnectivityService`, `TtlStalenessEvaluator`. Depends on `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Hosting.Abstractions` and `Polly`; no storage dependency. |
 | `Hyperwyc` | `Hyperwyc.dll` | `CabinetSyncStore` backed by [Cabinet](https://github.com/mattgoldman/cabinet), `CabinetStoreOptions`, and the batteries-included `AddHyperwyc()`. Depends on `Hyperwyc.Core` and `Cabinet`. |
 
 `Hyperwyc` is the package almost everyone installs: `AddHyperwyc()` with no arguments produces
@@ -63,6 +63,13 @@ which packages are installed.
 | `AddHyperwyc(configure?, configureStore?)` | `Hyperwyc` | `CabinetSyncStore`, constructed by the container |
 | `AddHyperwycCore<TStore>(configure?)` | `Hyperwyc.Core` | `TStore`, constructed by the container |
 | `AddHyperwycCore(storeFactory, configure?)` | `Hyperwyc.Core` | Whatever the factory returns |
+
+`IHyperwyc` is the whole consumer-facing runtime surface — `SyncEvents`, `FlushAsync` and
+`ResetStoreAsync`. `SyncOrchestrator` is internal: flushing is reached through the interface
+rather than by depending on the concrete type. Configuration enums (`OfflineResponsePolicy`,
+`CacheStrategy`) live in the root `Hyperwyc` namespace rather than `Hyperwyc.Models`, so
+configuring options needs no second `using`; `Hyperwyc.Models` holds only genuine data types
+(`Envelope`, `CachedResponse`, `SyncEvent`, `RetryOptions`).
 
 The store is a type parameter rather than a property on `HyperwycOptions`. That makes omitting
 it a compile-time error, where an options property would allow an application to silently run
@@ -210,9 +217,9 @@ semaphore's `AvailableWaitHandle` is never used and the invoker does not own its
 | Component | Responsibility |
 |-----------|----------------|
 | `HyperwycHandler` | Intercepts requests; routes to cache, network, or outbox. Pipeline entry point |
-| `SyncOrchestrator` | Drains the outbox on connectivity restoration or manual flush; owns retry and dead-lettering |
+| `SyncOrchestrator` | Drains the outbox on connectivity restoration or manual flush; owns retry and dead-lettering. Internal — reached through `IHyperwyc` |
 | `HyperwycHostedService` | Triggers the startup flush |
-| `HyperwycService` | Default `IHyperwyc` — exposes `SyncEvents` and `ResetStoreAsync` |
+| `HyperwycService` | Default `IHyperwyc` — exposes `SyncEvents`, `FlushAsync` and `ResetStoreAsync` |
 | `ISyncStore` | CRUD over stored envelopes; pluggable |
 | `InMemorySyncStore` | Default non-durable store; the fallback when none is configured |
 | `CabinetSyncStore` | Durable `ISyncStore` using Cabinet |

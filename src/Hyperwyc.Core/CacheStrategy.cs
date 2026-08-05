@@ -1,4 +1,4 @@
-namespace Hyperwyc.Models;
+namespace Hyperwyc;
 
 /// <summary>
 /// Defines the strategy used to resolve a request — whether to prefer a cached

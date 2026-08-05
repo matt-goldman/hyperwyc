@@ -177,6 +177,18 @@ Hyperwyc.SyncEvents.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
 | `OnFailed` | Request moved to dead-letter after max retries |
 | `OnUpdated` | Cached response refreshed |
 
+## Manual Sync
+
+Hyperwyc flushes queued writes on its own — at startup, and when connectivity is restored.
+Shutting down is deliberately not a trigger: writes are queued because connectivity was poor,
+and closing the app does not change that. Anything still queued replays on next launch.
+
+For a user-facing "sync now" control, flush explicitly:
+
+```csharp
+await hyperwyc.FlushAsync();   // IHyperwyc, resolved from DI
+```
+
 ---
 
 ## Further Reading

@@ -29,10 +29,12 @@ to its backlog item where one exists.
 - [x] Cache TTL resolved from policy or options, with a defined precedence ([29](Backlog/Done/29-default-ttl-propagation.md))
 - [x] Configurable policies applied — cache-first, API-first, cache-only and network-only ([27](Backlog/Done/27-cache-strategy-not-applied.md))
 - [x] Orchestrator disposal, synchronous and asynchronous, cancelling in-flight work ([33](Backlog/Done/33-orchestrator-sync-disposal.md))
+- [x] `IHyperwyc.FlushAsync()` for manual sync; `SyncOrchestrator` internal ([36](Backlog/Done/36-public-surface.md))
 - [x] Package structure: `Hyperwyc` (batteries included) over `Hyperwyc.Core` ([31](Backlog/Done/31-package-structure.md)) — `AddHyperwyc()` with no configuration gives a durable, encrypted store
 
 **Remaining**
 
+- [ ] Injectable replay transport ([35](Backlog/35-orchestrator-transport-not-injectable.md)) — consumers cannot currently test a flush without real network access
 - [ ] Document the flush trigger model ([34](Backlog/34-app-lifecycle-integration.md)) — app start and connectivity restoration only; shutdown and backgrounding are deliberately not triggers
 - [ ] `StaticConnectivityService` in core, MAUI connectivity as documented reference code ([13](Backlog/13-connectivity-reference-implementation.md)) — only `AlwaysOnlineConnectivityService` ships today
 - [ ] `IHyperwyc.ResetStoreAsync()` — flush coordination and test coverage ([16](Backlog/16-reset-store-async.md)); the method itself exists

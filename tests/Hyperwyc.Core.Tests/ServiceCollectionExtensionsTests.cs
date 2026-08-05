@@ -135,6 +135,49 @@ public sealed class ServiceCollectionExtensionsTests
     }
 
     // -------------------------------------------------------------------------
+    // IHyperwyc is the whole consumer-facing surface
+    // -------------------------------------------------------------------------
+
+    // Built directly rather than through the container: AddHyperwycCore hardcodes a
+    // real HttpClientHandler for the orchestrator's transport, so a flush resolved
+    // from DI would hit the network. See issue #35.
+    [Fact]
+    public async Task IHyperwyc_FlushAsync_DrainsTheOutbox()
+    {
+        var store = new InMemorySyncStore();
+        await store.UpsertAsync(new Envelope { Url = "https://example.com/api/x", Method = "POST" });
+
+        var transport = new StubHttpMessageHandler(
+            new HttpResponseMessage(System.Net.HttpStatusCode.OK));
+        var events = new SyncEventStream();
+        await using var orchestrator = new SyncOrchestrator(
+            store,
+            new FakeSyncPolicy(),
+            new FakeConnectivityService(isConnected: true),
+            events,
+            new HyperwycOptions(),
+            transport);
+
+        // Reaching a flush must not require the concrete orchestrator, which is internal.
+        IHyperwyc hyperwyc = new HyperwycService(events, store, orchestrator);
+
+        await hyperwyc.FlushAsync();
+
+        Assert.Equal(1, transport.CallCount);
+        Assert.Empty(await store.GetPendingOutboxAsync());
+    }
+
+    [Fact]
+    public void IHyperwyc_ExposesSyncEvents()
+    {
+        var sp = BuildProvider(null);
+
+        var hyperwyc = sp.GetRequiredService<IHyperwyc>();
+
+        Assert.NotNull(hyperwyc.SyncEvents);
+    }
+
+    // -------------------------------------------------------------------------
     // Store selection
     // -------------------------------------------------------------------------
 

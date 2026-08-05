@@ -42,10 +42,12 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | 14 | [`CabinetSyncStore`](Done/14-cabinet-sync-store.md) | ✅ Done | P0 | Cabinet 1.0.7, AES-256-GCM at rest |
 | 15 | [`AddHyperwyc()` DI extension](Done/15-di-extension-and-options.md) | ✅ Done | P0 | |
 | 17 | [Max cached body size](Done/17-max-cached-body-size.md) | ✅ Done | P0 | Enforced in `HandleOnlineReadAsync`; covered by `ResponseCacheReadTests` |
+| 36 | [Public surface and organisation](Done/36-public-surface.md) | ✅ Done | P0 | `IHyperwyc.FlushAsync()` added, `SyncOrchestrator` internal, config enums moved to the root namespace. No `Services/` folder — folders are namespaces here |
 | 33 | [Orchestrator disposal](Done/33-orchestrator-sync-disposal.md) | ✅ Done | P0 | Both paths now cancel a lifetime token every flush links to. Neither waits for queued work to send; `DisposeAsync` waits only for the in-flight flush to unwind |
 | 27 | [`CacheStrategy` never applied](Done/27-cache-strategy-not-applied.md) | ✅ Done | P0 | All four presets now honoured on both read paths. Added `X-Hyperwyc-Status: CacheMiss` for a `CacheOnly` read with an empty cache |
 | 29 | [Policy TTL not reaching the evaluator](Done/29-default-ttl-propagation.md) | ✅ Done | P0 | Also fixed a second defect found alongside it: the default policy's TTL silently overwrote an explicitly set `DefaultCacheTtl` |
 | 31 | [Package structure](Done/31-package-structure.md) | ✅ Done | P0 | `Hyperwyc` (batteries, Cabinet default) over `Hyperwyc.Core`. Store is a type parameter on `AddHyperwycCore<TStore>()`; `HyperwycOptions.Store` removed |
+| **35** | [Orchestrator transport not injectable](35-orchestrator-transport-not-injectable.md) | ⬜ Open | **P0** | `AddCoreServices` hardcodes `new HttpClientHandler()`, so consumers cannot flush against a stub — an integration test hits the real network. Also blocks cert pinning, proxies, and 30's auth question |
 | **34** | [Flush trigger model](34-app-lifecycle-integration.md) | ⬜ Open | P0 (docs) | **Decided:** no flush on shutdown or backgrounding, and no lifecycle wiring asked of consumers — queued work implies poor connectivity, which shutting down does not change. Documentation only; also renames the misleading "Lifecycle Events" README heading |
 | **13** | [Connectivity reference implementation](13-connectivity-reference-implementation.md) | ⬜ Open | **P0** | Scope revised: `StaticConnectivityService` ships in core; MAUI stays reference code. `MauiConnectivityService` in core is rejected — it would force platform TFMs and a MAUI workload dependency. Blocks 19 |
 | **16** | [`ResetStoreAsync()`](16-reset-store-async.md) | 🟡 Partial | P0 | Method exists and delegates to `ISyncStore.ResetAsync`. Missing: flush-semaphore coordination (a reset during an in-flight flush is unguarded) and any unit tests |
@@ -86,6 +88,8 @@ request grouping / bulk sync, and GraphQL support.
 
 ## Conventions
 
+- **Public surface: start internal, widen on demand.** Pre-1.0 anything can be made public
+  later; nothing can be taken back. See [36](Done/36-public-surface.md).
 - **Numbering is sequential and permanent.** Items keep their number when they move to
   `Done/`; numbers are never reused.
 - **A file moves to `Done/` only when its acceptance criteria are ticked and the behaviour
@@ -101,6 +105,9 @@ request grouping / bulk sync, and GraphQL support.
   scope (ship `MauiConnectivityService` in core) is recorded in the item as superseded.
 - **Item 33 was found while implementing 31.** New registration tests disposed a service
   provider that earlier tests never did, which exposed a latent crash on shutdown.
+- **Item 35 was found by a test that took 29 seconds** instead of half a second: resolving
+  `IHyperwyc` from the container and flushing made a real network call, then passed for the
+  wrong reason because dead-lettering also empties the outbox.
 - **Item 34 came out of reasoning through 33** on 2026-08-06 and ended in a decision not to
   build anything: shutdown is not a flush trigger. It is kept as an item because the reasoning
   is unintuitive and worth documenting rather than rediscovering.
