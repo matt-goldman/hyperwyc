@@ -7,9 +7,17 @@ namespace Hyperwyc;
 /// Configuration options for <see cref="HyperwycHandler"/> and <see cref="SyncOrchestrator"/>.
 /// </summary>
 /// <remarks>
-/// Extended by later issues (#17 max body size, #20 per-endpoint TTL overrides, etc.).
-/// Set properties on this class and call <c>AddHyperwyc(options => ...)</c> to
-/// register Hyperwyc with a .NET DI container.
+/// <para>
+/// Set properties on this class and pass a configure delegate to
+/// <c>AddHyperwyc(options =&gt; ...)</c> (or
+/// <see cref="ServiceCollectionExtensions.AddHyperwycCore{TStore}"/>) to register
+/// Hyperwyc with a .NET DI container.
+/// </para>
+/// <para>
+/// The <see cref="ISyncStore"/> is deliberately absent from this class. It is supplied
+/// as a type parameter to <c>AddHyperwycCore&lt;TStore&gt;()</c> so that a missing store
+/// is a compile-time error rather than a silent fall back to non-durable storage.
+/// </para>
 /// </remarks>
 public sealed class HyperwycOptions
 {
@@ -24,13 +32,6 @@ public sealed class HyperwycOptions
     /// </summary>
     public ISyncPolicy DefaultPolicy { get; set; } =
         SyncPolicy.CacheFirst(TimeSpan.FromDays(1));
-
-    /// <summary>
-    /// The backing store for outbox entries and cached responses.
-    /// Defaults to <see cref="InMemorySyncStore"/>; replace with
-    /// <c>CabinetSyncStore</c> for durable persistence.
-    /// </summary>
-    public ISyncStore Store { get; set; } = new InMemorySyncStore();
 
     /// <summary>
     /// Provides network reachability information. Defaults to

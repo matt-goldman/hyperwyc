@@ -42,7 +42,9 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | 14 | [`CabinetSyncStore`](Done/14-cabinet-sync-store.md) | ✅ Done | P0 | Cabinet 1.0.7, AES-256-GCM at rest |
 | 15 | [`AddHyperwyc()` DI extension](Done/15-di-extension-and-options.md) | ✅ Done | P0 | |
 | 17 | [Max cached body size](Done/17-max-cached-body-size.md) | ✅ Done | P0 | Enforced in `HandleOnlineReadAsync`; covered by `ResponseCacheReadTests` |
-| **13** | [MAUI connectivity service](13-maui-connectivity-service.md) | ⬜ Open | **P0** | Only `AlwaysOnlineConnectivityService` ships. `MauiConnectivityService` and `StaticConnectivityService` are both still missing. Blocks 19 |
+| 31 | [Package structure](Done/31-package-structure.md) | ✅ Done | P0 | `Hyperwyc` (batteries, Cabinet default) over `Hyperwyc.Core`. Store is a type parameter on `AddHyperwycCore<TStore>()`; `HyperwycOptions.Store` removed |
+| **33** | [Orchestrator cannot be disposed synchronously](33-orchestrator-sync-disposal.md) | ⬜ Open | **P0** | `SyncOrchestrator` is `IAsyncDisposable`-only, so disposing the provider synchronously throws once it has been resolved. Crash on an ordinary shutdown path; found during 31 |
+| **13** | [Connectivity reference implementation](13-connectivity-reference-implementation.md) | ⬜ Open | **P0** | Scope revised: `StaticConnectivityService` ships in core; MAUI stays reference code. `MauiConnectivityService` in core is rejected — it would force platform TFMs and a MAUI workload dependency. Blocks 19 |
 | **29** | [Policy TTL not reaching the evaluator](29-default-ttl-propagation.md) | ⬜ Open | **P0** | Small bug, high visibility: the quick-start snippet's 1-day TTL silently behaves as 5 minutes |
 | **27** | [`CacheStrategy` never applied](27-cache-strategy-not-applied.md) | ⬜ Open | **P0** | `ApiFirst` / `CacheOnly` / `NetworkOnly` are public no-ops. Either implement or remove before release; also unblocks 22 |
 | **16** | [`ResetStoreAsync()`](16-reset-store-async.md) | 🟡 Partial | P0 | Method exists and delegates to `ISyncStore.ResetAsync`. Missing: flush-semaphore coordination (a reset during an in-flight flush is unguarded) and any unit tests |
@@ -58,6 +60,7 @@ then 30, then the ergonomics items.
 |---|---|---|---|---|
 | 25 | [Binary request/response bodies](25-binary-request-response-bodies.md) | ⬜ Open | **P1 (first)** | Correctness gap, not ergonomics: bodies round-trip through `ReadAsStringAsync`. The item records the decision that no migration is required pre-1.0 |
 | 30 | [Sensitive headers are persisted](30-sensitive-header-exclusion.md) | ⬜ Open | P1 | `Authorization` and `Cookie` are stored verbatim and replayed. Includes the open question of how replays acquire fresh credentials |
+| 32 | [Default encryption key](32-default-encryption-key.md) | 🟡 Partial | P1 (small) | **Decided:** keep the path-derived key as the free default. README and TECHNICAL_PLAN §9 now state plainly what it does and does not protect. Remaining: the MAUI `SecureStorage` reference implementation, which needs the POC |
 | 28 | [Retry state is never persisted](28-persisted-retry-state.md) | ⬜ Open | P1 | `RetryCount` / `NextRetryUtc` / `GetDueForRetryAsync` are built and tested but unused. Decide: persist them, or delete them as dead surface |
 | 22 | [Per-route policies](22-v1-per-route-policies.md) | ⬜ Open | P1 | Largest v1.0 item. Delivers the per-route escape hatches the README already promises. Best done after 27 |
 | 21 | [`Date` header rewriting](21-v1-date-header-rewriting.md) | ⬜ Open | P1 | Plus the `X-Hyperwyc-Cached-At` header |
@@ -92,3 +95,8 @@ request grouping / bulk sync, and GraphQL support.
 - **Items 27–30 were filed from a docs-vs-code reconciliation** on 2026-07-31, not from
   feature planning. They record places where the documentation described behaviour the code
   did not have.
+- **Items 31–32 record packaging and default-behaviour decisions** taken on 2026-08-02, along
+  with the options rejected and why. Item 13 was rewritten in the same pass; its original
+  scope (ship `MauiConnectivityService` in core) is recorded in the item as superseded.
+- **Item 33 was found while implementing 31.** New registration tests disposed a service
+  provider that earlier tests never did, which exposed a latent crash on shutdown.

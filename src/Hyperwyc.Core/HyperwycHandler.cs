@@ -10,8 +10,8 @@ namespace Hyperwyc;
 /// <remarks>
 /// This handler must be placed inside the <see cref="HttpClient"/> pipeline
 /// (i.e. closer to the transport than auth handlers). Assign an
-/// <see cref="System.Net.Http.HttpMessageHandler.InnerHandler"/> or use the DI
-/// extension from <c>Hyperwyc.Extensions</c> which wires this up automatically.
+/// <see cref="DelegatingHandler.InnerHandler"/> or register it with
+/// <c>AddHyperwyc()</c>, which wires this up automatically.
 /// </remarks>
 public sealed class HyperwycHandler : DelegatingHandler
 {

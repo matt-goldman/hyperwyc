@@ -35,6 +35,31 @@ public sealed class CabinetSyncStore : ISyncStore
         : this(dbDirectory, DeriveKey(dbDirectory)) { }
 
     /// <summary>
+    /// Initialises a new <see cref="CabinetSyncStore"/> from
+    /// <paramref name="options"/>. This is the constructor the DI container uses when
+    /// the store is registered by type.
+    /// </summary>
+    /// <remarks>
+    /// Configuration arrives through an options object rather than as positional
+    /// parameters precisely so that the container can construct this type. A
+    /// constructor taking a bare <see cref="string"/> cannot be resolved from DI.
+    /// </remarks>
+    /// <param name="options">Store location and encryption settings.</param>
+    public CabinetSyncStore(CabinetStoreOptions options)
+        : this(DirectoryFrom(options), KeyFrom(options)) { }
+
+    // Arguments are evaluated left to right, so the null check in DirectoryFrom runs
+    // before KeyFrom dereferences options.
+    private static string DirectoryFrom(CabinetStoreOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return options.DirectoryPath;
+    }
+
+    private static byte[] KeyFrom(CabinetStoreOptions options) =>
+        options.EncryptionKey ?? DeriveKey(options.DirectoryPath);
+
+    /// <summary>
     /// Initialises a new <see cref="CabinetSyncStore"/> with an explicit 32-byte
     /// AES-256 encryption key.
     /// </summary>

@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <RootNamespace>Hyperwyc</RootNamespace>
+    <Description>Core of Hyperwyc, a service-worker-inspired HTTP handler for .NET. Contains the handler, sync orchestrator and storage interfaces, with no storage dependency. Install this only if you are supplying your own ISyncStore — most consumers want the Hyperwyc package instead.</Description>
+    <PackageTags>http;offline;cache;sync;delegatinghandler;maui</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Polly" Version="8.6.6" />
+  </ItemGroup>
+</Project>

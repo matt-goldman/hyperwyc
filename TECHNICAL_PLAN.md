@@ -41,13 +41,34 @@ for applications that need explicit offline handling.
 
 ## Package Structure
 
-| Package | Contents |
-|---------|----------|
-| `Hyperwyc` | Core: `HyperwycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `SyncEventStream`, `SyncOrchestrator`, `IHyperwyc`, `InMemorySyncStore`, `AlwaysOnlineConnectivityService`, `TtlStalenessEvaluator`. Depends on `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Hosting.Abstractions` and `Polly`; no storage dependency. |
-| `Hyperwyc.Cabinet` | `CabinetSyncStore` — `ISyncStore` implementation backed by [Cabinet](https://github.com/mattgoldman/cabinet). Depends on `Hyperwyc`; installing this package delivers the core transitively. |
+| Package | Assembly | Contents |
+|---------|----------|----------|
+| `Hyperwyc.Core` | `Hyperwyc.Core.dll` | `HyperwycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `SyncEventStream`, `SyncOrchestrator`, `IHyperwyc`, `InMemorySyncStore`, `AlwaysOnlineConnectivityService`, `TtlStalenessEvaluator`. Depends on `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Hosting.Abstractions` and `Polly`; no storage dependency. |
+| `Hyperwyc` | `Hyperwyc.dll` | `CabinetSyncStore` backed by [Cabinet](https://github.com/mattgoldman/cabinet), `CabinetStoreOptions`, and the batteries-included `AddHyperwyc()`. Depends on `Hyperwyc.Core` and `Cabinet`. |
 
-Future provider packages follow the same pattern: `Hyperwyc.LiteDb`, `Hyperwyc.IndexedDb`,
-etc. Developers who want to implement their own store install only `Hyperwyc`.
+`Hyperwyc` is the package almost everyone installs: `AddHyperwyc()` with no arguments produces
+a working, durable configuration. `Hyperwyc.Core` is for developers supplying their own
+`ISyncStore`, and future provider packages — `Hyperwyc.LiteDb`, `Hyperwyc.IndexedDb` — sit
+alongside it.
+
+Package ID, assembly name and root namespace are deliberately independent. `Hyperwyc.Core`
+ships types in the `Hyperwyc` namespace, and `Hyperwyc` ships `CabinetSyncStore` in
+`Hyperwyc.Cabinet`, so a single `using Hyperwyc;` reaches the common surface regardless of
+which packages are installed.
+
+### Registration
+
+| Entry point | Package | Store |
+|---|---|---|
+| `AddHyperwyc(configure?, configureStore?)` | `Hyperwyc` | `CabinetSyncStore`, constructed by the container |
+| `AddHyperwycCore<TStore>(configure?)` | `Hyperwyc.Core` | `TStore`, constructed by the container |
+| `AddHyperwycCore(storeFactory, configure?)` | `Hyperwyc.Core` | Whatever the factory returns |
+
+The store is a type parameter rather than a property on `HyperwycOptions`. That makes omitting
+it a compile-time error, where an options property would allow an application to silently run
+on `InMemorySyncStore` and lose every queued write at restart — the exact failure the library
+exists to prevent. Registration is by type, so the container owns construction and disposal and
+no store is built (and no directory touched) unless something resolves it.
 
 ---
 
@@ -170,8 +191,9 @@ manual triggering (e.g. a "sync now" button).
 
 ### 5. Storage — Cabinet
 
-Hyperwyc's durable `ISyncStore` implementation uses **Cabinet**, whose document-oriented
-model and flexible index system suit HTTP request/response envelopes.
+Hyperwyc's default `ISyncStore` implementation uses **Cabinet**, whose document-oriented
+model and flexible index system suit HTTP request/response envelopes. It ships in the
+`Hyperwyc` package and is what `AddHyperwyc()` resolves with no configuration.
 
 #### Key Advantages
 
@@ -261,22 +283,17 @@ services.AddHttpClient("MyApi")
     .AddHttpMessageHandler<HyperwycHandler>()
     .AddHttpMessageHandler<AuthHandler>();
 
-services.AddHyperwyc(options =>
-{
-    options.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromDays(1));
-    options.Store = new CabinetSyncStore("Hyperwyc.db");
-});
+services.AddHyperwyc();
 ```
 
 `AddHyperwyc` builds a `HyperwycOptions` instance, applies the caller's delegate, and
 registers the resolved services as singletons — except `HyperwycHandler`, which is transient.
-Unset options fall back to `InMemorySyncStore`, `AlwaysOnlineConnectivityService`,
-`TtlStalenessEvaluator` and `SyncPolicy.CacheFirst(1 day)`.
+Unset options fall back to `AlwaysOnlineConnectivityService`, `TtlStalenessEvaluator` and
+`SyncPolicy.CacheFirst(1 day)`. The store has no default on this class; see Registration above.
 
 | Option | Default |
 |---|---|
 | `DefaultPolicy` | `SyncPolicy.CacheFirst(TimeSpan.FromDays(1))` |
-| `Store` | `InMemorySyncStore` |
 | `Connectivity` | `AlwaysOnlineConnectivityService` |
 | `StalenessEvaluator` | `TtlStalenessEvaluator` (5 minutes) |
 | `DefaultCacheTtl` | 5 minutes |
@@ -285,6 +302,11 @@ Unset options fall back to `InMemorySyncStore`, `AlwaysOnlineConnectivityService
 | `ConnectivityDebounceDelay` | 2 seconds |
 | `FlushOnStartup` | `true` |
 | `DefaultRetryOptions` | 5 retries, 2s initial delay, ×2 backoff |
+
+`CabinetStoreOptions`, configured through `AddHyperwyc`'s second delegate, carries the
+storage-specific settings — `DirectoryPath` (default `{LocalApplicationData}/Hyperwyc`) and
+`EncryptionKey` (default: derived from the path). These deliberately live outside
+`HyperwycOptions`, which stays free of concepts that apply to only one store.
 
 > **Known gap:** a TTL passed to `SyncPolicy.CacheFirst` does not currently reach the default
 > staleness evaluator, which is constructed with the 5-minute default before the policy's TTL
@@ -308,9 +330,13 @@ Unset options fall back to `InMemorySyncStore`, `AlwaysOnlineConnectivityService
 
 ### 9. Security and Privacy
 
-- **Encryption at rest** is provided by `CabinetSyncStore` (AES-256-GCM). A key derived from
-  the store path is used when no explicit key is supplied; production callers should pass
-  their own via the two-parameter constructor.
+- **Encryption at rest** is provided by `CabinetSyncStore` (AES-256-GCM). When no key is
+  supplied, one is derived from the store path via SHA-256. That default requires no
+  configuration and keeps cached data from casual inspection of the device filesystem, but it
+  is deterministic for a given path and so is not a defence against an attacker holding the
+  device who knows what this library does. Callers whose cached data warrants more should set
+  `CabinetStoreOptions.EncryptionKey`, ideally from platform secure storage. Losing that key
+  means losing access to everything already stored.
 - **Multi-user / cache isolation:** the store is not scoped to a user identity. On logout or
   account switch, applications should call `IHyperwyc.ResetStoreAsync()` to clear all cached
   data. A user-scoped store with automatic partitioning is a v2.0 candidate.

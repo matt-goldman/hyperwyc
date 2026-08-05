@@ -16,6 +16,13 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/matt-goldman/Hyperwyc</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/matt-goldman/Hyperwyc</PackageProjectUrl>
+    <!--
+      Both packages ship in lockstep from this version. Hyperwyc takes a minimum-version
+      dependency on Hyperwyc.Core rather than an exact pin: it consumes only Core's public
+      API, so a newer Core is compatible, and an exact pin would block patching Core alone.
+    -->
+    <Version>0.1.0-preview.1</Version>
   </PropertyGroup>
 
 </Project>

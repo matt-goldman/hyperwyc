@@ -15,8 +15,8 @@ to its backlog item where one exists.
 **Shipped**
 
 - [x] `HyperwycHandler` — core `DelegatingHandler`, online and offline paths ([06](Backlog/Done/06-hyperwyc-handler-online-path.md), [07](Backlog/Done/07-hyperwyc-handler-offline-path.md))
-- [x] `Hyperwyc` core package: all interfaces, `IHyperwyc`, `InMemorySyncStore` ([02](Backlog/Done/02-core-interfaces.md), [04](Backlog/Done/04-in-memory-sync-store.md))
-- [x] `Hyperwyc.Cabinet` provider package: `CabinetSyncStore` ([14](Backlog/Done/14-cabinet-sync-store.md))
+- [x] `Hyperwyc.Core` package: all interfaces, `IHyperwyc`, `InMemorySyncStore` ([02](Backlog/Done/02-core-interfaces.md), [04](Backlog/Done/04-in-memory-sync-store.md))
+- [x] `CabinetSyncStore`, shipped in the `Hyperwyc` package as the default store ([14](Backlog/Done/14-cabinet-sync-store.md))
 - [x] Request/response envelope model ([03](Backlog/Done/03-envelope-model.md))
 - [x] Idempotency-Key header injection on all mutating requests ([08](Backlog/Done/08-idempotency-key-injection.md))
 - [x] Response cache with TTL staleness evaluation ([09](Backlog/Done/09-response-cache-read-operations.md))
@@ -26,10 +26,12 @@ to its backlog item where one exists.
 - [x] Polly-based retry with exponential backoff and dead-lettering ([12](Backlog/Done/12-polly-retry-dead-letter.md))
 - [x] Reactive sync event stream (`IObservable<SyncEvent>`) ([05](Backlog/Done/05-sync-event-stream.md))
 - [x] `AddHyperwyc()` DI extension for configuration ([15](Backlog/Done/15-di-extension-and-options.md))
+- [x] Package structure: `Hyperwyc` (batteries included) over `Hyperwyc.Core` ([31](Backlog/Done/31-package-structure.md)) — `AddHyperwyc()` with no configuration gives a durable, encrypted store
 
 **Remaining**
 
-- [ ] `IConnectivityService` default implementation using MAUI Essentials ([13](Backlog/13-maui-connectivity-service.md)) — only `AlwaysOnlineConnectivityService` ships today
+- [ ] `SyncOrchestrator` disposable synchronously ([33](Backlog/33-orchestrator-sync-disposal.md)) — currently throws when the service provider is disposed without `await`
+- [ ] `StaticConnectivityService` in core, MAUI connectivity as documented reference code ([13](Backlog/13-connectivity-reference-implementation.md)) — only `AlwaysOnlineConnectivityService` ships today
 - [ ] `IHyperwyc.ResetStoreAsync()` — flush coordination and test coverage ([16](Backlog/16-reset-store-async.md)); the method itself exists
 - [ ] Configurable policies actually applied — `ApiFirst` / `CacheOnly` / `NetworkOnly` are currently no-ops ([27](Backlog/27-cache-strategy-not-applied.md))
 - [ ] Policy TTL reaching the staleness evaluator ([29](Backlog/29-default-ttl-propagation.md))
@@ -43,6 +45,7 @@ to its backlog item where one exists.
 
 - [ ] Binary request and response bodies ([25](Backlog/25-binary-request-response-bodies.md)) — lifts the current text-only limitation; breaking change to the persisted shape, so it lands first
 - [ ] Sensitive-header exclusion from persisted envelopes ([30](Backlog/30-sensitive-header-exclusion.md))
+- [ ] MAUI `SecureStorage` reference implementation for the store encryption key ([32](Backlog/32-default-encryption-key.md)) — the path-derived key stays as the free default, and is now documented as such
 - [ ] Persisted retry state so the retry budget survives a restart ([28](Backlog/28-persisted-retry-state.md))
 - [ ] Fine-grained per-route policies — TTL, cache strategy, offline response policy, empty-offline body ([22](Backlog/22-v1-per-route-policies.md))
 - [ ] `Date` header rewriting when serving responses from cache ([21](Backlog/21-v1-date-header-rewriting.md))

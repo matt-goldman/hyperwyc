@@ -26,23 +26,56 @@ Hyperwyc is backend-agnostic, storage-pluggable, and designed for scenarios wher
 ## Quick Start
 
 ```bash
-dotnet add package Hyperwyc.Cabinet
+dotnet add package Hyperwyc
 ```
-
-`Hyperwyc.Cabinet` depends on `Hyperwyc`, so the core arrives transitively. To use a different store, or implement your own, install only `Hyperwyc`.
 
 ```csharp
 services.AddHttpClient("MyApi")
     .AddHttpMessageHandler<HyperwycHandler>()
     .AddHttpMessageHandler<AuthHandler>();
 
+services.AddHyperwyc();
+```
+
+That's the whole setup. `AddHyperwyc()` with no arguments gives you durable, encrypted storage — no store to choose, nothing to wire up. Configure it when you want to:
+
+```csharp
 services.AddHyperwyc(options =>
 {
     options.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromDays(1));
-    options.Store = new CabinetSyncStore("Hyperwyc.db");
-    options.Connectivity = new MauiConnectivityService();
+    options.Connectivity = new MauiConnectivityService();   // see Connectivity, below
 });
 ```
+
+### Packages
+
+| Package | Use it when |
+|---|---|
+| `Hyperwyc` | Almost always. Includes durable [Cabinet](https://github.com/mattgoldman/cabinet)-backed storage and works with no configuration |
+| `Hyperwyc.Core` | You are supplying your own `ISyncStore`. No storage dependency; call `AddHyperwycCore<TStore>()` instead |
+
+The store is a type parameter on `AddHyperwycCore<TStore>()` rather than a setting, so forgetting it is a compile error rather than a silent fall back to in-memory storage that loses everything on restart:
+
+```csharp
+services.AddHyperwycCore<MyCustomStore>();          // container constructs it
+services.AddHyperwycCore(sp => new MyStore(...));   // or supply a factory
+```
+
+### Storage location and encryption
+
+By default the store lives in a `Hyperwyc` folder under `LocalApplicationData` — inside the app sandbox on Android and iOS — and is encrypted with AES-256-GCM using a key derived from that path.
+
+That default costs you nothing and keeps cached data from casual inspection of the device filesystem, but the derived key is deterministic, so it is not a defence against an attacker who has the device and knows what this library does. If the cached data warrants more, supply your own key:
+
+```csharp
+services.AddHyperwyc(configureStore: store =>
+{
+    store.DirectoryPath = myPath;
+    store.EncryptionKey = keyFromSecureStorage;   // 32 bytes
+});
+```
+
+Losing that key means losing access to everything already stored.
 
 ---
 
