@@ -105,6 +105,25 @@ Hyperwyc sits in your `HttpClient` pipeline as a `DelegatingHandler` — the sam
 - **Offline reads:** Served from cache if available (even if stale — any data is better than no data offline). If no cache exists, the caller receives a `200 OK` with `X-Hyperwyc-Status: Offline` and an empty body.
 - **Online reads (GET/HEAD/OPTIONS):** Served from cache if fresh; fetched from the API if stale or missing.
 
+### Caching strategies
+
+The default is cache-first. Set `options.DefaultPolicy` to choose a different one:
+
+| Policy | Behaviour |
+|---|---|
+| `SyncPolicy.CacheFirst()` | Serve a fresh cached response; otherwise fetch. Uses `DefaultCacheTtl` |
+| `SyncPolicy.CacheFirst(ttl)` | As above, with the freshness window stated on the policy |
+| `SyncPolicy.ApiFirst()` | Always fetch; fall back to the cache only if the request fails |
+| `SyncPolicy.CacheOnly()` | Serve from cache regardless of age; never touch the network |
+| `SyncPolicy.NetworkOnly()` | Always fetch; never read or write the cache |
+
+Offline, `CacheFirst` and `ApiFirst` both serve stale cached data rather than nothing, and
+`CacheOnly` behaves the same as it does online. `NetworkOnly` opts out of the cache entirely,
+so it has nothing to offer offline.
+
+A `CacheOnly` read that finds nothing cached returns `X-Hyperwyc-Status: CacheMiss` rather than
+`Offline` — the device may be online, and the request was withheld by policy, not connectivity.
+
 The app doesn't need to know the difference. Your existing code doesn't change.
 
 > **Why "no data" instead of "no connection"?** Connectivity is an infrastructure concern, not an application one. Your code already has to handle the empty-result path (a search with no matches, a feed with no items); offline simply produces the same shape. If that mindset shift doesn't fit a particular route, set `OfflineResponsePolicy = OfflineResponsePolicy.Signal` to receive `503 Service Unavailable` instead. Per-route policies are planned for v1.0.

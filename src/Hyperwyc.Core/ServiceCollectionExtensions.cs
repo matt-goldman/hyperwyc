@@ -95,10 +95,17 @@ public static class ServiceCollectionExtensions
         var options = new HyperwycOptions();
         configure?.Invoke(options);
 
-        // If the default policy carries a TTL, propagate it to DefaultCacheTtl
-        // so TtlStalenessEvaluator and other consumers stay in sync.
+        // Resolve the effective TTL now that the caller has finished configuring.
+        // A TTL stated on the policy wins; otherwise DefaultCacheTtl supplies it.
+        // The default policy carries no TTL, so setting DefaultCacheTtl alone is
+        // honoured rather than being overwritten by a default nobody chose.
         if (options.DefaultPolicy is SyncPolicy.PresetSyncPolicy { Ttl: { } policyTtl })
             options.DefaultCacheTtl = policyTtl;
+
+        // Build the default evaluator only now, from the resolved TTL. Constructing
+        // it any earlier captures a TTL that configuration has not yet settled.
+        var stalenessEvaluator =
+            options.StalenessEvaluator ?? new TtlStalenessEvaluator(options.DefaultCacheTtl);
 
         // Register the options object itself as a singleton so HyperwycHandler
         // and SyncOrchestrator can receive it via constructor injection.
@@ -107,7 +114,7 @@ public static class ServiceCollectionExtensions
         // Interfaces resolved from the options instance.
         services.TryAddSingleton<IConnectivityService>(_ => options.Connectivity);
         services.TryAddSingleton<ISyncPolicy>(_ => options.DefaultPolicy);
-        services.TryAddSingleton<IStalenessEvaluator>(_ => options.StalenessEvaluator);
+        services.TryAddSingleton<IStalenessEvaluator>(_ => stalenessEvaluator);
 
         // Core singletons.
         services.TryAddSingleton<SyncEventStream>();

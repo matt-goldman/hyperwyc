@@ -33,6 +33,18 @@ public static class SyncPolicy
         new PresetSyncPolicy(CacheStrategy.CacheFirst, shouldInvalidate: true, ttl);
 
     /// <summary>
+    /// Cache-first behaviour using <see cref="HyperwycOptions.DefaultCacheTtl"/>
+    /// as the freshness window. This is the default policy.
+    /// </summary>
+    /// <remarks>
+    /// Use the <see cref="CacheFirst(TimeSpan)"/> overload to state the TTL on the
+    /// policy itself; a TTL given there takes precedence over
+    /// <see cref="HyperwycOptions.DefaultCacheTtl"/>.
+    /// </remarks>
+    public static ISyncPolicy CacheFirst() =>
+        new PresetSyncPolicy(CacheStrategy.CacheFirst, shouldInvalidate: true, ttl: null);
+
+    /// <summary>
     /// Always calls the API first; falls back to the cache only when the
     /// network is unavailable.
     /// </summary>

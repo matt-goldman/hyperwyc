@@ -42,11 +42,12 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | 14 | [`CabinetSyncStore`](Done/14-cabinet-sync-store.md) | ✅ Done | P0 | Cabinet 1.0.7, AES-256-GCM at rest |
 | 15 | [`AddHyperwyc()` DI extension](Done/15-di-extension-and-options.md) | ✅ Done | P0 | |
 | 17 | [Max cached body size](Done/17-max-cached-body-size.md) | ✅ Done | P0 | Enforced in `HandleOnlineReadAsync`; covered by `ResponseCacheReadTests` |
+| 27 | [`CacheStrategy` never applied](Done/27-cache-strategy-not-applied.md) | ✅ Done | P0 | All four presets now honoured on both read paths. Added `X-Hyperwyc-Status: CacheMiss` for a `CacheOnly` read with an empty cache |
+| 29 | [Policy TTL not reaching the evaluator](Done/29-default-ttl-propagation.md) | ✅ Done | P0 | Also fixed a second defect found alongside it: the default policy's TTL silently overwrote an explicitly set `DefaultCacheTtl` |
 | 31 | [Package structure](Done/31-package-structure.md) | ✅ Done | P0 | `Hyperwyc` (batteries, Cabinet default) over `Hyperwyc.Core`. Store is a type parameter on `AddHyperwycCore<TStore>()`; `HyperwycOptions.Store` removed |
 | **33** | [Orchestrator cannot be disposed synchronously](33-orchestrator-sync-disposal.md) | ⬜ Open | **P0** | `SyncOrchestrator` is `IAsyncDisposable`-only, so disposing the provider synchronously throws once it has been resolved. Crash on an ordinary shutdown path; found during 31 |
+| **34** | [Flush trigger model](34-app-lifecycle-integration.md) | ⬜ Open | P0 (docs) | **Decided:** no flush on shutdown or backgrounding, and no lifecycle wiring asked of consumers — queued work implies poor connectivity, which shutting down does not change. Documentation only; also renames the misleading "Lifecycle Events" README heading |
 | **13** | [Connectivity reference implementation](13-connectivity-reference-implementation.md) | ⬜ Open | **P0** | Scope revised: `StaticConnectivityService` ships in core; MAUI stays reference code. `MauiConnectivityService` in core is rejected — it would force platform TFMs and a MAUI workload dependency. Blocks 19 |
-| **29** | [Policy TTL not reaching the evaluator](29-default-ttl-propagation.md) | ⬜ Open | **P0** | Small bug, high visibility: the quick-start snippet's 1-day TTL silently behaves as 5 minutes |
-| **27** | [`CacheStrategy` never applied](27-cache-strategy-not-applied.md) | ⬜ Open | **P0** | `ApiFirst` / `CacheOnly` / `NetworkOnly` are public no-ops. Either implement or remove before release; also unblocks 22 |
 | **16** | [`ResetStoreAsync()`](16-reset-store-async.md) | 🟡 Partial | P0 | Method exists and delegates to `ISyncStore.ResetAsync`. Missing: flush-semaphore coordination (a reset during an in-flight flush is unguarded) and any unit tests |
 | **18** | [POC — ASP.NET Core Web API](18-poc-web-api.md) | ⬜ Open | P0 | No `Hyperwyc.Sample` solution folder exists yet |
 | **19** | [POC — .NET MAUI sample app](19-poc-maui-app.md) | ⬜ Open | P0 | Depends on 13 and 18 |
@@ -61,8 +62,8 @@ then 30, then the ergonomics items.
 | 25 | [Binary request/response bodies](25-binary-request-response-bodies.md) | ⬜ Open | **P1 (first)** | Correctness gap, not ergonomics: bodies round-trip through `ReadAsStringAsync`. The item records the decision that no migration is required pre-1.0 |
 | 30 | [Sensitive headers are persisted](30-sensitive-header-exclusion.md) | ⬜ Open | P1 | `Authorization` and `Cookie` are stored verbatim and replayed. Includes the open question of how replays acquire fresh credentials |
 | 32 | [Default encryption key](32-default-encryption-key.md) | 🟡 Partial | P1 (small) | **Decided:** keep the path-derived key as the free default. README and TECHNICAL_PLAN §9 now state plainly what it does and does not protect. Remaining: the MAUI `SecureStorage` reference implementation, which needs the POC |
-| 28 | [Retry state is never persisted](28-persisted-retry-state.md) | ⬜ Open | P1 | `RetryCount` / `NextRetryUtc` / `GetDueForRetryAsync` are built and tested but unused. Decide: persist them, or delete them as dead surface |
-| 22 | [Per-route policies](22-v1-per-route-policies.md) | ⬜ Open | P1 | Largest v1.0 item. Delivers the per-route escape hatches the README already promises. Best done after 27 |
+| 28 | [Retry state is never persisted](28-persisted-retry-state.md) | ⬜ Open | **P1 (raised)** | `RetryCount` / `NextRetryUtc` / `GetDueForRetryAsync` are built and tested but unused. Decide: persist them, or delete them as dead surface. Priority raised while reasoning through 33/34 — a connectivity-triggered flush cut off by backgrounding discards its budget, so a persistently failing envelope restarts forever instead of converging on dead-letter |
+| 22 | [Per-route policies](22-v1-per-route-policies.md) | ⬜ Open | P1 | Largest v1.0 item. Delivers the per-route escape hatches the README already promises. Reuses the strategy resolution added by 27 |
 | 21 | [`Date` header rewriting](21-v1-date-header-rewriting.md) | ⬜ Open | P1 | Plus the `X-Hyperwyc-Cached-At` header |
 | 23 | [Diagnostics view](23-v1-diagnostics-view.md) | ⬜ Open | P1 | Read-only outbox/dead-letter queries on `IHyperwyc` + a sample page. Reports `RetryCount`, so reads better after 28 |
 | 24 | [Dead-letter management](24-v1-dead-letter-management.md) | ⬜ Open | P1 | Requeue/dismiss. Depends on 23 for the UI surface |
@@ -100,3 +101,6 @@ request grouping / bulk sync, and GraphQL support.
   scope (ship `MauiConnectivityService` in core) is recorded in the item as superseded.
 - **Item 33 was found while implementing 31.** New registration tests disposed a service
   provider that earlier tests never did, which exposed a latent crash on shutdown.
+- **Item 34 came out of reasoning through 33** on 2026-08-06 and ended in a decision not to
+  build anything: shutdown is not a flush trigger. It is kept as an item because the reasoning
+  is unintuitive and worth documenting rather than rediscovering.

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Hyperwyc.Interfaces;
 using Hyperwyc.Models;
+using Hyperwyc.Tests.Fakes;
 using Xunit;
 
 namespace Hyperwyc.Tests;
@@ -98,14 +99,24 @@ public sealed class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddHyperwycCore_Defaults_RegistersIStalenessEvaluatorFromOptionsInstance()
+    public void AddHyperwycCore_Defaults_RegistersIStalenessEvaluator()
     {
         var sp = BuildProvider(null);
 
-        var options = sp.GetRequiredService<HyperwycOptions>();
         var evaluator = sp.GetRequiredService<IStalenessEvaluator>();
 
-        Assert.Same(options.StalenessEvaluator, evaluator);
+        Assert.IsType<TtlStalenessEvaluator>(evaluator);
+    }
+
+    [Fact]
+    public void AddHyperwycCore_CustomStalenessEvaluator_IsNotReplaced()
+    {
+        var custom = new FakeStalenessEvaluator(isStale: false);
+        var sp = BuildProvider(o => o.StalenessEvaluator = custom);
+
+        var resolved = sp.GetRequiredService<IStalenessEvaluator>();
+
+        Assert.Same(custom, resolved);
     }
 
     // -------------------------------------------------------------------------
@@ -170,29 +181,80 @@ public sealed class ServiceCollectionExtensionsTests
     }
 
     // -------------------------------------------------------------------------
-    // TTL propagation
+    // Effective TTL
+    //
+    // These assert the TTL the resolved evaluator actually applies, not just the
+    // value left on the options object. Issue #29 was precisely a case where the
+    // property was correct and the evaluator was not.
     // -------------------------------------------------------------------------
 
     [Fact]
-    public void AddHyperwycCore_CacheFirstPolicy_PropagatesTtlToDefaultCacheTtl()
+    public void AddHyperwycCore_CacheFirstPolicyTtl_IsAppliedByTheEvaluator()
     {
-        var ttl = TimeSpan.FromHours(3);
-        var sp = BuildProvider(o => o.DefaultPolicy = SyncPolicy.CacheFirst(ttl));
+        var sp = BuildProvider(o => o.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromDays(1)));
 
+        var evaluator = sp.GetRequiredService<IStalenessEvaluator>();
         var options = sp.GetRequiredService<HyperwycOptions>();
 
-        Assert.Equal(ttl, options.DefaultCacheTtl);
+        Assert.Equal(TimeSpan.FromDays(1), options.DefaultCacheTtl);
+        Assert.False(IsStaleAfter(evaluator, TimeSpan.FromHours(23)));
+        Assert.True(IsStaleAfter(evaluator, TimeSpan.FromHours(25)));
     }
 
     [Fact]
-    public void AddHyperwycCore_ApiFirstPolicy_DoesNotOverrideDefaultCacheTtl()
+    public void AddHyperwycCore_ExplicitDefaultCacheTtl_IsAppliedByTheEvaluator()
     {
-        var sp = BuildProvider(o => o.DefaultPolicy = SyncPolicy.ApiFirst());
+        var sp = BuildProvider(o => o.DefaultCacheTtl = TimeSpan.FromMinutes(1));
 
+        var evaluator = sp.GetRequiredService<IStalenessEvaluator>();
         var options = sp.GetRequiredService<HyperwycOptions>();
 
-        // Default TTL from HyperwycOptions initializer should be preserved.
-        Assert.True(options.DefaultCacheTtl > TimeSpan.Zero);
+        // The default policy carries no TTL, so it must not clobber this.
+        Assert.Equal(TimeSpan.FromMinutes(1), options.DefaultCacheTtl);
+        Assert.False(IsStaleAfter(evaluator, TimeSpan.FromSeconds(30)));
+        Assert.True(IsStaleAfter(evaluator, TimeSpan.FromMinutes(2)));
+    }
+
+    [Fact]
+    public void AddHyperwycCore_PolicyTtl_WinsOverDefaultCacheTtl()
+    {
+        var sp = BuildProvider(o =>
+        {
+            o.DefaultCacheTtl = TimeSpan.FromMinutes(1);
+            o.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromHours(6));
+        });
+
+        var evaluator = sp.GetRequiredService<IStalenessEvaluator>();
+
+        Assert.False(IsStaleAfter(evaluator, TimeSpan.FromHours(5)));
+        Assert.True(IsStaleAfter(evaluator, TimeSpan.FromHours(7)));
+    }
+
+    [Fact]
+    public void AddHyperwycCore_Defaults_ApplyFiveMinuteTtl()
+    {
+        var sp = BuildProvider(null);
+
+        var evaluator = sp.GetRequiredService<IStalenessEvaluator>();
+
+        Assert.False(IsStaleAfter(evaluator, TimeSpan.FromMinutes(4)));
+        Assert.True(IsStaleAfter(evaluator, TimeSpan.FromMinutes(6)));
+    }
+
+    [Fact]
+    public void AddHyperwycCore_TtllessPolicy_FallsBackToDefaultCacheTtl()
+    {
+        var sp = BuildProvider(o =>
+        {
+            o.DefaultPolicy = SyncPolicy.ApiFirst();
+            o.DefaultCacheTtl = TimeSpan.FromMinutes(30);
+        });
+
+        var evaluator = sp.GetRequiredService<IStalenessEvaluator>();
+        var options = sp.GetRequiredService<HyperwycOptions>();
+
+        Assert.Equal(TimeSpan.FromMinutes(30), options.DefaultCacheTtl);
+        Assert.True(IsStaleAfter(evaluator, TimeSpan.FromMinutes(31)));
     }
 
     // -------------------------------------------------------------------------
@@ -220,6 +282,21 @@ public sealed class ServiceCollectionExtensionsTests
     // -------------------------------------------------------------------------
     // Helper
     // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Asks <paramref name="evaluator"/> whether a response cached
+    /// <paramref name="age"/> ago is stale.
+    /// </summary>
+    private static bool IsStaleAfter(IStalenessEvaluator evaluator, TimeSpan age)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var envelope = new Envelope
+        {
+            Response = new CachedResponse { CachedAt = now - age },
+        };
+
+        return evaluator.IsStale(envelope, now);
+    }
 
     private static ServiceProvider BuildProvider(Action<HyperwycOptions>? configure)
     {

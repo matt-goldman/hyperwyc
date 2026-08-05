@@ -114,20 +114,27 @@ their failure status is returned to the caller unchanged. Only offline writes ar
 
 #### Incoming Responses (Read Operations)
 
-1. For `GET`, `HEAD` and `OPTIONS` requests, when **online**:
-   - Returns the cached response if one exists and `IStalenessEvaluator` considers it fresh.
-   - Otherwise sends the request, and on a 2xx caches the response and publishes `OnUpdated`,
-     subject to the body size cap.
-2. When **offline**:
-   - Returns the cached response if one exists, **even if stale** — any data beats no data.
-   - Otherwise returns a synthetic `200 OK` with an empty body (`Transparent`) or `503`
-     (`Signal`), with `X-Hyperwyc-Status: Offline`.
-3. Cached responses are reconstructed with their original status code and headers.
+Read handling for `GET`, `HEAD` and `OPTIONS` is governed by the `CacheStrategy` that
+`ISyncPolicy.GetStrategy(request)` returns for the request:
 
-> **Not yet applied:** `ISyncPolicy.GetStrategy` returns a `CacheStrategy`, but the handler
-> does not consult it — all reads use cache-first semantics, so the `ApiFirst`, `CacheOnly`
-> and `NetworkOnly` presets currently have no effect. Tracked in
-> [issue 27](Backlog/27-cache-strategy-not-applied.md).
+| Strategy | Online | Offline |
+|---|---|---|
+| `CacheFirst` (default) | Serves a fresh cached response; otherwise fetches, caches and returns | Serves the cached response even if stale; otherwise a synthetic offline response |
+| `ApiFirst` | Always fetches; falls back to the cache only if the request throws | Serves the cached response even if stale; otherwise a synthetic offline response |
+| `CacheOnly` | Serves the cached response regardless of staleness; never sends | Same as online — the network is never consulted either way |
+| `NetworkOnly` | Always sends; never reads or writes the cache | Synthetic offline response; the cache is not consulted |
+
+Successful responses are cached subject to the body size cap, and publish `OnUpdated`. Cached
+responses are reconstructed with their original status code and headers.
+
+`ApiFirst`'s fallback triggers on `HttpRequestException` — the case where
+`IConnectivityService` reports online but the API is not actually reachable (captive portal,
+DNS failure, transient outage). `CacheFirst` deliberately does *not* fall back this way: it has
+already considered the cache and judged it stale.
+
+Synthetic read responses carry `X-Hyperwyc-Status: Offline`, except a `CacheOnly` read that
+finds nothing cached, which carries `CacheMiss` — the device may well be online, and the
+request was withheld by policy rather than by connectivity.
 
 #### Cache Invalidation Prefix
 
@@ -293,9 +300,9 @@ Unset options fall back to `AlwaysOnlineConnectivityService`, `TtlStalenessEvalu
 
 | Option | Default |
 |---|---|
-| `DefaultPolicy` | `SyncPolicy.CacheFirst(TimeSpan.FromDays(1))` |
+| `DefaultPolicy` | `SyncPolicy.CacheFirst()` — TTL taken from `DefaultCacheTtl` |
 | `Connectivity` | `AlwaysOnlineConnectivityService` |
-| `StalenessEvaluator` | `TtlStalenessEvaluator` (5 minutes) |
+| `StalenessEvaluator` | `null` — a `TtlStalenessEvaluator` is built at registration from the effective TTL |
 | `DefaultCacheTtl` | 5 minutes |
 | `OfflineResponsePolicy` | `Transparent` |
 | `MaxCachedResponseBodyBytes` | 524,288 (512 KB) |
@@ -308,10 +315,11 @@ storage-specific settings — `DirectoryPath` (default `{LocalApplicationData}/H
 `EncryptionKey` (default: derived from the path). These deliberately live outside
 `HyperwycOptions`, which stays free of concepts that apply to only one store.
 
-> **Known gap:** a TTL passed to `SyncPolicy.CacheFirst` does not currently reach the default
-> staleness evaluator, which is constructed with the 5-minute default before the policy's TTL
-> is read. The snippet above therefore behaves as a 5-minute cache. Tracked in
-> [issue 29](Backlog/29-default-ttl-propagation.md).
+**Effective TTL** resolves at registration, after the caller's configuration has run: a TTL
+given to `SyncPolicy.CacheFirst(ttl)` wins, otherwise `DefaultCacheTtl` supplies it. The default
+policy deliberately carries no TTL of its own, so setting `DefaultCacheTtl` alone is honoured
+rather than being overwritten by a default nobody chose. The default staleness evaluator is
+constructed only once that resolution is complete.
 
 ---
 

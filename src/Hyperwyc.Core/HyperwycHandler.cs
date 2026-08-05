@@ -103,6 +103,10 @@ public sealed class HyperwycHandler : DelegatingHandler
         HttpRequestMessage request,
         CancellationToken ct)
     {
+        // NetworkOnly opts out of the cache entirely, so there is nothing to serve.
+        if (_policy.GetStrategy(request) == CacheStrategy.NetworkOnly)
+            return HyperwycResponseFactory.Offline(_options.OfflineResponsePolicy);
+
         var url = request.RequestUri?.ToString() ?? string.Empty;
 
         // Serve from cache even if stale — any cached data is better than nothing offline.
@@ -150,33 +154,80 @@ public sealed class HyperwycHandler : DelegatingHandler
         HttpRequestMessage request,
         CancellationToken ct)
     {
+        var strategy = _policy.GetStrategy(request);
         var url = request.RequestUri?.ToString() ?? string.Empty;
-        var cached = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
 
-        if (cached is not null && !_stalenessEvaluator.IsStale(cached, DateTimeOffset.UtcNow))
-            return BuildResponseFromEnvelope(cached);
+        // NetworkOnly neither reads nor writes the cache.
+        if (strategy == CacheStrategy.NetworkOnly)
+            return await base.SendAsync(request, ct).ConfigureAwait(false);
 
-        var response = await base.SendAsync(request, ct).ConfigureAwait(false);
-
-        if (response.IsSuccessStatusCode)
+        // CacheOnly never reaches the network, so staleness is irrelevant — a stale
+        // cached response is the only answer available.
+        if (strategy == CacheStrategy.CacheOnly)
         {
-            // Buffer content so ForCachedResponse can read it synchronously and
-            // the caller can still read the body afterwards.
-            if (response.Content is not null)
-                await response.Content.LoadIntoBufferAsync(ct).ConfigureAwait(false);
-
-            var bodyLength = response.Content?.Headers.ContentLength ?? 0;
-            if (bodyLength <= _options.MaxCachedResponseBodyBytes)
-            {
-                var envelope = Envelope.ForCachedResponse(request, response);
-                await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
-
-                _events.Publish(new SyncEvent(
-                    SyncEventType.OnUpdated, url, request.Method.Method, DateTimeOffset.UtcNow));
-            }
+            var cacheOnly = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
+            return cacheOnly is not null
+                ? BuildResponseFromEnvelope(cacheOnly)
+                : HyperwycResponseFactory.CacheMiss(_options.OfflineResponsePolicy);
         }
 
+        // CacheFirst serves a fresh cached response without touching the network.
+        // ApiFirst always goes to the network, and consults the cache only on failure.
+        if (strategy == CacheStrategy.CacheFirst)
+        {
+            var cached = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
+            if (cached is not null && !_stalenessEvaluator.IsStale(cached, DateTimeOffset.UtcNow))
+                return BuildResponseFromEnvelope(cached);
+        }
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await base.SendAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HttpRequestException) when (strategy == CacheStrategy.ApiFirst)
+        {
+            // Reachable when IConnectivityService reports online but the API is not
+            // actually reachable — a captive portal, DNS failure or transient outage.
+            var fallback = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
+            if (fallback is not null)
+                return BuildResponseFromEnvelope(fallback);
+
+            throw;
+        }
+
+        await CacheResponseIfEligibleAsync(request, response, url, ct).ConfigureAwait(false);
         return response;
+    }
+
+    /// <summary>
+    /// Writes a successful read response to the cache, unless its body exceeds
+    /// <see cref="HyperwycOptions.MaxCachedResponseBodyBytes"/>. Oversized responses
+    /// are still returned to the caller; they are simply not stored.
+    /// </summary>
+    private async Task CacheResponseIfEligibleAsync(
+        HttpRequestMessage request,
+        HttpResponseMessage response,
+        string url,
+        CancellationToken ct)
+    {
+        if (!response.IsSuccessStatusCode)
+            return;
+
+        // Buffer content so ForCachedResponse can read it synchronously and
+        // the caller can still read the body afterwards.
+        if (response.Content is not null)
+            await response.Content.LoadIntoBufferAsync(ct).ConfigureAwait(false);
+
+        var bodyLength = response.Content?.Headers.ContentLength ?? 0;
+        if (bodyLength > _options.MaxCachedResponseBodyBytes)
+            return;
+
+        var envelope = Envelope.ForCachedResponse(request, response);
+        await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
+
+        _events.Publish(new SyncEvent(
+            SyncEventType.OnUpdated, url, request.Method.Method, DateTimeOffset.UtcNow));
     }
 
     // -------------------------------------------------------------------------

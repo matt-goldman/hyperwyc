@@ -26,12 +26,17 @@ public sealed class HyperwycOptions
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// The default caching and sync policy applied to all requests unless
-    /// overridden per-endpoint. Defaults to <see cref="SyncPolicy.CacheFirst"/>
-    /// with a 1-day TTL.
+    /// The default caching and sync policy applied to all requests. Defaults to
+    /// <see cref="SyncPolicy.CacheFirst()"/>, which takes its freshness window
+    /// from <see cref="DefaultCacheTtl"/>.
     /// </summary>
-    public ISyncPolicy DefaultPolicy { get; set; } =
-        SyncPolicy.CacheFirst(TimeSpan.FromDays(1));
+    /// <remarks>
+    /// Assigning <see cref="SyncPolicy.CacheFirst(TimeSpan)"/> states the TTL on
+    /// the policy, which takes precedence over <see cref="DefaultCacheTtl"/>. The
+    /// default policy deliberately carries no TTL of its own, so that setting
+    /// <see cref="DefaultCacheTtl"/> alone is honoured.
+    /// </remarks>
+    public ISyncPolicy DefaultPolicy { get; set; } = SyncPolicy.CacheFirst();
 
     /// <summary>
     /// Provides network reachability information. Defaults to
@@ -42,11 +47,18 @@ public sealed class HyperwycOptions
         new AlwaysOnlineConnectivityService();
 
     /// <summary>
-    /// Determines whether a cached response is still fresh. Defaults to
-    /// <see cref="TtlStalenessEvaluator"/> using <see cref="DefaultCacheTtl"/>.
+    /// Determines whether a cached response is still fresh. Leave
+    /// <see langword="null"/> to use a <see cref="TtlStalenessEvaluator"/> built
+    /// from the effective TTL.
     /// </summary>
-    public IStalenessEvaluator StalenessEvaluator { get; set; } =
-        new TtlStalenessEvaluator(TimeSpan.FromMinutes(5));
+    /// <remarks>
+    /// This is <see langword="null"/> until registration precisely so that the
+    /// default can be constructed <em>after</em> the effective TTL is known.
+    /// Building it eagerly here would capture the TTL before
+    /// <see cref="DefaultPolicy"/> and <see cref="DefaultCacheTtl"/> had been
+    /// configured, which is the defect issue #29 records.
+    /// </remarks>
+    public IStalenessEvaluator? StalenessEvaluator { get; set; }
 
     // -------------------------------------------------------------------------
     // Cache settings
@@ -57,6 +69,11 @@ public sealed class HyperwycOptions
     /// <see cref="TtlStalenessEvaluator"/> marks it stale.
     /// Defaults to 5 minutes.
     /// </summary>
+    /// <remarks>
+    /// A TTL supplied to <see cref="SyncPolicy.CacheFirst(TimeSpan)"/> wins over
+    /// this value. After registration this property holds the effective TTL,
+    /// whichever source it came from.
+    /// </remarks>
     public TimeSpan DefaultCacheTtl { get; set; } = TimeSpan.FromMinutes(5);
 
     /// <summary>

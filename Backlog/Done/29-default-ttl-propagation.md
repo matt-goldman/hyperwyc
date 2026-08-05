@@ -38,10 +38,34 @@ the evaluator when the caller did not set one.
 
 ## Acceptance Criteria
 
-- [ ] `SyncPolicy.CacheFirst(TimeSpan.FromDays(1))` results in a 1-day effective TTL.
-- [ ] An explicitly assigned `options.StalenessEvaluator` is never overwritten.
-- [ ] Setting `options.DefaultCacheTtl` directly, with no preset policy, is honoured.
-- [ ] Unit test asserts the effective TTL through `AddHyperwyc` for: preset policy TTL, explicit `DefaultCacheTtl`, and custom evaluator.
+- [x] `SyncPolicy.CacheFirst(TimeSpan.FromDays(1))` results in a 1-day effective TTL.
+- [x] An explicitly assigned `options.StalenessEvaluator` is never overwritten.
+- [x] Setting `options.DefaultCacheTtl` directly, with no preset policy, is honoured.
+- [x] Unit test asserts the effective TTL through `AddHyperwyc` for: preset policy TTL, explicit `DefaultCacheTtl`, and custom evaluator.
+
+## Resolution
+
+A second defect surfaced while fixing this one: `DefaultPolicy` defaulted to
+`CacheFirst(1 day)` while `DefaultCacheTtl` defaulted to 5 minutes — two defaults for one
+concept, disagreeing. Because the propagation step overwrote `DefaultCacheTtl` whenever the
+policy carried a TTL, a caller who set `DefaultCacheTtl` and left the policy alone had their
+value silently replaced by the *default* policy's 1 day.
+
+Both defects share a root cause — TTL expressed in two places with no precedence rule — and are
+fixed together:
+
+- `SyncPolicy.CacheFirst()` (parameterless) added, carrying no TTL, and made the default policy.
+- Precedence is now unambiguous: a TTL on the policy wins; otherwise `DefaultCacheTtl` supplies
+  it. No explicit-assignment tracking is needed, because the default policy no longer competes.
+- `HyperwycOptions.StalenessEvaluator` is nullable and defaults to `null`. The default
+  `TtlStalenessEvaluator` is constructed inside `AddHyperwycCore`, after the effective TTL is
+  known.
+- Effective unconfigured behaviour is unchanged at 5 minutes — which is what the code already
+  did, the documented default now simply being true.
+
+Tests assert the TTL the resolved evaluator *applies*, not the value left on the options object,
+since the original defect was precisely a case where the property was right and the evaluator
+was wrong.
 
 ## Notes
 
