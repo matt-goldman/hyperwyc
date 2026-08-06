@@ -1,0 +1,16 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.4.6">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>16c93472-f9b2-4e8a-a642-9cc36d6666f1</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Hyperwyc.Sample.ApiService\Hyperwyc.Sample.ApiService.csproj" />
+    <ProjectReference Include="..\Hyperwyc.Sample.Web\Hyperwyc.Sample.Web.csproj" />
+  </ItemGroup>
+
+</Project>
