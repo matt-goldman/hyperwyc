@@ -47,6 +47,31 @@ public sealed class HyperwycOptions
         new AlwaysOnlineConnectivityService();
 
     /// <summary>
+    /// The transport used to replay queued writes from the outbox. Leave
+    /// <see langword="null"/> to use a default <see cref="HttpClientHandler"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Replayed requests do not travel through your application's
+    /// <see cref="HttpClient"/> pipeline — they are sent directly, bypassing
+    /// <see cref="HyperwycHandler"/> so that a replay is not queued again. That
+    /// means handler-level concerns you rely on for ordinary requests (certificate
+    /// pinning, proxies, timeouts, logging) do not reach replays unless you supply
+    /// a transport that includes them here.
+    /// </para>
+    /// <para>
+    /// Supplying a stub is also how you exercise a flush in tests without network
+    /// access.
+    /// </para>
+    /// <para>
+    /// <b>Ownership:</b> Hyperwyc never disposes this handler, whether you supplied
+    /// it or it defaulted. A handler you provide remains yours to dispose. The
+    /// default is created once and lives for the lifetime of the application.
+    /// </para>
+    /// </remarks>
+    public HttpMessageHandler? ReplayTransport { get; set; }
+
+    /// <summary>
     /// Determines whether a cached response is still fresh. Leave
     /// <see langword="null"/> to use a <see cref="TtlStalenessEvaluator"/> built
     /// from the effective TTL.

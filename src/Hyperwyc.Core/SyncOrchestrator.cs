@@ -24,7 +24,8 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     private readonly IConnectivityService _connectivity;
     private readonly SyncEventStream _events;
     private readonly HyperwycOptions _options;
-    private readonly HttpMessageInvoker _invoker;
+    private readonly HttpMessageInvoker _fallbackInvoker;
+    private readonly IHttpClientFactory? _httpClientFactory;
 
     private readonly SemaphoreSlim _flushGate = new(1, 1);
     private readonly IDisposable _connectivitySubscription;
@@ -47,8 +48,15 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     /// <param name="events">The event stream to publish lifecycle events on.</param>
     /// <param name="options">Runtime configuration options.</param>
     /// <param name="transport">
-    /// The inner <see cref="HttpMessageHandler"/> used to send outbox requests.
-    /// This should be a bare transport handler that bypasses <see cref="HyperwycHandler"/>.
+    /// The <see cref="HttpMessageHandler"/> used to send outbox requests. This must
+    /// bypass <see cref="HyperwycHandler"/>, or a replay would be queued again.
+    /// Never disposed by the orchestrator — see
+    /// <see cref="HyperwycOptions.ReplayTransport"/> for ownership.
+    /// </param>
+    /// <param name="httpClientFactory">
+    /// Used to replay an envelope through the named client it was queued on, so that
+    /// downstream handlers such as auth apply to replays. When absent, or when an
+    /// envelope carries no client name, <paramref name="transport"/> is used instead.
     /// </param>
     public SyncOrchestrator(
         ISyncStore store,
@@ -56,7 +64,8 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         IConnectivityService connectivity,
         SyncEventStream events,
         HyperwycOptions options,
-        HttpMessageHandler transport)
+        HttpMessageHandler transport,
+        IHttpClientFactory? httpClientFactory = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(policy);
@@ -70,7 +79,8 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         _connectivity = connectivity;
         _events = events;
         _options = options;
-        _invoker = new HttpMessageInvoker(transport, disposeHandler: false);
+        _fallbackInvoker = new HttpMessageInvoker(transport, disposeHandler: false);
+        _httpClientFactory = httpClientFactory;
 
         _connectivitySubscription = connectivity.ConnectivityChanged
             .Subscribe(new ConnectivityObserver(this));
@@ -134,7 +144,8 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
             finalResponse = await pipeline.ExecuteAsync(async token =>
             {
                 var request = BuildRequest(envelope);
-                return await _invoker.SendAsync(request, token).ConfigureAwait(false);
+                return await ResolveInvoker(envelope)
+                    .SendAsync(request, token).ConfigureAwait(false);
             }, ct).ConfigureAwait(false);
         }
         catch (HttpRequestException) { /* all retries exhausted on exception */ }
@@ -208,10 +219,33 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     // Helpers
     // -------------------------------------------------------------------------
 
+    /// <summary>
+    /// Returns the invoker a replay should be sent through: the originating named
+    /// client's full pipeline where one is known, otherwise the configured fallback
+    /// transport.
+    /// </summary>
+    /// <remarks>
+    /// Going back through the originating client is what lets downstream handlers —
+    /// auth, logging, telemetry — apply to replays exactly as they do to ordinary
+    /// requests. <see cref="HyperwycHandler"/> recognises the replay marker and steps
+    /// aside, so the request is not intercepted a second time.
+    /// </remarks>
+    private HttpMessageInvoker ResolveInvoker(Envelope envelope)
+    {
+        if (_httpClientFactory is not null && !string.IsNullOrEmpty(envelope.ClientName))
+            return _httpClientFactory.CreateClient(envelope.ClientName);
+
+        return _fallbackInvoker;
+    }
+
     private static HttpRequestMessage BuildRequest(Envelope envelope)
     {
         var method = new HttpMethod(envelope.Method);
         var request = new HttpRequestMessage(method, envelope.Url);
+
+        // Applied per attempt: BuildRequest constructs a fresh message each retry, so
+        // the marker cannot be assumed to carry over.
+        request.Options.Set(HyperwycHandler.ReplayMarker, true);
 
         foreach (var (key, value) in envelope.RequestHeaders)
         {

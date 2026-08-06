@@ -15,7 +15,7 @@ The MAUI app is the primary POC surface. It gives developers a concrete referenc
 | Create / update / delete notes | Mutating requests; online and offline paths |
 | Per-item sync state badge | `OnQueued`, `OnSynced`, `OnFailed` events |
 | Live sync event log panel | Full `SyncEvents` subscription |
-| "Sync Now" button | Manual flush trigger via `IHyperwyc` |
+| "Sync Now" button | `IHyperwyc.FlushAsync()` |
 | "Logout / Clear Cache" button | `IHyperwyc.ResetStoreAsync()` |
 | Offline simulation instructions | README note on using emulator network toggle |
 
@@ -24,7 +24,7 @@ The MAUI app is the primary POC surface. It gives developers a concrete referenc
 ```csharp
 // MauiProgram.cs
 builder.Services.AddHttpClient("NotesApi", c => c.BaseAddress = new Uri("http://localhost:5000"))
-    .AddHttpMessageHandler<HyperwycHandler>();
+    .AddHyperwycHandler();
 
 builder.Services.AddHyperwyc(options =>
 {
@@ -40,7 +40,7 @@ builder.Services.AddHyperwyc(options =>
 - [ ] `NoteListPage` showing all notes with sync-state badges.
 - [ ] Create/edit/delete notes flow fully functional.
 - [ ] Live event log panel subscribes to `IHyperwyc.SyncEvents` and appends entries.
-- [ ] "Sync Now" button calls the orchestrator flush manually.
+- [ ] "Sync Now" button calls `IHyperwyc.FlushAsync()`.
 - [ ] "Logout" button calls `IHyperwyc.ResetStoreAsync()` and clears the note list.
 - [ ] App runs offline: notes created while offline appear with "Queued" badge.
 - [ ] On reconnect, queued notes sync and badges update to "Synced".

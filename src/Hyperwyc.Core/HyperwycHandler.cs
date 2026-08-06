@@ -17,6 +17,20 @@ public sealed class HyperwycHandler : DelegatingHandler
 {
     private const string _idempotencyKeyHeader = "Idempotency-Key";
 
+    /// <summary>
+    /// Marks a request as a replay from the outbox, so this handler passes it
+    /// straight through instead of intercepting it again.
+    /// </summary>
+    /// <remarks>
+    /// Replays are sent through the application's own pipeline so that downstream
+    /// handlers — auth above all — apply to them exactly as they do to ordinary
+    /// requests. Only this handler steps aside. Inferring "this is a replay" from
+    /// connectivity is not sufficient: a replay reaching the normal online path
+    /// would publish a second <c>OnSynced</c> and re-run cache invalidation, work
+    /// the orchestrator has already taken responsibility for.
+    /// </remarks>
+    internal static readonly HttpRequestOptionsKey<bool> ReplayMarker = new("Hyperwyc.Replay");
+
     private static readonly HashSet<HttpMethod> _writeMethods =
     [
         HttpMethod.Post,
@@ -31,17 +45,32 @@ public sealed class HyperwycHandler : DelegatingHandler
     private readonly IStalenessEvaluator _stalenessEvaluator;
     private readonly SyncEventStream _events;
     private readonly HyperwycOptions _options;
+    private readonly string? _clientName;
 
     /// <summary>
     /// Initialises a new <see cref="HyperwycHandler"/>.
     /// </summary>
+    /// <param name="store">Persistence for queued writes and cached responses.</param>
+    /// <param name="connectivity">Reports whether the device is online.</param>
+    /// <param name="policy">Cache strategy and write-invalidation rules per request.</param>
+    /// <param name="stalenessEvaluator">Decides whether a cached response is still fresh.</param>
+    /// <param name="events">Stream on which sync lifecycle events are published.</param>
+    /// <param name="options">Runtime configuration options.</param>
+    /// <param name="clientName">
+    /// The name of the <see cref="HttpClient"/> this handler is registered on, stamped
+    /// onto queued envelopes so a replay can be sent back through the same pipeline.
+    /// <see langword="null"/> when the handler was registered without a name, in which
+    /// case replays fall back to <see cref="HyperwycOptions.ReplayTransport"/>. Use
+    /// <c>AddHyperwycHandler()</c> to have this captured automatically.
+    /// </param>
     public HyperwycHandler(
         ISyncStore store,
         IConnectivityService connectivity,
         ISyncPolicy policy,
         IStalenessEvaluator stalenessEvaluator,
         SyncEventStream events,
-        HyperwycOptions options)
+        HyperwycOptions options,
+        string? clientName = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(connectivity);
@@ -56,6 +85,7 @@ public sealed class HyperwycHandler : DelegatingHandler
         _stalenessEvaluator = stalenessEvaluator;
         _events = events;
         _options = options;
+        _clientName = clientName;
     }
 
     /// <inheritdoc/>
@@ -63,6 +93,10 @@ public sealed class HyperwycHandler : DelegatingHandler
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
+        // A replay from the outbox: step aside so the rest of the pipeline runs.
+        if (request.Options.TryGetValue(ReplayMarker, out var isReplay) && isReplay)
+            return base.SendAsync(request, cancellationToken);
+
         if (_connectivity.IsConnected)
             return HandleOnlineAsync(request, cancellationToken);
 
@@ -87,7 +121,7 @@ public sealed class HyperwycHandler : DelegatingHandler
             await request.Content.LoadIntoBufferAsync(ct).ConfigureAwait(false);
 
         EnsureIdempotencyKey(request);
-        var envelope = Envelope.ForRequest(request);
+        var envelope = Envelope.ForRequest(request, _clientName);
         await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
 
         _events.Publish(new SyncEvent(
@@ -223,7 +257,7 @@ public sealed class HyperwycHandler : DelegatingHandler
         if (bodyLength > _options.MaxCachedResponseBodyBytes)
             return;
 
-        var envelope = Envelope.ForCachedResponse(request, response);
+        var envelope = Envelope.ForCachedResponse(request, response, _clientName);
         await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
 
         _events.Publish(new SyncEvent(

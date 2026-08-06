@@ -9,6 +9,9 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
+    <!-- Replays are sent through the originating named client's pipeline, so the
+         orchestrator needs IHttpClientFactory. See issue #37. -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
     <PackageReference Include="Polly" Version="8.6.6" />
   </ItemGroup>
 </Project>

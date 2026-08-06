@@ -49,8 +49,10 @@ actually goes on the wire during a flush.
 ## Notes
 
 - Discovered while reconciling the docs against the code; not previously tracked.
-- **Open design question:** `SyncOrchestrator` sends replays through a bare
-  `HttpClientHandler` constructed in `AddHyperwyc`, which bypasses the app's auth handler
-  entirely. Dropping the persisted `Authorization` header therefore makes replayed
-  requests unauthenticated unless the orchestrator is given a transport that includes the
-  auth handler. Resolving that is part of this issue and may be the larger half of it.
+- **Resolved by issue #37.** This item's hardest question — how replayed requests acquire
+  credentials once the persisted `Authorization` header is dropped — is answered: replays now
+  traverse the originating client's pipeline, so the application's auth handler stamps a fresh
+  token at replay time. Excluding sensitive headers is therefore straightforwardly correct
+  rather than a change that breaks replay. Note that with the recommended ordering the header
+  was never captured in the first place, so the exclusion is mostly a defence against
+  consumers who register auth *before* Hyperwyc.

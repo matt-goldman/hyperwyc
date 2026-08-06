@@ -31,7 +31,7 @@ dotnet add package Hyperwyc
 
 ```csharp
 services.AddHttpClient("MyApi")
-    .AddHttpMessageHandler<HyperwycHandler>()
+    .AddHyperwycHandler()
     .AddHttpMessageHandler<AuthHandler>();
 
 services.AddHyperwyc();
@@ -146,27 +146,44 @@ A future per-route option will let Hyperwyc return a caller-supplied default bod
 
 ## Auth Handler Placement
 
-Hyperwyc does not manage authentication. When placing handlers, order matters:
-
-- **Expiring tokens** (e.g. OAuth/JWT): Place `HyperwycHandler` **before** your auth handler so that replayed requests pick up fresh tokens.
-- **Non-expiring tokens** (e.g. API keys): Order is flexible.
+Hyperwyc does not manage authentication — your own handler does. Register Hyperwyc's handler
+**first**, so everything after it also applies to replayed requests:
 
 ```csharp
-// Correct order for expiring auth:
-.AddHttpMessageHandler<HyperwycHandler>()   // queues and replays
-.AddHttpMessageHandler<AuthHandler>()     // adds fresh token at send time
+services.AddHttpClient("MyApi")
+    .AddHyperwycHandler()                     // queues and replays
+    .AddHttpMessageHandler<AuthHandler>();    // adds a fresh token at send time
 ```
+
+This works because **a replayed write goes back through the same pipeline it was made on.**
+Hyperwyc steps aside for replays — it doesn't re-queue them — but every handler after it runs
+normally. So a write queued on Monday and replayed on Tuesday is authenticated with Tuesday's
+token, not the one that was current when it was queued.
+
+The same applies to anything else you put in the pipeline: logging, correlation IDs, telemetry,
+custom retry. Register it after `AddHyperwycHandler()` and replays get it too.
+
+> **Use `AddHyperwycHandler()`, not `AddHttpMessageHandler<HyperwycHandler>()`.** The former
+> captures the client's name, which is how Hyperwyc knows which pipeline to replay a queued
+> write through. The plain form still works, but replays fall back to a bare transport with
+> none of your handlers in it.
+
+### Replays and `ReplayTransport`
+
+For the fallback case — a handler registered without a client name — `options.ReplayTransport`
+sets the transport replays use. It's also useful for exercising a flush in tests without network
+access, by supplying a stub. Hyperwyc never disposes it; one you provide stays yours to dispose.
 
 > **Note — Hyperwyc short-circuits the pipeline when offline.** Synthetic responses (`Queued`, `Offline`) are returned directly from the handler, so any `DelegatingHandler` placed *after* `HyperwycHandler` is **not** invoked on the offline path. This is by design — there is no outbound request to authenticate or otherwise mutate — but it means downstream handlers should not be relied upon for side effects that need to occur on every logical request (logging, telemetry, header stamping). For cross-cutting concerns that must run regardless of connectivity, place the handler **before** `HyperwycHandler` in the pipeline.
 
 ---
 
-## Lifecycle Events
+## Sync Events
 
-Subscribe to `IObservable<SyncEvent>` to observe state changes:
+Subscribe to `IObservable<SyncEvent>` to observe requests moving through the sync lifecycle:
 
 ```csharp
-Hyperwyc.SyncEvents.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
+hyperwyc.SyncEvents.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
 ```
 
 | Event | Meaning |
@@ -177,17 +194,45 @@ Hyperwyc.SyncEvents.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
 | `OnFailed` | Request moved to dead-letter after max retries |
 | `OnUpdated` | Cached response refreshed |
 
-## Manual Sync
+These are Hyperwyc's own events, not your app's lifecycle — see below for how the two relate.
 
-Hyperwyc flushes queued writes on its own — at startup, and when connectivity is restored.
-Shutting down is deliberately not a trigger: writes are queued because connectivity was poor,
-and closing the app does not change that. Anything still queued replays on next launch.
+---
 
-For a user-facing "sync now" control, flush explicitly:
+## When Hyperwyc Syncs
+
+Queued writes are flushed on exactly two triggers:
+
+| Trigger | When |
+|---|---|
+| Application start | `FlushOnStartup` (default `true`), if the device is online |
+| Connectivity restored | While the app is running, debounced by 2 seconds |
+
+Plus an explicit call, for a user-facing "sync now" control:
 
 ```csharp
 await hyperwyc.FlushAsync();   // IHyperwyc, resolved from DI
 ```
+
+### You don't need to hook app lifecycle events
+
+**Shutting down or backgrounding the app is deliberately not a sync trigger**, and you should
+not add one. Writes are only ever queued because connectivity was poor — and closing the app
+doesn't improve connectivity, so a flush at that moment would fail for the same reason the work
+was queued in the first place.
+
+Anything still queued is replayed at next launch. Nothing is lost, so there is nothing to
+rescue on the way out.
+
+This matters most on mobile, where it wouldn't work anyway: Android and iOS terminate suspended
+processes without running disposal, finalizers, or any cleanup you might have registered.
+Durability comes from the outbox being persistent, not from tidying up at exit.
+
+### Interrupted syncs
+
+If a flush is cut short — the app is backgrounded mid-replay, or the process is killed — the
+envelopes it hadn't delivered stay queued and go out on the next trigger. They are not marked
+as failed, and they are not dead-lettered. Only a request the server actually rejected, after
+its retry budget is exhausted, ends up in the dead-letter queue.
 
 ---
 

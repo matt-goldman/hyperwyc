@@ -138,9 +138,6 @@ public sealed class ServiceCollectionExtensionsTests
     // IHyperwyc is the whole consumer-facing surface
     // -------------------------------------------------------------------------
 
-    // Built directly rather than through the container: AddHyperwycCore hardcodes a
-    // real HttpClientHandler for the orchestrator's transport, so a flush resolved
-    // from DI would hit the network. See issue #35.
     [Fact]
     public async Task IHyperwyc_FlushAsync_DrainsTheOutbox()
     {
@@ -149,22 +146,32 @@ public sealed class ServiceCollectionExtensionsTests
 
         var transport = new StubHttpMessageHandler(
             new HttpResponseMessage(System.Net.HttpStatusCode.OK));
-        var events = new SyncEventStream();
-        await using var orchestrator = new SyncOrchestrator(
-            store,
-            new FakeSyncPolicy(),
-            new FakeConnectivityService(isConnected: true),
-            events,
-            new HyperwycOptions(),
-            transport);
+
+        var services = new ServiceCollection();
+        services.AddHyperwycCore(_ => store, o => o.ReplayTransport = transport);
+        using var sp = services.BuildServiceProvider();
 
         // Reaching a flush must not require the concrete orchestrator, which is internal.
-        IHyperwyc hyperwyc = new HyperwycService(events, store, orchestrator);
-
-        await hyperwyc.FlushAsync();
+        await sp.GetRequiredService<IHyperwyc>().FlushAsync();
 
         Assert.Equal(1, transport.CallCount);
         Assert.Empty(await store.GetPendingOutboxAsync());
+    }
+
+    [Fact]
+    public async Task ReplayTransport_IsNotDisposedByHyperwyc()
+    {
+        var transport = new DisposalTrackingHandler();
+
+        var services = new ServiceCollection();
+        services.AddHyperwycCore<InMemorySyncStore>(o => o.ReplayTransport = transport);
+        var sp = services.BuildServiceProvider();
+        sp.GetRequiredService<IHyperwyc>();
+
+        await sp.DisposeAsync();
+
+        // The caller supplied it, so the caller still owns it.
+        Assert.False(transport.WasDisposed);
     }
 
     [Fact]
@@ -346,6 +353,22 @@ public sealed class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddHyperwycCore<InMemorySyncStore>(configure);
         return services.BuildServiceProvider();
+    }
+
+    /// <summary>Records whether anything disposed it.</summary>
+    private sealed class DisposalTrackingHandler : HttpMessageHandler
+    {
+        public bool WasDisposed { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK));
+
+        protected override void Dispose(bool disposing)
+        {
+            WasDisposed = true;
+            base.Dispose(disposing);
+        }
     }
 
     /// <summary>A dependency the container must inject to build the store below.</summary>

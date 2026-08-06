@@ -124,13 +124,17 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<ISyncStore>(),
             sp.GetRequiredService<SyncOrchestrator>()));
 
+        // Replays go back through the named client they were queued on, so downstream
+        // handlers (auth above all) apply to them. ReplayTransport is the fallback for
+        // envelopes with no client name — see issue #37.
         services.TryAddSingleton<SyncOrchestrator>(sp => new SyncOrchestrator(
             sp.GetRequiredService<ISyncStore>(),
             sp.GetRequiredService<ISyncPolicy>(),
             sp.GetRequiredService<IConnectivityService>(),
             sp.GetRequiredService<SyncEventStream>(),
             sp.GetRequiredService<HyperwycOptions>(),
-            new HttpClientHandler()));
+            options.ReplayTransport ?? new HttpClientHandler(),
+            sp.GetService<IHttpClientFactory>()));
 
         // HyperwycHandler is transient — each named HTTP client pipeline gets its own instance.
         services.TryAddTransient<HyperwycHandler>();

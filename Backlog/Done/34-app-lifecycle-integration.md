@@ -51,13 +51,31 @@ Documentation only. No code change, and no new API.
 
 ## Acceptance Criteria
 
-- [ ] README documents the two flush triggers and states that shutdown and backgrounding are
+- [x] README documents the two flush triggers and states that shutdown and backgrounding are
       deliberately not triggers, with the one-line reason.
-- [ ] The README section currently titled "Lifecycle Events" is renamed (e.g. "Sync Events").
+- [x] The README section currently titled "Lifecycle Events" is renamed (e.g. "Sync Events").
       It documents the `IObservable<SyncEvent>` stream, and a reader looking for
       application-lifecycle guidance currently lands there and is misled.
-- [ ] README notes that a manual flush is available for a "sync now" affordance.
-- [ ] TECHNICAL_PLAN §3 states the trigger model explicitly rather than leaving it implied.
+- [x] README notes that a manual flush is available for a "sync now" affordance.
+- [x] TECHNICAL_PLAN §3 states the trigger model explicitly rather than leaving it implied.
+
+## Resolution
+
+README gained a **"When Hyperwyc Syncs"** section stating the two triggers and, under a
+subheading a reader will actually find, *"You don't need to hook app lifecycle events"* — with
+the reason, because the conclusion is unintuitive without it. It also covers what happens to an
+interrupted sync: envelopes stay queued, are not marked failed, and are not dead-lettered. Only
+a request the server actually rejected after exhausting its retries reaches the dead-letter
+queue.
+
+"Lifecycle Events" is now "Sync Events", with a line pointing at the new section so the two
+meanings of "lifecycle" cannot be confused.
+
+TECHNICAL_PLAN's trigger model was already written during issue #33; it now names
+`IHyperwyc.FlushAsync` rather than the internal orchestrator.
+
+The net deliverable is a documented *absence* of work for consumers: nothing to wire up, and an
+explicit warning against wiring something up anyway.
 
 ## Notes
 

@@ -26,6 +26,14 @@ public sealed class Envelope
     public string Method { get; init; }
 
     /// <summary>
+    /// The name of the <see cref="HttpClient"/> this request was made on, used to
+    /// replay it through the same pipeline — and therefore the same auth, logging and
+    /// telemetry handlers. <see langword="null"/> when the handler was registered
+    /// without a name.
+    /// </summary>
+    public string? ClientName { get; init; }
+
+    /// <summary>
     /// The request headers to be forwarded with the request.
     /// </summary>
     public Dictionary<string, string> RequestHeaders { get; init; }
@@ -90,7 +98,11 @@ public sealed class Envelope
     /// </summary>
     /// <param name="request">The HTTP request to wrap.</param>
     /// <returns>A new <see cref="Envelope"/> representing the pending request.</returns>
-    public static Envelope ForRequest(HttpRequestMessage request)
+    /// <param name="clientName">
+    /// The named client the request was made on, so a replay can return through the
+    /// same pipeline.
+    /// </param>
+    public static Envelope ForRequest(HttpRequestMessage request, string? clientName = null)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -114,6 +126,7 @@ public sealed class Envelope
             Id = idempotencyKey ?? Guid.NewGuid().ToString(),
             Url = request.RequestUri?.ToString() ?? string.Empty,
             Method = request.Method.Method,
+            ClientName = clientName,
             RequestHeaders = headers,
             RequestBody = body,
         };
@@ -127,16 +140,20 @@ public sealed class Envelope
     /// </summary>
     /// <param name="request">The original HTTP request.</param>
     /// <param name="response">The HTTP response to cache.</param>
+    /// <param name="clientName">The named client the request was made on.</param>
     /// <returns>
     /// A new <see cref="Envelope"/> with <see cref="Response"/> populated and
     /// <see cref="IsSynced"/> set to <c>true</c>.
     /// </returns>
-    public static Envelope ForCachedResponse(HttpRequestMessage request, HttpResponseMessage response)
+    public static Envelope ForCachedResponse(
+        HttpRequestMessage request,
+        HttpResponseMessage response,
+        string? clientName = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(response);
 
-        var envelope = ForRequest(request);
+        var envelope = ForRequest(request, clientName);
 
         var responseHeaders = FlattenHeaders(response.Headers);
 

@@ -85,14 +85,20 @@ no store is built (and no directory touched) unless something resolves it.
 
 - **Entry point:** `HyperwycHandler : DelegatingHandler`, registered transient so each named
   client pipeline gets its own instance.
-- **Usage:** Added to the `HttpClient` pipeline via `IHttpClientFactory`.
-- **Processing order:**
-  - Place `HyperwycHandler` **before** authentication handlers for expiring tokens, so
-    replayed requests pick up fresh tokens.
-  - For non-expiring auth (e.g. API keys), order is flexible.
-  - Handlers placed *after* `HyperwycHandler` are not invoked on the offline path, because
-    synthetic responses short-circuit the pipeline. Cross-cutting concerns that must run on
-    every logical request belong before it.
+- **Usage:** Added via `AddHyperwycHandler()` on `IHttpClientBuilder`, which captures the
+  client's name from `IHttpClientBuilder.Name`. That name is stamped on queued envelopes and is
+  how a replay finds its way back to the right pipeline. `AddHttpMessageHandler<HyperwycHandler>()`
+  still works but yields no client name, so replays fall back to `ReplayTransport`.
+- **Processing order:** register `HyperwycHandler` **first**. Handlers added after it run on
+  ordinary requests *and* on replays, which is what allows a replayed write to be authenticated
+  with a token minted at replay time rather than at queue time.
+- **Two exceptions to "handlers after it always run":**
+  - On the **offline path**, synthetic responses short-circuit the pipeline, so nothing
+    downstream is invoked — there is no outbound request to authenticate or stamp.
+  - Because the handler queues a request *before* downstream handlers have run, a queued
+    envelope reflects the request as Hyperwyc saw it. It will not contain an `Authorization`
+    header added further down. This is why replays must traverse the pipeline rather than being
+    replayed verbatim.
 
 ### 2. Request Handling Logic
 
@@ -162,8 +168,12 @@ manual triggering (e.g. a "sync now" button).
   immediately rather than queueing.
 - `HyperwycHostedService` triggers a flush at startup when `FlushOnStartup` is set and the
   device is online.
-- Envelopes are replayed in stored order via a bare transport handler, bypassing
-  `HyperwycHandler` so replays are not re-queued.
+- Envelopes are replayed in stored order via `HyperwycOptions.ReplayTransport`, bypassing
+  `HyperwycHandler` so replays are not re-queued. That bypass means handler-level concerns the
+  application applies to ordinary requests — certificate pinning, proxies, timeouts, logging —
+  do not reach replays unless that transport supplies them. It defaults to a plain
+  `HttpClientHandler`, and is never disposed by Hyperwyc: a caller-supplied handler stays the
+  caller's to dispose, and the default lives for the application's lifetime.
 - On successful delivery: marks `IsSynced = true`, publishes `OnSynced`, and applies
   write-triggered invalidation.
 - On failure:
@@ -183,7 +193,7 @@ manual triggering (e.g. a "sync now" button).
 #### What triggers a flush
 
 Only two things: application startup, when `FlushOnStartup` is set and the device is online;
-and connectivity being restored while the app runs. Plus `FlushAsync` itself, for a manual
+and connectivity being restored while the app runs. Plus `IHyperwyc.FlushAsync`, for a manual
 "sync now" affordance.
 
 **Shutdown is deliberately not a trigger**, on any platform. Envelopes reach the outbox only
@@ -324,7 +334,7 @@ prefer event-style consumption get it with a one-line `.Subscribe(...)`.
 
 ```csharp
 services.AddHttpClient("MyApi")
-    .AddHttpMessageHandler<HyperwycHandler>()
+    .AddHyperwycHandler()
     .AddHttpMessageHandler<AuthHandler>();
 
 services.AddHyperwyc();
@@ -343,6 +353,7 @@ Unset options fall back to `AlwaysOnlineConnectivityService`, `TtlStalenessEvalu
 | `DefaultCacheTtl` | 5 minutes |
 | `OfflineResponsePolicy` | `Transparent` |
 | `MaxCachedResponseBodyBytes` | 524,288 (512 KB) |
+| `ReplayTransport` | `null` — a plain `HttpClientHandler` is used |
 | `ConnectivityDebounceDelay` | 2 seconds |
 | `FlushOnStartup` | `true` |
 | `DefaultRetryOptions` | 5 retries, 2s initial delay, ×2 backoff |

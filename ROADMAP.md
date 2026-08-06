@@ -30,12 +30,13 @@ to its backlog item where one exists.
 - [x] Configurable policies applied — cache-first, API-first, cache-only and network-only ([27](Backlog/Done/27-cache-strategy-not-applied.md))
 - [x] Orchestrator disposal, synchronous and asynchronous, cancelling in-flight work ([33](Backlog/Done/33-orchestrator-sync-disposal.md))
 - [x] `IHyperwyc.FlushAsync()` for manual sync; `SyncOrchestrator` internal ([36](Backlog/Done/36-public-surface.md))
+- [x] Injectable replay transport ([35](Backlog/Done/35-orchestrator-transport-not-injectable.md))
+- [x] Replays sent through the originating client's pipeline, so auth applies to them ([37](Backlog/Done/37-replay-through-pipeline.md))
+- [x] Flush trigger model documented — no app lifecycle wiring required ([34](Backlog/Done/34-app-lifecycle-integration.md))
 - [x] Package structure: `Hyperwyc` (batteries included) over `Hyperwyc.Core` ([31](Backlog/Done/31-package-structure.md)) — `AddHyperwyc()` with no configuration gives a durable, encrypted store
 
 **Remaining**
 
-- [ ] Injectable replay transport ([35](Backlog/35-orchestrator-transport-not-injectable.md)) — consumers cannot currently test a flush without real network access
-- [ ] Document the flush trigger model ([34](Backlog/34-app-lifecycle-integration.md)) — app start and connectivity restoration only; shutdown and backgrounding are deliberately not triggers
 - [ ] `StaticConnectivityService` in core, MAUI connectivity as documented reference code ([13](Backlog/13-connectivity-reference-implementation.md)) — only `AlwaysOnlineConnectivityService` ships today
 - [ ] `IHyperwyc.ResetStoreAsync()` — flush coordination and test coverage ([16](Backlog/16-reset-store-async.md)); the method itself exists
 - [ ] Sample ASP.NET Core Web API ([18](Backlog/18-poc-web-api.md)) and .NET MAUI app ([19](Backlog/19-poc-maui-app.md)) — see [POC.md](POC.md)
@@ -47,7 +48,7 @@ to its backlog item where one exists.
 > **Goal:** Correctness, developer ergonomics, and operational visibility
 
 - [ ] Binary request and response bodies ([25](Backlog/25-binary-request-response-bodies.md)) — lifts the current text-only limitation; breaking change to the persisted shape, so it lands first
-- [ ] Sensitive-header exclusion from persisted envelopes ([30](Backlog/30-sensitive-header-exclusion.md))
+- [ ] Sensitive-header exclusion from persisted envelopes ([30](Backlog/30-sensitive-header-exclusion.md)) — its credentials question was answered by [37](Backlog/Done/37-replay-through-pipeline.md)
 - [ ] MAUI `SecureStorage` reference implementation for the store encryption key ([32](Backlog/32-default-encryption-key.md)) — the path-derived key stays as the free default, and is now documented as such
 - [ ] Persisted retry state so the retry budget survives a restart or suspension ([28](Backlog/28-persisted-retry-state.md)) — a flush cut off by backgrounding currently discards its budget
 - [ ] Fine-grained per-route policies — TTL, cache strategy, offline response policy, empty-offline body ([22](Backlog/22-v1-per-route-policies.md))

@@ -65,15 +65,36 @@ container.
 
 ## Acceptance Criteria
 
-- [ ] The orchestrator's transport can be supplied through `HyperwycOptions`.
-- [ ] The default is unchanged for callers who supply nothing.
-- [ ] A consumer can flush against a stub transport with no network access, and this is
+- [x] The orchestrator's transport can be supplied through `HyperwycOptions`.
+- [x] The default is unchanged for callers who supply nothing.
+- [x] A consumer can flush against a stub transport with no network access, and this is
       documented.
-- [ ] Ownership and disposal of a caller-supplied transport is defined and documented.
-- [ ] Unit test: a supplied transport receives replayed requests.
-- [ ] Unit test: a supplied transport is not disposed by Hyperwyc.
-- [ ] `ServiceCollectionExtensionsTests.IHyperwyc_FlushAsync_DrainsTheOutbox` reverted to
+- [x] Ownership and disposal of a caller-supplied transport is defined and documented.
+- [x] Unit test: a supplied transport receives replayed requests.
+- [x] Unit test: a supplied transport is not disposed by Hyperwyc.
+- [x] `ServiceCollectionExtensionsTests.IHyperwyc_FlushAsync_DrainsTheOutbox` reverted to
       resolving `IHyperwyc` from the container, and its explanatory comment removed.
+
+## Resolution
+
+`HyperwycOptions.ReplayTransport` — an `HttpMessageHandler?` defaulting to `null`, in which
+case a plain `HttpClientHandler` is used exactly as before.
+
+**Chosen over the factory and `IHttpClientFactory` forms.** An instance is consistent with the
+other pluggables on this type (`Connectivity`, `StalenessEvaluator`), and the
+`IHttpClientFactory` form would have added a `Microsoft.Extensions.Http` dependency to a core
+package that currently has three — too much to pay before a consumer has asked for it. The
+option can be widened later without breaking anyone.
+
+**Ownership resolved as: Hyperwyc never disposes the transport**, supplied or defaulted. This is
+what the code already did — `SyncOrchestrator` constructs its `HttpMessageInvoker` with
+`disposeHandler: false` — so the resolution documents an existing decision rather than changing
+behaviour. Tracking ownership so the default could be disposed was considered and rejected: it
+would have required disposing under a possibly-unwinding flush, which is exactly the hazard
+issue #33 removed, in exchange for reclaiming a socket pool microseconds before process exit.
+
+The undisposed default remains a real if minor untidiness. A consumer who cares now has the
+means to take control of it, which is the meaningful improvement.
 
 ## Notes
 
