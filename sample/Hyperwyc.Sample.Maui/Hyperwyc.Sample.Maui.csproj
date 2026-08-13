@@ -63,4 +63,8 @@
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="11.0.0-preview.4.*" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <ProjectReference Include="..\Hyperwyc.Sample.MauiServiceDefaults\Hyperwyc.Sample.MauiServiceDefaults.csproj" />
+	</ItemGroup>
+
 </Project>

@@ -10,7 +10,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Hyperwyc.Sample.ApiService\Hyperwyc.Sample.ApiService.csproj" />
-    <ProjectReference Include="..\Hyperwyc.Sample.Web\Hyperwyc.Sample.Web.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.Maui" Version="13.4.6-preview.1.26319.6" />
   </ItemGroup>
 
 </Project>

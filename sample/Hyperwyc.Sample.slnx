@@ -3,5 +3,4 @@
   <Project Path="Hyperwyc.Sample.AppHost/Hyperwyc.Sample.AppHost.csproj" />
   <Project Path="Hyperwyc.Sample.Maui/Hyperwyc.Sample.Maui.csproj" />
   <Project Path="Hyperwyc.Sample.ServiceDefaults/Hyperwyc.Sample.ServiceDefaults.csproj" />
-  <Project Path="Hyperwyc.Sample.Web/Hyperwyc.Sample.Web.csproj" />
 </Solution>

@@ -15,6 +15,13 @@ public static class MauiProgram
 				fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
 			});
 
+		builder.AddServiceDefaults();
+
+        builder.Services.AddHttpClient<WeatherApiClient>(client =>
+        {
+            client.BaseAddress = new Uri("https+http://apiservice");
+        });
+
 #if DEBUG
 		builder.Logging.AddDebug();
 #endif
