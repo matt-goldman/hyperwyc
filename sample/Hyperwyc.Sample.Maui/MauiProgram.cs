@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 
 namespace Hyperwyc.Sample.Maui;
 
@@ -17,9 +18,9 @@ public static class MauiProgram
 
 		builder.AddServiceDefaults();
 
-        builder.Services.AddHttpClient<WeatherApiClient>(client =>
+        builder.Services.AddHttpClient<WeatherApiClient>(client => // need to create a client
         {
-            client.BaseAddress = new Uri("https+http://apiservice");
+            client.BaseAddress = new Uri("https+http://apiservice"); // should probably be the tunnel name
         });
 
 #if DEBUG

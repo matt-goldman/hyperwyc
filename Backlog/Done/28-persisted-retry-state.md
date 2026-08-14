@@ -1,5 +1,12 @@
 # Issue 28 — Retry State Is Never Persisted
 
+> **Closed by [issue 38](38-retry-classification.md), which implemented it.** That item reframes retry as
+> connectivity-driven rather than time-driven, which *requires* persisting `RetryCount` and
+> `NextRetryUtc` — so this item's central question ("persist them, or delete them as dead
+> surface?") was answered by implementing them: `RetryCount` and `NextRetryUtc` are now written on
+> every deferred attempt and read back by `GetReadyToSendAsync`. Kept for the failure analysis
+> below, which motivated the change.
+
 ## Summary
 
 `Envelope.RetryCount`, `Envelope.NextRetryUtc` and `ISyncStore.GetDueForRetryAsync` are

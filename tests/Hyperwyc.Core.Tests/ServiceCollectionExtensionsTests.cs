@@ -391,8 +391,8 @@ public sealed class ServiceCollectionExtensionsTests
         public Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default) =>
             _inner.GetPendingOutboxAsync(ct);
 
-        public Task<IReadOnlyList<Envelope>> GetDueForRetryAsync(DateTimeOffset now, CancellationToken ct = default) =>
-            _inner.GetDueForRetryAsync(now, ct);
+        public Task<IReadOnlyList<Envelope>> GetReadyToSendAsync(DateTimeOffset now, CancellationToken ct = default) =>
+            _inner.GetReadyToSendAsync(now, ct);
 
         public Task UpsertAsync(Envelope envelope, CancellationToken ct = default) =>
             _inner.UpsertAsync(envelope, ct);

@@ -42,6 +42,7 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | 14 | [`CabinetSyncStore`](Done/14-cabinet-sync-store.md) | ✅ Done | P0 | Cabinet 1.0.7, AES-256-GCM at rest |
 | 15 | [`AddHyperwyc()` DI extension](Done/15-di-extension-and-options.md) | ✅ Done | P0 | |
 | 17 | [Max cached body size](Done/17-max-cached-body-size.md) | ✅ Done | P0 | Enforced in `HandleOnlineReadAsync`; covered by `ResponseCacheReadTests` |
+| 38 | [Retry model: connectivity-driven](Done/38-retry-classification.md) | ✅ Done | P0 | One attempt per flush; `4xx` dead-letters at once, `5xx` defers with persisted `RetryCount`/`NextRetryUtc`, a transport failure ends the flush. Made the three orphaned store members live and dropped the `Polly` dependency |
 | 34 | [Flush trigger model](Done/34-app-lifecycle-integration.md) | ✅ Done | P0 | Documented as a deliberate absence: no lifecycle wiring, and an explicit warning against adding any |
 | 35 | [Injectable replay transport](Done/35-orchestrator-transport-not-injectable.md) | ✅ Done | P0 | `HyperwycOptions.ReplayTransport`. Never disposed by Hyperwyc; also unblocks 30's auth question |
 | 37 | [Replays go through the pipeline](Done/37-replay-through-pipeline.md) | ✅ Done | P0 | `HyperwycHandler` steps aside for replays instead of them bypassing the pipeline. Fixes offline writes against authenticated APIs; registration is now `AddHyperwycHandler()` |
@@ -50,22 +51,22 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | 27 | [`CacheStrategy` never applied](Done/27-cache-strategy-not-applied.md) | ✅ Done | P0 | All four presets now honoured on both read paths. Added `X-Hyperwyc-Status: CacheMiss` for a `CacheOnly` read with an empty cache |
 | 29 | [Policy TTL not reaching the evaluator](Done/29-default-ttl-propagation.md) | ✅ Done | P0 | Also fixed a second defect found alongside it: the default policy's TTL silently overwrote an explicitly set `DefaultCacheTtl` |
 | 31 | [Package structure](Done/31-package-structure.md) | ✅ Done | P0 | `Hyperwyc` (batteries, Cabinet default) over `Hyperwyc.Core`. Store is a type parameter on `AddHyperwycCore<TStore>()`; `HyperwycOptions.Store` removed |
+| 18 | [Sample — product/sales API](Done/18-poc-web-api.md) | ✅ Done | P0 | Random catalogue, stock-decrementing sales, `Idempotency-Key` dedup and 400/404/409 failure paths, all verified against a running server |
 | **13** | [Connectivity reference implementation](13-connectivity-reference-implementation.md) | ⬜ Open | **P0** | Scope revised: `StaticConnectivityService` ships in core; MAUI stays reference code. `MauiConnectivityService` in core is rejected — it would force platform TFMs and a MAUI workload dependency. Blocks 19 |
 | **16** | [`ResetStoreAsync()`](16-reset-store-async.md) | 🟡 Partial | P0 | Method exists and delegates to `ISyncStore.ResetAsync`. Missing: flush-semaphore coordination (a reset during an in-flight flush is unguarded) and any unit tests |
-| **18** | [POC — ASP.NET Core Web API](18-poc-web-api.md) | ⬜ Open | P0 | No `Hyperwyc.Sample` solution folder exists yet |
-| **19** | [POC — .NET MAUI sample app](19-poc-maui-app.md) | ⬜ Open | P0 | Depends on 13 and 18 |
+| **19** | [Sample — .NET MAUI app](19-poc-maui-app.md) | ⬜ Open | P0 | Aspire AppHost, MAUI project and `Shared` scaffolded; API done ([18](Done/18-poc-web-api.md)). Depends on 13 |
 
 ## v1.0
 
-Suggested order: 25 first (breaking store change, best done before there are real users),
-then 30, then the ergonomics items.
+Suggested order: 25 first (breaking store change, best done before there are real users), then
+30, then the ergonomics items.
 
 | # | Item | Status | Priority | Notes |
 |---|---|---|---|---|
 | 25 | [Binary request/response bodies](25-binary-request-response-bodies.md) | ⬜ Open | **P1 (with 37)** | Correctness gap, not ergonomics: bodies round-trip through `ReadAsStringAsync`. The item records the decision that no migration is required pre-1.0. Batch with 37 — both change the persisted envelope shape |
 | 30 | [Sensitive headers are persisted](30-sensitive-header-exclusion.md) | ⬜ Open | P1 | `Authorization` and `Cookie` are stored verbatim and replayed. Its hard half — how replays acquire credentials — was answered by 37, so this is now just the deny-list |
 | 32 | [Default encryption key](32-default-encryption-key.md) | 🟡 Partial | P1 (small) | **Decided:** keep the path-derived key as the free default. README and TECHNICAL_PLAN §9 now state plainly what it does and does not protect. Remaining: the MAUI `SecureStorage` reference implementation, which needs the POC |
-| 28 | [Retry state is never persisted](28-persisted-retry-state.md) | ⬜ Open | **P1 (raised)** | `RetryCount` / `NextRetryUtc` / `GetDueForRetryAsync` are built and tested but unused. Decide: persist them, or delete them as dead surface. Priority raised while reasoning through 33/34 — a connectivity-triggered flush cut off by backgrounding discards its budget, so a persistently failing envelope restarts forever instead of converging on dead-letter |
+| 28 | [Retry state is never persisted](Done/28-persisted-retry-state.md) | ✅ Done | P1 | Closed by 38, which persists `RetryCount` and `NextRetryUtc` as the core of its model | `RetryCount` / `NextRetryUtc` / `GetDueForRetryAsync` are built and tested but unused. Decide: persist them, or delete them as dead surface. 
 | 22 | [Per-route policies](22-v1-per-route-policies.md) | ⬜ Open | P1 | Largest v1.0 item. Delivers the per-route escape hatches the README already promises. Reuses the strategy resolution added by 27 |
 | 21 | [`Date` header rewriting](21-v1-date-header-rewriting.md) | ⬜ Open | P1 | Plus the `X-Hyperwyc-Cached-At` header |
 | 23 | [Diagnostics view](23-v1-diagnostics-view.md) | ⬜ Open | P1 | Read-only outbox/dead-letter queries on `IHyperwyc` + a sample page. Reports `RetryCount`, so reads better after 28 |
@@ -106,6 +107,9 @@ request grouping / bulk sync, and GraphQL support.
   scope (ship `MauiConnectivityService` in core) is recorded in the item as superseded.
 - **Item 33 was found while implementing 31.** New registration tests disposed a service
   provider that earlier tests never did, which exposed a latent crash on shutdown.
+- **Item 38's follow-up scheduling bug was caught by its own test**, not by review: a timer
+  firing marginally early stranded a deferred envelope. Timing-dependent code earns a repeated
+  run before it is called done.
 - **Item 35 was found by a test that took 29 seconds** instead of half a second: resolving
   `IHyperwyc` from the container and flushing made a real network call, then passed for the
   wrong reason because dead-lettering also empties the outbox.

@@ -59,12 +59,13 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
-		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="11.0.0-preview.4.*" />
+		<PackageReference Include="Microsoft.Maui.Controls" Version="11.0.0-preview.7.26406.9" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="11.0.0-preview.7.26381.103" />
 	</ItemGroup>
 
 	<ItemGroup>
 	  <ProjectReference Include="..\Hyperwyc.Sample.MauiServiceDefaults\Hyperwyc.Sample.MauiServiceDefaults.csproj" />
+	  <ProjectReference Include="..\Shared\Shared.csproj" />
 	</ItemGroup>
 
 </Project>

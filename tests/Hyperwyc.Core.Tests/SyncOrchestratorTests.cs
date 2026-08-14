@@ -255,8 +255,11 @@ public class SyncOrchestratorTests
         Assert.Equal(SyncEventType.OnFailed, received[0].Type);
     }
 
+    // A transient failure is not retried inside the flush; the envelope is deferred and
+    // a follow-up pass picks it up. This covers that whole path, which is what replaced
+    // the in-flush backoff loop.
     [Fact]
-    public async Task FlushAsync_SucceedsOnRetry_PublishesOnRetryingThenOnSynced()
+    public async Task TransientFailure_IsRetriedByAFollowUpFlush()
     {
         var store = new InMemorySyncStore();
         await store.UpsertAsync(MakeOutboxEnvelope());
@@ -274,14 +277,35 @@ public class SyncOrchestratorTests
         });
         var policy = new FakeSyncPolicy(retryOptions: new RetryOptions(
             MaxRetries: 3,
-            InitialDelay: TimeSpan.Zero,
+            InitialDelay: TimeSpan.FromMilliseconds(50),
             BackoffMultiplier: 1.0));
         await using var orchestrator = BuildOrchestrator(store, transport, events: events, policy: policy);
 
         await orchestrator.FlushAsync();
 
+        // The first attempt failed transiently, so nothing is delivered yet and the
+        // envelope is still queued rather than dead-lettered.
+        Assert.Equal(1, callCount);
+        Assert.DoesNotContain(received, e => e.Type == SyncEventType.OnSynced);
+        Assert.Single(await store.GetPendingOutboxAsync());
+
+        await WaitUntilAsync(() => received.Any(e => e.Type == SyncEventType.OnSynced));
+
         Assert.Contains(received, e => e.Type == SyncEventType.OnRetrying);
-        Assert.Contains(received, e => e.Type == SyncEventType.OnSynced);
+        Assert.Empty(await store.GetPendingOutboxAsync());
+    }
+
+    /// <summary>Polls <paramref name="condition"/> until it holds or the timeout expires.</summary>
+    private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (Environment.TickCount64 < deadline)
+        {
+            if (condition()) return;
+            await Task.Delay(15);
+        }
+
+        Assert.Fail($"Condition not met within {timeoutMs}ms.");
     }
 
     // -------------------------------------------------------------------------

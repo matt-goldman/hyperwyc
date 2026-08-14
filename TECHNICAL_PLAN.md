@@ -43,7 +43,7 @@ for applications that need explicit offline handling.
 
 | Package | Assembly | Contents |
 |---------|----------|----------|
-| `Hyperwyc.Core` | `Hyperwyc.Core.dll` | `HyperwycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `SyncEventStream`, `IHyperwyc`, `InMemorySyncStore`, `AlwaysOnlineConnectivityService`, `TtlStalenessEvaluator`. Depends on `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Hosting.Abstractions` and `Polly`; no storage dependency. |
+| `Hyperwyc.Core` | `Hyperwyc.Core.dll` | `HyperwycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `SyncEventStream`, `IHyperwyc`, `InMemorySyncStore`, `AlwaysOnlineConnectivityService`, `TtlStalenessEvaluator`. Depends on `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Hosting.Abstractions` and `Microsoft.Extensions.Http`; no storage dependency. |
 | `Hyperwyc` | `Hyperwyc.dll` | `CabinetSyncStore` backed by [Cabinet](https://github.com/mattgoldman/cabinet), `CabinetStoreOptions`, and the batteries-included `AddHyperwyc()`. Depends on `Hyperwyc.Core` and `Cabinet`. |
 
 `Hyperwyc` is the package almost everyone installs: `AddHyperwyc()` with no arguments produces
@@ -99,6 +99,13 @@ no store is built (and no directory touched) unless something resolves it.
     envelope reflects the request as Hyperwyc saw it. It will not contain an `Authorization`
     header added further down. This is why replays must traverse the pipeline rather than being
     replayed verbatim.
+- **Failure observation.** Pipelines are first-in, last-out, so a handler registered after
+  `HyperwycHandler` observes each response *before* Hyperwyc does. Combined with the replay
+  retry wrapping the entire client (§3), this makes Hyperwyc's retry the outermost, last-resort
+  one: it acts only on failures the application's own handlers — refresh-on-401, circuit
+  breakers, custom retry — could not resolve. Hyperwyc therefore does not need configuring to
+  avoid interfering with them. The corollary is that an application retry handler nests inside
+  Hyperwyc's, multiplying total attempts.
 
 ### 2. Request Handling Logic
 
@@ -176,19 +183,37 @@ manual triggering (e.g. a "sync now" button).
   caller's to dispose, and the default lives for the application's lifetime.
 - On successful delivery: marks `IsSynced = true`, publishes `OnSynced`, and applies
   write-triggered invalidation.
-- On failure:
-  - Failure means a non-2xx response or a transport exception — not a connectivity-state
-    change. A device that `IConnectivityService` considers online but that cannot reach the
-    API (captive portal, DNS failure, transient outage) is handled by the retry budget, not
-    by the offline queue.
-  - Polly retries with exponential backoff and jitter, publishing `OnRetrying` per attempt.
-  - After the retry budget is exhausted: moves to dead-letter, publishes `OnFailed`.
+- **One attempt per envelope per flush.** There is no in-flush retry loop; a failed attempt
+  resolves to one of three outcomes below. This is what keeps a single undeliverable write from
+  holding up everything queued behind it, given the outbox drains sequentially.
+- On a **`4xx`**: dead-letter immediately and publish `OnFailed`. The status describes the
+  request, so replaying it unchanged cannot produce a different answer. `408` and `429` are
+  excluded — both explicitly mean "later".
+- On a **`5xx`, `408` or `429`**: increment `Envelope.RetryCount`, set `Envelope.NextRetryUtc`
+  to an exponentially backed-off time, and leave the envelope queued. Both fields are persisted,
+  so a budget survives the process being killed mid-flush.
+- On a **transport exception**: abandon the remainder of the flush. The premise — that the
+  network is reachable — has been falsified, so the remaining envelopes would fail identically.
+  Nothing is held against them: no retry count, no scheduled time, and they stay immediately
+  eligible for the next attempt.
+- When `RetryCount` exceeds the configured budget: dead-letter and publish `OnFailed`.
 
-> **In-process only:** the retry budget lives in the Polly pipeline for the duration of a
-> single flush. `Envelope.RetryCount`, `Envelope.NextRetryUtc` and
-> `ISyncStore.GetDueForRetryAsync` exist and are tested, but the orchestrator does not write
-> or read them, so an interrupted flush restarts the budget. Tracked in
-> [issue 28](Backlog/28-persisted-retry-state.md).
+Retrying connectivity failures on connectivity change is the whole of Hyperwyc's remit here.
+Failures an application knows how to resolve — refreshing a token, tripping a circuit breaker,
+retrying a flaky endpoint — are handled by its own handlers, which run first (§1).
+
+#### Which envelopes a flush attempts
+
+`ISyncStore.GetReadyToSendAsync(now)` returns envelopes never attempted plus those whose
+scheduled retry time has arrived — deliberately excluding ones still waiting, so a flush does
+not re-attempt deferred work. `GetPendingOutboxAsync` reports everything queued regardless of
+readiness, which is what diagnostics wants.
+
+When a flush defers anything, the orchestrator schedules a single follow-up pass for when the
+earliest of them becomes eligible. Without it, a transient server failure on a device that stays
+online would wait for the next connectivity change or app start. This terminates because every
+deferral increments `RetryCount`, so an envelope that keeps failing eventually dead-letters and
+stops being rescheduled.
 
 #### What triggers a flush
 
@@ -373,11 +398,18 @@ constructed only once that resolution is complete.
 
 ### 8. Retry and Resilience
 
-- **Retry strategy:** Polly exponential backoff with jitter; configured via
-  `ISyncPolicy.GetRetryOptions(request)`, which receives the request and can therefore vary
-  per endpoint.
-- **Dead-letter policy:** envelopes failing after the retry threshold are flagged
-  `IsDeadLettered` and excluded from subsequent outbox queries; `OnFailed` is published.
+- **Retry strategy:** one attempt per flush. A transiently failed envelope is deferred to a
+  scheduled later attempt with exponential backoff and jitter, rather than retried in place.
+  Configured via `ISyncPolicy.GetRetryOptions(request)`, which receives the request and can
+  therefore vary per endpoint. Backoff is clamped to one hour so a generous budget cannot
+  schedule an attempt absurdly far out.
+- **No resilience-library dependency.** Retry was previously a Polly pipeline inside each
+  flush. Once attempts are spaced by connectivity events and scheduled times rather than by an
+  in-process backoff loop, what remains is arithmetic, and `Polly` was dropped from
+  `Hyperwyc.Core` — worth having in a core package aimed at mobile.
+- **Dead-letter policy:** an envelope is flagged `IsDeadLettered` and `OnFailed` published when
+  the server rejects it outright (`4xx`) or when `RetryCount` exceeds the budget. Dead-lettered
+  envelopes are excluded from subsequent outbox queries.
 - **Manual requeue:** not yet available — dead-lettered envelopes can currently only be
   cleared by `ResetStoreAsync()`. Tracked in
   [issue 24](Backlog/24-v1-dead-letter-management.md).

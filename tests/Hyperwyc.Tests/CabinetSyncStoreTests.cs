@@ -175,11 +175,11 @@ public class CabinetSyncStoreTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
-    // GetDueForRetryAsync
+    // GetReadyToSendAsync
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task GetDueForRetryAsync_ReturnsEnvelopesDueBeforeNow()
+    public async Task GetReadyToSendAsync_ReturnsEnvelopesDueBeforeNow()
     {
         var due = new Envelope
         {
@@ -197,7 +197,7 @@ public class CabinetSyncStoreTests : IDisposable
         await _store.UpsertAsync(due);
         await _store.UpsertAsync(notDue);
 
-        var results = await _store.GetDueForRetryAsync(DateTimeOffset.UtcNow);
+        var results = await _store.GetReadyToSendAsync(DateTimeOffset.UtcNow);
 
         Assert.Single(results);
         Assert.Equal("https://example.com/api/orders", results[0].Url);

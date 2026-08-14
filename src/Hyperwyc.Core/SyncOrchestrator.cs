@@ -1,5 +1,4 @@
-using Polly;
-using Polly.Retry;
+using System.Net;
 using Hyperwyc.Interfaces;
 using Hyperwyc.Models;
 
@@ -19,6 +18,12 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
 {
     private const string _idempotencyKeyHeader = "Idempotency-Key";
 
+    /// <summary>
+    /// Ceiling on a computed backoff, so a generous retry budget cannot schedule an
+    /// attempt absurdly far out — or overflow the arithmetic getting there.
+    /// </summary>
+    private static readonly TimeSpan MaxBackoff = TimeSpan.FromHours(1);
+
     private readonly ISyncStore _store;
     private readonly Interfaces.ISyncPolicy _policy;
     private readonly IConnectivityService _connectivity;
@@ -37,6 +42,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     private readonly CancellationTokenSource _lifetimeCts = new();
 
     private CancellationTokenSource? _debounceCts;
+    private CancellationTokenSource? _followUpCts;
     private bool _disposed;
 
     /// <summary>
@@ -91,10 +97,16 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Drains the outbox, sending each pending envelope to the server in
+    /// Drains the outbox, making one delivery attempt per eligible envelope in
     /// <see cref="Models.Envelope.CreatedUtc"/> ascending order.
     /// If a flush is already in progress this call returns immediately.
     /// </summary>
+    /// <remarks>
+    /// One attempt each, not a retry loop. An envelope that fails transiently is left
+    /// queued with a scheduled next-attempt time, so a single undeliverable write cannot
+    /// hold up everything behind it — which is what a per-envelope backoff loop does when
+    /// the outbox drains sequentially.
+    /// </remarks>
     public async Task FlushAsync(CancellationToken ct = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -111,108 +123,215 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
 
         try
         {
-            var pending = await _store.GetPendingOutboxAsync(token).ConfigureAwait(false);
+            var ready = await _store.GetReadyToSendAsync(DateTimeOffset.UtcNow, token)
+                .ConfigureAwait(false);
 
-            foreach (var envelope in pending)
+            foreach (var envelope in ready)
             {
                 if (token.IsCancellationRequested) break;
-                await SendWithRetryAsync(envelope, token).ConfigureAwait(false);
+
+                var outcome = await SendAsync(envelope, token).ConfigureAwait(false);
+
+                if (outcome == SendOutcome.ConnectivityLost)
+                {
+                    // The premise of this flush was that the network is reachable. It is
+                    // not, so the remaining envelopes would fail for the same reason.
+                    // Stop and wait to be told connectivity has returned.
+                    break;
+                }
+
             }
         }
         finally
         {
             _flushGate.Release();
         }
+
+        await ScheduleNextPassAsync(token).ConfigureAwait(false);
     }
 
-    // -------------------------------------------------------------------------
-    // Send + Polly retry pipeline
-    // -------------------------------------------------------------------------
-
-    private async Task SendWithRetryAsync(Envelope envelope, CancellationToken ct)
+    /// <summary>
+    /// Schedules one further flush for when the earliest waiting envelope becomes
+    /// eligible, if anything is waiting.
+    /// </summary>
+    /// <remarks>
+    /// Derived from the store rather than from what this pass happened to defer. That
+    /// matters: a follow-up timer can fire a moment early, find nothing ready and defer
+    /// nothing, and if scheduling depended on deferrals it would schedule nothing
+    /// further — stranding the envelope until the next connectivity change. Asking what
+    /// is still waiting is correct regardless of why this pass deferred nothing.
+    /// </remarks>
+    private async Task ScheduleNextPassAsync(CancellationToken ct)
     {
-        // Determine retry configuration from the policy once per envelope.
-        var probeRequest = BuildRequest(envelope);
-        var retryOptions = _policy.GetRetryOptions(probeRequest);
-        probeRequest.Dispose();
+        if (_disposed || ct.IsCancellationRequested) return;
 
-        var pipeline = BuildRetryPipeline(retryOptions, envelope);
-
-        HttpResponseMessage? finalResponse = null;
+        DateTimeOffset? nextDue;
         try
         {
-            finalResponse = await pipeline.ExecuteAsync(async token =>
-            {
-                var request = BuildRequest(envelope);
-                return await ResolveInvoker(envelope)
-                    .SendAsync(request, token).ConfigureAwait(false);
-            }, ct).ConfigureAwait(false);
+            var pending = await _store.GetPendingOutboxAsync(ct).ConfigureAwait(false);
+            nextDue = pending
+                .Where(e => e.NextRetryUtc is not null)
+                .Min(e => e.NextRetryUtc);
         }
-        catch (HttpRequestException) { /* all retries exhausted on exception */ }
-
-        if (finalResponse?.IsSuccessStatusCode == true)
+        catch (OperationCanceledException)
         {
-            await _store.MarkSyncedAsync(envelope.Id, ct).ConfigureAwait(false);
+            return;
+        }
 
+        if (nextDue is { } due)
+            ScheduleFollowUp(due);
+    }
+
+    // -------------------------------------------------------------------------
+    // Sending
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// What one delivery attempt concluded, and therefore what the flush should do next.
+    /// </summary>
+    private enum SendOutcome
+    {
+        /// <summary>Delivered; the envelope is out of the outbox.</summary>
+        Synced,
+
+        /// <summary>Rejected or out of budget; the envelope will not be attempted again.</summary>
+        DeadLettered,
+
+        /// <summary>Transient failure; the envelope stays queued for a later attempt.</summary>
+        Deferred,
+
+        /// <summary>The network is unreachable, so the rest of the flush is pointless.</summary>
+        ConnectivityLost,
+    }
+
+    /// <summary>
+    /// Makes a single delivery attempt. Retrying is not this method's job — a failed
+    /// attempt either dead-letters or is deferred to a later flush.
+    /// </summary>
+    private async Task<SendOutcome> SendAsync(Envelope envelope, CancellationToken ct)
+    {
+        using var request = BuildRequest(envelope);
+        var retryOptions = _policy.GetRetryOptions(request);
+
+        if (envelope.RetryCount > 0)
+        {
             _events.Publish(new SyncEvent(
-                SyncEventType.OnSynced,
-                envelope.Url,
-                envelope.Method,
-                DateTimeOffset.UtcNow));
+                SyncEventType.OnRetrying, envelope.Url, envelope.Method, DateTimeOffset.UtcNow));
+        }
 
-            var lastRequest = BuildRequest(envelope);
-            if (_policy.ShouldInvalidateCacheOnWrite(lastRequest))
+        HttpResponseMessage response;
+        try
+        {
+            response = await ResolveInvoker(envelope).SendAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HttpRequestException)
+        {
+            // The device believed it was online but the network is not usable — a captive
+            // portal, DNS failure, or signal that dropped mid-flush. Every remaining
+            // envelope would fail identically, so report it and let the flush stop.
+            return SendOutcome.ConnectivityLost;
+        }
+
+        using (response)
+        {
+            if (response.IsSuccessStatusCode)
             {
-                var prefix = HyperwycHandler.DeriveInvalidationPrefix(lastRequest.RequestUri);
-                await _store.InvalidateCacheForPrefixAsync(prefix, ct).ConfigureAwait(false);
+                await MarkDeliveredAsync(envelope, ct).ConfigureAwait(false);
+                return SendOutcome.Synced;
             }
-            lastRequest.Dispose();
-        }
-        else
-        {
-            await _store.MoveToDeadLetterAsync(envelope.Id, ct).ConfigureAwait(false);
 
-            _events.Publish(new SyncEvent(
-                SyncEventType.OnFailed,
-                envelope.Url,
-                envelope.Method,
-                DateTimeOffset.UtcNow));
+            // A 4xx describes the request, not the connection. Replaying it unchanged
+            // produces the same answer, and any failure the application knows how to
+            // resolve — a token refresh, say — has already had its turn further down the
+            // pipeline. Retrying here would only delay an outcome already known.
+            if (IsPermanentFailure(response.StatusCode))
+            {
+                await DeadLetterAsync(envelope, ct).ConfigureAwait(false);
+                return SendOutcome.DeadLettered;
+            }
+
+            return await DeferAsync(envelope, retryOptions, ct).ConfigureAwait(false);
         }
     }
 
-    private ResiliencePipeline<HttpResponseMessage> BuildRetryPipeline(
-        RetryOptions retryOptions,
-        Envelope envelope)
-    {
-        var builder = new ResiliencePipelineBuilder<HttpResponseMessage>();
+    /// <summary>
+    /// Whether <paramref name="statusCode"/> means "this request will never succeed",
+    /// as opposed to "not right now".
+    /// </summary>
+    private static bool IsPermanentFailure(HttpStatusCode statusCode) =>
+        (int)statusCode is >= 400 and < 500
+        && statusCode is not HttpStatusCode.RequestTimeout       // 408 — worth another go
+        && statusCode is not HttpStatusCode.TooManyRequests;     // 429 — explicitly "later"
 
-        // Polly requires MaxRetryAttempts >= 1; skip when no retries are configured.
-        if (retryOptions.MaxRetries >= 1)
+    private async Task MarkDeliveredAsync(Envelope envelope, CancellationToken ct)
+    {
+        await _store.MarkSyncedAsync(envelope.Id, ct).ConfigureAwait(false);
+
+        _events.Publish(new SyncEvent(
+            SyncEventType.OnSynced, envelope.Url, envelope.Method, DateTimeOffset.UtcNow));
+
+        using var request = BuildRequest(envelope);
+        if (_policy.ShouldInvalidateCacheOnWrite(request))
         {
-            builder.AddRetry(new RetryStrategyOptions<HttpResponseMessage>
-            {
-                MaxRetryAttempts = retryOptions.MaxRetries,
-                BackoffType = DelayBackoffType.Exponential,
-                UseJitter = true,
-                Delay = retryOptions.InitialDelay > TimeSpan.Zero
-                    ? retryOptions.InitialDelay
-                    : TimeSpan.FromMilliseconds(1),
-                ShouldHandle = new PredicateBuilder<HttpResponseMessage>()
-                    .Handle<HttpRequestException>()
-                    .HandleResult(r => !r.IsSuccessStatusCode),
-                OnRetry = args =>
-                {
-                    _events.Publish(new SyncEvent(
-                        SyncEventType.OnRetrying,
-                        envelope.Url,
-                        envelope.Method,
-                        DateTimeOffset.UtcNow));
-                    return default;
-                },
-            });
+            var prefix = HyperwycHandler.DeriveInvalidationPrefix(request.RequestUri);
+            await _store.InvalidateCacheForPrefixAsync(prefix, ct).ConfigureAwait(false);
+        }
+    }
+
+    private async Task DeadLetterAsync(Envelope envelope, CancellationToken ct)
+    {
+        await _store.MoveToDeadLetterAsync(envelope.Id, ct).ConfigureAwait(false);
+
+        _events.Publish(new SyncEvent(
+            SyncEventType.OnFailed, envelope.Url, envelope.Method, DateTimeOffset.UtcNow));
+    }
+
+    /// <summary>
+    /// Records a transient failure against the envelope and schedules when it becomes
+    /// eligible again, or dead-letters it if the budget is spent.
+    /// </summary>
+    /// <remarks>
+    /// The count and the next-attempt time are persisted rather than held in memory, so
+    /// a budget survives the process being killed mid-flush — routine on mobile.
+    /// </remarks>
+    private async Task<SendOutcome> DeferAsync(
+        Envelope envelope,
+        RetryOptions retryOptions,
+        CancellationToken ct)
+    {
+        envelope.RetryCount++;
+
+        if (envelope.RetryCount > retryOptions.MaxRetries)
+        {
+            await DeadLetterAsync(envelope, ct).ConfigureAwait(false);
+            return SendOutcome.DeadLettered;
         }
 
-        return builder.Build();
+        envelope.NextRetryUtc = DateTimeOffset.UtcNow + BackoffFor(retryOptions, envelope.RetryCount);
+        await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
+
+        return SendOutcome.Deferred;
+    }
+
+    /// <summary>
+    /// Exponential backoff with jitter, clamped so an over-generous retry budget cannot
+    /// produce an absurd — or arithmetically invalid — delay.
+    /// </summary>
+    private static TimeSpan BackoffFor(RetryOptions retryOptions, int attempt)
+    {
+        // A configured zero is honoured as zero: "retry as soon as you can" is a
+        // legitimate choice now that a retry is a later flush rather than a sleep.
+        var initial = retryOptions.InitialDelay > TimeSpan.Zero
+            ? retryOptions.InitialDelay
+            : TimeSpan.Zero;
+
+        var multiplier = retryOptions.BackoffMultiplier > 1 ? retryOptions.BackoffMultiplier : 1;
+        var seconds = initial.TotalSeconds * Math.Pow(multiplier, Math.Max(0, attempt - 1));
+
+        // Jitter spreads a fleet of clients that all reconnected at the same moment.
+        seconds *= 0.85 + (Random.Shared.NextDouble() * 0.3);
+
+        return TimeSpan.FromSeconds(Math.Min(seconds, MaxBackoff.TotalSeconds));
     }
 
     // -------------------------------------------------------------------------
@@ -261,6 +380,54 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
             request.Content = new StringContent(envelope.RequestBody);
 
         return request;
+    }
+
+    // -------------------------------------------------------------------------
+    // Follow-up pass
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Schedules one further flush for when the earliest deferred envelope becomes
+    /// eligible.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without this, a transient server failure would wait for the next connectivity
+    /// change or app start — which may never come while the device sits happily online.
+    /// A backend having a bad day is a narrower case than the offline one Hyperwyc exists
+    /// for, but it is a real one, and "your write goes out when the outage ends" is the
+    /// only defensible answer to it.
+    /// </para>
+    /// <para>
+    /// This terminates: every deferral increments <see cref="Envelope.RetryCount"/>, so an
+    /// envelope that keeps failing eventually dead-letters and stops being rescheduled.
+    /// </para>
+    /// </remarks>
+    private void ScheduleFollowUp(DateTimeOffset dueAt)
+    {
+        if (_disposed) return;
+
+        // A small buffer past the due time: timers can fire fractionally early, and a
+        // near-miss costs a whole extra scheduling round-trip.
+        var delay = dueAt - DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(15);
+        if (delay < TimeSpan.Zero) delay = TimeSpan.Zero;
+
+        var previous = Interlocked.Exchange(ref _followUpCts, new CancellationTokenSource());
+        previous?.Cancel();
+        previous?.Dispose();
+
+        var cts = _followUpCts!;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(delay, cts.Token).ConfigureAwait(false);
+                await FlushAsync(cts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { /* superseded, or disposed */ }
+            catch (ObjectDisposedException) { /* disposed between the check and the flush */ }
+        }, cts.Token);
     }
 
     // -------------------------------------------------------------------------
@@ -367,6 +534,9 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
 
         _debounceCts?.Cancel();
         _debounceCts?.Dispose();
+
+        _followUpCts?.Cancel();
+        _followUpCts?.Dispose();
 
         _lifetimeCts.Cancel();
     }

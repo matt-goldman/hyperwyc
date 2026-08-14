@@ -168,6 +168,32 @@ custom retry. Register it after `AddHyperwycHandler()` and replays get it too.
 > write through. The plain form still works, but replays fall back to a bare transport with
 > none of your handlers in it.
 
+### What Hyperwyc sees, and what it leaves alone
+
+Handler pipelines are **first in, last out**: the first handler you add is the first to see the
+request and the *last* to see the response.
+
+```
+request  →  Hyperwyc  →  AuthHandler  →  network
+response ←  Hyperwyc  ←  AuthHandler  ←  network
+```
+
+So a handler registered *after* `AddHyperwycHandler()` sees each response **before** Hyperwyc
+does, and can resolve failures Hyperwyc never learns about. If you already have a handler that
+catches a `401`, refreshes the token and retries, that is exactly what happens — Hyperwyc sees
+the successful retry, not the `401`.
+
+That's deliberate. **Hyperwyc's replay retry is the outermost, last-resort retry**: it wraps the
+whole pipeline, so it only ever acts on failures your own handlers couldn't fix. It won't
+second-guess your auth, your circuit breaker or your fallbacks, and you don't need to configure
+it to stay out of their way.
+
+Hyperwyc makes **one delivery attempt per queued write per flush** — it does not loop. A write
+the server rejects is failed immediately; one that fails transiently is left queued and tried
+again at the next opportunity. So your own retry handler, if you have one, composes rather than
+compounds: it retries within a single attempt, and Hyperwyc decides whether there should be
+another attempt at all.
+
 ### Replays and `ReplayTransport`
 
 For the fallback case — a handler registered without a client name — `options.ReplayTransport`
@@ -189,9 +215,9 @@ hyperwyc.SyncEvents.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
 | Event | Meaning |
 |-------|---------|
 | `OnQueued` | Request persisted to local queue (offline) |
-| `OnRetrying` | Retry attempt initiated |
+| `OnRetrying` | A queued request is being attempted again after an earlier failure |
 | `OnSynced` | Request successfully delivered |
-| `OnFailed` | Request moved to dead-letter after max retries |
+| `OnFailed` | Request dead-lettered — rejected by the server, or out of retries |
 | `OnUpdated` | Cached response refreshed |
 
 These are Hyperwyc's own events, not your app's lifecycle — see below for how the two relate.
@@ -226,6 +252,21 @@ rescue on the way out.
 This matters most on mobile, where it wouldn't work anyway: Android and iOS terminate suspended
 processes without running disposal, finalizers, or any cleanup you might have registered.
 Durability comes from the outbox being persistent, not from tidying up at exit.
+
+### When a write fails
+
+Not every failure means the same thing, so Hyperwyc doesn't treat them the same way:
+
+| Failure | What happens |
+|---|---|
+| `4xx` — the server rejected it | Dead-lettered immediately. Sending the identical request again cannot change the answer |
+| `5xx`, `408`, `429` — the server is struggling | Left queued and retried later, with a growing gap between attempts, until the retry budget runs out |
+| Can't reach the network at all | The flush stops and nothing is held against the queued writes — the network being down says nothing about them |
+
+Hyperwyc's job is getting writes out once the network allows it, so that is the failure it
+retries. Anything your own handlers already deal with — refreshing a token, tripping a circuit
+breaker, retrying a flaky endpoint — has run before Hyperwyc sees the result, and it doesn't
+second-guess them.
 
 ### Interrupted syncs
 

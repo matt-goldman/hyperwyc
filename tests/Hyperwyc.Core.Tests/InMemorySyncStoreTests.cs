@@ -160,44 +160,62 @@ public class InMemorySyncStoreTests
     }
 
     // -------------------------------------------------------------------------
-    // GetDueForRetryAsync
+    // GetReadyToSendAsync
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task GetDueForRetryAsync_EmptyStore_ReturnsEmpty()
+    public async Task GetReadyToSendAsync_EmptyStore_ReturnsEmpty()
     {
         var store = new InMemorySyncStore();
-        var result = await store.GetDueForRetryAsync(DateTimeOffset.UtcNow);
+        var result = await store.GetReadyToSendAsync(DateTimeOffset.UtcNow);
         Assert.Empty(result);
     }
 
+    // A never-attempted envelope has no NextRetryUtc and is ready immediately — this
+    // query is what a flush drains, not just the retry subset.
     [Fact]
-    public async Task GetDueForRetryAsync_NullNextRetryUtc_NotIncluded()
+    public async Task GetReadyToSendAsync_NeverAttempted_IsIncluded()
     {
         var store = new InMemorySyncStore();
         var envelope = MakeEnvelope();
         await store.UpsertAsync(envelope);
 
-        var result = await store.GetDueForRetryAsync(DateTimeOffset.UtcNow);
+        var result = await store.GetReadyToSendAsync(DateTimeOffset.UtcNow);
 
-        Assert.Empty(result);
+        Assert.Single(result);
+        Assert.Equal(envelope.Id, result[0].Id);
     }
 
     [Fact]
-    public async Task GetDueForRetryAsync_RetryInFuture_NotIncluded()
+    public async Task GetReadyToSendAsync_DeferredEnvelope_IsExcludedButStillPending()
+    {
+        var store = new InMemorySyncStore();
+        var envelope = MakeEnvelope();
+        envelope.NextRetryUtc = DateTimeOffset.UtcNow.AddMinutes(30);
+        await store.UpsertAsync(envelope);
+
+        // Not ready to send yet...
+        Assert.Empty(await store.GetReadyToSendAsync(DateTimeOffset.UtcNow));
+
+        // ...but still queued, so diagnostics and reset still see it.
+        Assert.Single(await store.GetPendingOutboxAsync());
+    }
+
+    [Fact]
+    public async Task GetReadyToSendAsync_RetryInFuture_NotIncluded()
     {
         var store = new InMemorySyncStore();
         var envelope = MakeEnvelope();
         envelope.NextRetryUtc = DateTimeOffset.UtcNow.AddHours(1);
         await store.UpsertAsync(envelope);
 
-        var result = await store.GetDueForRetryAsync(DateTimeOffset.UtcNow);
+        var result = await store.GetReadyToSendAsync(DateTimeOffset.UtcNow);
 
         Assert.Empty(result);
     }
 
     [Fact]
-    public async Task GetDueForRetryAsync_RetryDue_Included()
+    public async Task GetReadyToSendAsync_RetryDue_Included()
     {
         var store = new InMemorySyncStore();
         var envelope = MakeEnvelope();
@@ -205,14 +223,14 @@ public class InMemorySyncStoreTests
         envelope.NextRetryUtc = now.AddMinutes(-5);
         await store.UpsertAsync(envelope);
 
-        var result = await store.GetDueForRetryAsync(now);
+        var result = await store.GetReadyToSendAsync(now);
 
         Assert.Single(result);
         Assert.Equal(envelope.Id, result[0].Id);
     }
 
     [Fact]
-    public async Task GetDueForRetryAsync_ExcludesSynced()
+    public async Task GetReadyToSendAsync_ExcludesSynced()
     {
         var store = new InMemorySyncStore();
         var envelope = MakeEnvelope();
@@ -220,13 +238,13 @@ public class InMemorySyncStoreTests
         envelope.IsSynced = true;
         await store.UpsertAsync(envelope);
 
-        var result = await store.GetDueForRetryAsync(DateTimeOffset.UtcNow);
+        var result = await store.GetReadyToSendAsync(DateTimeOffset.UtcNow);
 
         Assert.Empty(result);
     }
 
     [Fact]
-    public async Task GetDueForRetryAsync_ExcludesDeadLettered()
+    public async Task GetReadyToSendAsync_ExcludesDeadLettered()
     {
         var store = new InMemorySyncStore();
         var envelope = MakeEnvelope();
@@ -234,7 +252,7 @@ public class InMemorySyncStoreTests
         envelope.IsDeadLettered = true;
         await store.UpsertAsync(envelope);
 
-        var result = await store.GetDueForRetryAsync(DateTimeOffset.UtcNow);
+        var result = await store.GetReadyToSendAsync(DateTimeOffset.UtcNow);
 
         Assert.Empty(result);
     }

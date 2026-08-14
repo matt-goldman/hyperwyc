@@ -105,13 +105,13 @@ public sealed class CabinetSyncStore : ISyncStore
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<Envelope>> GetDueForRetryAsync(
+    public async Task<IReadOnlyList<Envelope>> GetReadyToSendAsync(
         DateTimeOffset now,
         CancellationToken ct = default)
     {
         var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
         return [.. all
-            .Where(e => !e.IsSynced && !e.IsDeadLettered && e.NextRetryUtc <= now)
+            .Where(e => !e.IsSynced && !e.IsDeadLettered && (e.NextRetryUtc is null || e.NextRetryUtc <= now))
             .OrderBy(e => e.CreatedUtc)];
     }
 
