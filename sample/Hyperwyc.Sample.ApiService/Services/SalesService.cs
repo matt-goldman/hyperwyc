@@ -16,6 +16,11 @@ public class SalesService(ApplicationDbContext context)
 
     public async Task<Sale?> RecordSale(Sale sale, CancellationToken token)
     {
+        var alreadyRecorded = await context.Sales.FirstOrDefaultAsync(s => s.Id == sale.Id, token);
+
+        if (alreadyRecorded != null)
+            return alreadyRecorded;
+
         var product = context.Products.FirstOrDefault(p => p.Id == sale.ProductId);
 
         if (product is null)

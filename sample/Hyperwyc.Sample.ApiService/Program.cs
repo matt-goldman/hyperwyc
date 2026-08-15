@@ -35,12 +35,6 @@ if (app.Environment.IsDevelopment())
 
 app.MapIdentityApi<IdentityUser>();
 
-// Idempotency-Key -> the sale that key already produced. Hyperwyc injects this
-// header on every mutating request and reuses the same value when it replays, so
-// a write that was delivered but whose response never made it back does not get
-// recorded twice.
-var salesByIdempotencyKey = new ConcurrentDictionary<string, Sale>(StringComparer.Ordinal);
-
 // -----------------------------------------------------------------------------
 // Endpoints
 // -----------------------------------------------------------------------------
@@ -80,8 +74,6 @@ app.MapPost("/products/regenerate", async (
         [FromServices] SalesService salesService,
         CancellationToken token) =>
 {
-    salesByIdempotencyKey.Clear();
-
     await salesService.Clear(token);
     await productService.Regenerate(token);
     var products =  await productService.GetProducts(token);
@@ -103,17 +95,6 @@ app.MapPost("/sales", async (
         HttpRequest request,
         CancellationToken token) =>
 {
-    // Hyperwyc injects Idempotency-Key on mutating requests and reuses it across
-    // replays. Returning the original result for a repeated key is what makes an
-    // offline queue safe to flush more than once.
-    var idempotencyKey = request.Headers["Idempotency-Key"].FirstOrDefault();
-
-    if (!string.IsNullOrEmpty(idempotencyKey) &&
-        salesByIdempotencyKey.TryGetValue(idempotencyKey, out var alreadyRecorded))
-    {
-        return Results.Ok(alreadyRecorded);
-    }
-
     if (sale.Quantity <= 0)
         return Results.BadRequest(new { error = "Quantity must be greater than zero." });
 
