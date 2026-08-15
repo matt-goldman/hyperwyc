@@ -55,6 +55,7 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | **13** | [Connectivity reference implementation](13-connectivity-reference-implementation.md) | ⬜ Open | **P0** | Scope revised: `StaticConnectivityService` ships in core; MAUI stays reference code. `MauiConnectivityService` in core is rejected — it would force platform TFMs and a MAUI workload dependency. Blocks 19 |
 | **16** | [`ResetStoreAsync()`](16-reset-store-async.md) | 🟡 Partial | P0 | Method exists and delegates to `ISyncStore.ResetAsync`. Missing: flush-semaphore coordination (a reset during an in-flight flush is unguarded) and any unit tests |
 | **19** | [Sample — .NET MAUI app](19-poc-maui-app.md) | ⬜ Open | P0 | Aspire AppHost, MAUI project and `Shared` scaffolded; API done ([18](Done/18-poc-web-api.md)). Depends on 13 |
+| **32** | [Reconsider Idempotency](32-reconsider-idempotency.md) | ⬜ Open | P0 | Idempotency key violates the principle of not requiring you to re-architect your API to suit the client |
 
 ## v1.0
 
