@@ -1,4 +1,8 @@
 using System.Collections.Concurrent;
+using Hyperwyc.Sample.ApiService.Persistence;
+using Hyperwyc.Sample.ApiService.Services;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Shared;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,6 +12,13 @@ builder.AddServiceDefaults();
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
+
+builder.AddSqlServerDbContext<ApplicationDbContext>(connectionName: "database");
+
+builder.Services.AddAuthorization();
+
+builder.Services.AddIdentityApiEndpoints<IdentityUser>()
+    .AddEntityFrameworkStores<ApplicationDbContext>();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -22,24 +33,13 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-// -----------------------------------------------------------------------------
-// In-memory state
-//
-// Deliberately not a database: the point of this sample is Hyperwyc's behaviour,
-// not the API's. Everything resets when the process restarts, which is itself
-// useful — a client holding a cached catalogue will keep showing the old one.
-// -----------------------------------------------------------------------------
-
-var catalogue = new Catalogue();
-var sales = new List<Sale>();
+app.MapIdentityApi<IdentityUser>();
 
 // Idempotency-Key -> the sale that key already produced. Hyperwyc injects this
 // header on every mutating request and reuses the same value when it replays, so
 // a write that was delivered but whose response never made it back does not get
 // recorded twice.
 var salesByIdempotencyKey = new ConcurrentDictionary<string, Sale>(StringComparer.Ordinal);
-
-var mutationLock = new object();
 
 // -----------------------------------------------------------------------------
 // Endpoints
@@ -58,12 +58,16 @@ app.MapGet("/", () => Results.Ok(new
     },
 }));
 
-app.MapGet("/products", () => Results.Ok(catalogue.Products))
+app.MapGet("/products", async ([FromServices] ProductService service, CancellationToken token) =>
+    {
+        var products = await service.GetProducts(token);
+        return Results.Ok(products);
+    })
     .WithName("GetProducts");
 
-app.MapGet("/products/{id:int}", (int id) =>
+app.MapGet("/products/{id:int}", async (int id, [FromServices] ProductService service, CancellationToken token) =>
 {
-    var product = catalogue.Products.FirstOrDefault(p => p.Id == id);
+    var product = await service.GetProduct(id, token);
     return product is null ? Results.NotFound() : Results.Ok(product);
 })
 .WithName("GetProduct");
@@ -71,29 +75,33 @@ app.MapGet("/products/{id:int}", (int id) =>
 // Rebuilds the catalogue from scratch while the app is running. Restarting the API
 // would do the same, but this lets a client be caught holding a stale cache without
 // stopping anything — which is the behaviour worth demonstrating.
-app.MapPost("/products/regenerate", () =>
+app.MapPost("/products/regenerate", async (
+        [FromServices] ProductService productService,
+        [FromServices] SalesService salesService,
+        CancellationToken token) =>
 {
-    lock (mutationLock)
-    {
-        catalogue.Regenerate();
-        sales.Clear();
-        salesByIdempotencyKey.Clear();
-    }
+    salesByIdempotencyKey.Clear();
 
-    return Results.Ok(catalogue.Products);
+    await salesService.Clear(token);
+    await productService.Regenerate(token);
+    var products =  await productService.GetProducts(token);
+
+    return Results.Ok(products);
 })
 .WithName("RegenerateCatalogue");
 
-app.MapGet("/sales", () =>
+app.MapGet("/sales", async ([FromServices] SalesService service, CancellationToken token) =>
 {
-    lock (mutationLock)
-    {
-        return Results.Ok(sales.OrderByDescending(s => s.SoldAt).ToList());
-    }
+    var sales = await service.GetAll(token);
+    return Results.Ok(sales.OrderByDescending(s => s.SoldAt).ToList());
 })
 .WithName("GetSales");
 
-app.MapPost("/sales", (Sale sale, HttpRequest request) =>
+app.MapPost("/sales", async (
+        [FromBody]Sale sale,
+        [FromServices] SalesService service,
+        HttpRequest request,
+        CancellationToken token) =>
 {
     // Hyperwyc injects Idempotency-Key on mutating requests and reuses it across
     // replays. Returning the original result for a repeated key is what makes an
@@ -109,109 +117,26 @@ app.MapPost("/sales", (Sale sale, HttpRequest request) =>
     if (sale.Quantity <= 0)
         return Results.BadRequest(new { error = "Quantity must be greater than zero." });
 
-    lock (mutationLock)
+    try
     {
-        var product = catalogue.Products.FirstOrDefault(p => p.Id == sale.ProductId);
+        var result = await service.RecordSale(sale, token);
 
-        if (product is null)
-            return Results.NotFound(new { error = $"No product with id {sale.ProductId}." });
-
-        if (product.StockLevel < sale.Quantity)
-        {
-            return Results.Conflict(new
-            {
-                error = $"Only {product.StockLevel} of '{product.Name}' left in stock.",
-                available = product.StockLevel,
-            });
-        }
-
-        product.StockLevel -= sale.Quantity;
-
-        var recorded = new Sale
-        {
-            Id = sale.Id == Guid.Empty ? Guid.NewGuid() : sale.Id,
-            ProductId = sale.ProductId,
-            Quantity = sale.Quantity,
-            SoldAt = DateTime.UtcNow,
-        };
-
-        sales.Add(recorded);
-
-        if (!string.IsNullOrEmpty(idempotencyKey))
-            salesByIdempotencyKey[idempotencyKey] = recorded;
-
-        return Results.Created($"/sales/{recorded.Id}", recorded);
+        return result is null
+            ? Results.NotFound(new { error = $"No product with id {sale.ProductId}." })
+            : Results.Created($"/sales/{result.Id}", result);
     }
+    catch (ArgumentOutOfRangeException e)
+    {
+        if (e.Message.Contains("stock", StringComparison.CurrentCultureIgnoreCase))
+        {
+            return Results.Conflict(new { error = e.Message });
+        }
+    }
+
+    return Results.InternalServerError("An error occurred.");
 })
 .WithName("RecordSale");
 
 app.MapDefaultEndpoints();
 
 app.Run();
-
-// -----------------------------------------------------------------------------
-// Catalogue generation
-// -----------------------------------------------------------------------------
-
-/// <summary>
-/// A randomly generated product catalogue, rebuilt on demand.
-/// </summary>
-/// <remarks>
-/// Generated rather than seeded from a real products API so the sample has no
-/// network dependency at startup and works offline — which matters, given the app
-/// under test is an offline-first one.
-/// </remarks>
-internal sealed class Catalogue
-{
-    private static readonly string[] Qualities =
-    [
-        "Handcrafted", "Rustic", "Refined", "Sleek", "Vintage", "Ergonomic",
-        "Practical", "Artisan", "Compact", "Heavy-duty", "Small-batch", "Modular",
-    ];
-
-    private static readonly string[] Materials =
-    [
-        "Copper", "Bamboo", "Walnut", "Linen", "Granite", "Brass",
-        "Ceramic", "Leather", "Steel", "Cork", "Slate", "Cedar",
-    ];
-
-    private static readonly string[] Items =
-    [
-        "Kettle", "Lamp", "Stool", "Planter", "Mug", "Bookend",
-        "Doorstop", "Tray", "Coaster Set", "Wall Clock", "Bread Bin", "Umbrella Stand",
-    ];
-
-    public List<Product> Products { get; private set; } = [];
-
-    public Catalogue() => Regenerate();
-
-    /// <summary>
-    /// Replaces the catalogue with a fresh random one. Names, prices and stock all
-    /// change, so a client comparing against a cached copy can see the difference.
-    /// </summary>
-    public void Regenerate()
-    {
-        var count = Random.Shared.Next(8, 16);
-        var names = new HashSet<string>(StringComparer.Ordinal);
-
-        // Sampling without replacement, so no two products share a name and the
-        // client can tell them apart on screen.
-        while (names.Count < count)
-        {
-            names.Add(string.Join(' ',
-                Qualities[Random.Shared.Next(Qualities.Length)],
-                Materials[Random.Shared.Next(Materials.Length)],
-                Items[Random.Shared.Next(Items.Length)]));
-        }
-
-        Products = names
-            .Select((name, index) => new Product
-            {
-                Id = index + 1,
-                Name = name,
-                Price = Math.Round((decimal)Random.Shared.NextDouble() * 90m + 5m, 2),
-                StockLevel = Random.Shared.Next(0, 40),
-            })
-            .ToList();
-    }
-}

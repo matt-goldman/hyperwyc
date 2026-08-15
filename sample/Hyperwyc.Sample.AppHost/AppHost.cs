@@ -1,7 +1,14 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
+var sql = builder.AddSqlServer("sql")
+    .WithLifetime(ContainerLifetime.Persistent);
+
+var db = sql.AddDatabase("database");
+
 var apiService = builder.AddProject<Projects.Hyperwyc_Sample_ApiService>("apiservice")
-    .WithHttpHealthCheck("/health");
+    .WithHttpHealthCheck("/health")
+    .WithReference(db)
+    .WaitFor(db);
 
 var publicDevTunnel = builder.AddDevTunnel("devtunnel-public")
     .WithAnonymousAccess()
