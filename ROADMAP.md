@@ -18,7 +18,6 @@ to its backlog item where one exists.
 - [x] `Hyperwyc.Core` package: all interfaces, `IHyperwyc`, `InMemorySyncStore` ([02](Backlog/Done/02-core-interfaces.md), [04](Backlog/Done/04-in-memory-sync-store.md))
 - [x] `CabinetSyncStore`, shipped in the `Hyperwyc` package as the default store ([14](Backlog/Done/14-cabinet-sync-store.md))
 - [x] Request/response envelope model ([03](Backlog/Done/03-envelope-model.md))
-- [x] Idempotency-Key header injection on all mutating requests ([08](Backlog/Done/08-idempotency-key-injection.md))
 - [x] Response cache with TTL staleness evaluation ([09](Backlog/Done/09-response-cache-read-operations.md))
 - [x] Write-triggered GET cache invalidation on write success ([10](Backlog/Done/10-write-triggered-cache-invalidation.md))
 - [x] Response body cache cap, 512 KB default ([17](Backlog/Done/17-max-cached-body-size.md))
@@ -34,7 +33,8 @@ to its backlog item where one exists.
 - [x] Injectable replay transport ([35](Backlog/Done/35-orchestrator-transport-not-injectable.md))
 - [x] Replays sent through the originating client's pipeline, so auth applies to them ([37](Backlog/Done/37-replay-through-pipeline.md))
 - [x] Flush trigger model documented — no app lifecycle wiring required ([34](Backlog/Done/34-app-lifecycle-integration.md))
-- [x] Sample product/sales API, in-memory with idempotent writes ([18](Backlog/Done/18-poc-web-api.md))
+- [x] Sample product/sales API ([18](Backlog/Done/18-poc-web-api.md))
+- [x] No headers added to outbound requests — idempotency left to the application and its API ([39](Backlog/Done/39-reconsider-idempotency.md), superseding [08](Backlog/Done/08-idempotency-key-injection.md))
 - [x] Package structure: `Hyperwyc` (batteries included) over `Hyperwyc.Core` ([31](Backlog/Done/31-package-structure.md)) — `AddHyperwyc()` with no configuration gives a durable, encrypted store
 
 **Remaining**

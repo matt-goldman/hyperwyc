@@ -48,7 +48,7 @@ app.MapGet("/", () => Results.Ok(new
         "GET  /products/{id}         — a single product",
         "POST /products/regenerate   — build a brand new catalogue (for testing stale caches)",
         "GET  /sales                 — sales recorded so far",
-        "POST /sales                 — record a sale; honours Idempotency-Key",
+        "POST /sales                 — record a sale; deduplicates on the client-supplied Sale.Id",
     },
 }));
 

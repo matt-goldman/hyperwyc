@@ -13,13 +13,13 @@ Hyperwyc is backend-agnostic, storage-pluggable, and designed for scenarios wher
 - ✅ **Service-worker-inspired** — transparent 200 OK responses by default; callers never branch on connectivity
 - ✅ Backend-agnostic HTTP caching and replay layer (REST/JSON over HTTP/1.x; v1.0)
 - ✅ Offline request queue with retry
-- ✅ Idempotency-Key injection on all mutating requests
 - ✅ Response cache with expiry policies
 - ✅ Write-triggered GET cache invalidation
 - ✅ Configurable offline response policy (transparent 200 or explicit 503)
 - ✅ Pluggable policies (connectivity, staleness, retry)
 - ✅ Observables for sync lifecycle events
 - ✅ Works with any `HttpClient`, minimal blast radius
+- ✅ Sends the request your app made — no headers added, nothing required of your API
 
 ---
 
@@ -268,6 +268,34 @@ retries. Anything your own handlers already deal with — refreshing a token, tr
 breaker, retrying a flaky endpoint — has run before Hyperwyc sees the result, and it doesn't
 second-guess them.
 
+### Duplicate writes
+
+Any retry can deliver the same request twice — if a response is lost after the server has
+already committed, the retry looks identical to a first attempt. This is true of a Polly retry
+handler, a user double-tapping a button, or a proxy replaying a request. Hyperwyc's retry carries
+the same risk and no more.
+
+**Hyperwyc takes no position on it.** It adds no headers and asks nothing of your API; duplicate
+suppression is between your application and your backend. If it matters to you, approaches people
+use include:
+
+- **Client-generated domain identity** — the record carries an id chosen by the client, so a
+  repeated write updates rather than duplicates. Idempotent by construction, and nothing in the
+  transport needs to know.
+- **The [`Idempotency-Key`](https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/)
+  header**, set at the call site, if your backend implements it. Hyperwyc persists request headers
+  and replays them unchanged, so a key you set once stays stable across every retry:
+
+  ```csharp
+  request.Headers.Add("Idempotency-Key", sale.Id.ToString());
+  ```
+
+- **A correlation or transaction id you already emit** — common in event-driven systems, and
+  increasingly generated in the UI so analytics can be tied to backend telemetry.
+
+These are things people do, not a recommendation from Hyperwyc. Which one fits, or whether the
+concern applies at all, depends on your API.
+
 ### Interrupted syncs
 
 If a flush is cut short — the app is backgrounded mid-replay, or the process is killed — the
@@ -282,4 +310,5 @@ its retry budget is exhausted, ends up in the dead-letter queue.
 - [TECHNICAL_PLAN.md](TECHNICAL_PLAN.md) — How Hyperwyc works today: architecture, components, storage model, and design rationale
 - [ROADMAP.md](ROADMAP.md) — Where it's going: milestones and planned features
 - [Backlog/README.md](Backlog/README.md) — Per-item status, priority, and dependencies
+- [docs/decisions](docs/decisions/README.md) — Architecture decision records: why Hyperwyc is the way it is, and what it deliberately does not do
 - [POC.md](POC.md) — Sample application and proof-of-concept setup

@@ -23,18 +23,28 @@ An [Aspire](https://learn.microsoft.com/dotnet/aspire/) solution under `sample/`
 ```
 sample/
 ├── Hyperwyc.Sample.AppHost/            # Aspire orchestration — the thing you run
-├── Hyperwyc.Sample.ApiService/         # ASP.NET Core API (all in Program.cs)
+├── Hyperwyc.Sample.ApiService/         # ASP.NET Core API, EF Core over SQL Server
+│   ├── Persistence/                    #   ApplicationDbContext
+│   └── Services/                       #   ProductService, SalesService
 ├── Hyperwyc.Sample.Maui/               # .NET MAUI client
 ├── Hyperwyc.Sample.ServiceDefaults/    # Aspire defaults for the API
 ├── Hyperwyc.Sample.MauiServiceDefaults/# Aspire defaults for the MAUI app
 └── Shared/                             # Product, Sale
 ```
 
+Aspire brings up SQL Server in a container with a persistent lifetime, so data survives between
+runs of the AppHost.
+
 ---
 
 ## Sample API
 
-Minimal, in-memory, entirely in `Program.cs`. No database, no migrations, nothing to set up.
+Minimal endpoints in `Program.cs`, over EF Core and SQL Server. Aspire provisions the database
+container, so there is nothing to install or configure by hand — but Docker (or an equivalent
+container runtime) does need to be running.
+
+ASP.NET Core Identity endpoints are mapped alongside, giving the sample a real authentication
+surface to exercise Hyperwyc's handler ordering against.
 
 | Method | Route | Description |
 |--------|-------|-------------|
@@ -47,12 +57,14 @@ Minimal, in-memory, entirely in `Program.cs`. No database, no migrations, nothin
 ### The catalogue is randomly generated
 
 Names are assembled from components (`Small-batch Copper Planter`, `Rustic Bamboo Stool`), with
-random prices and stock levels, and 8–16 products per catalogue. It is regenerated on every API
-start, and on demand via `POST /products/regenerate`.
+random prices and stock levels, and 8–16 products per catalogue.
 
 This is what makes cache staleness testable. A client holding a cached catalogue keeps showing
 the old one — old names, old prices, old stock — until its TTL expires or something invalidates
-it. Regenerating lets you provoke that without stopping anything.
+it. `POST /products/regenerate` lets you provoke that on demand, without restarting anything.
+
+Because the catalogue is persisted, it survives an API restart, so regenerating is the deliberate
+lever for staleness rather than a side effect of bouncing the process.
 
 It is generated rather than seeded from a real products API on purpose: a sample about working
 without a network should not need one to start.
@@ -71,14 +83,18 @@ demonstrated on demand:
 | `404` | Unknown product id |
 | `409` | Insufficient stock — the easiest one to trigger, just oversell |
 
-### Idempotency
+### Duplicate sales
 
-`POST /sales` honours the `Idempotency-Key` header that Hyperwyc injects on every mutating
-request. A repeated key returns the sale that key already produced, with `200 OK` rather than
-`201 Created`, and does not decrement stock a second time.
+`POST /sales` deduplicates on `Sale.Id`, which the **client** generates. A sale whose id is
+already recorded is returned as-is rather than written again, so stock is not decremented twice.
 
-This is what makes an offline queue safe to flush more than once — a sale that reached the
-server but whose response never made it back is not recorded twice on replay.
+This is what makes an offline queue safe to flush more than once: a sale that reached the server
+but whose response never made it back is recognised on replay.
+
+Note what is *not* involved. Hyperwyc adds no header and asks nothing of this API — it sends the
+request the app made. The idempotency is a property of the domain model, not of the transport,
+which is the point the sample is making. See
+[Duplicate writes](README.md#duplicate-writes) for other approaches.
 
 ---
 
@@ -142,6 +158,7 @@ not intercept it a second time. See [Auth Handler Placement](README.md#auth-hand
 
 - .NET 10 SDK
 - .NET MAUI workload (`dotnet workload install maui`)
+- A container runtime (Docker Desktop, Podman or similar) — Aspire runs SQL Server in a container
 - An Android emulator — the sample targets Android only, since it is the one target that runs
   from a Windows, macOS or Linux development machine
 
@@ -152,8 +169,12 @@ cd sample
 dotnet run --project Hyperwyc.Sample.AppHost
 ```
 
-Aspire starts the API, provisions a dev tunnel so the emulator can reach it, launches the
-Android emulator and deploys the app. The dashboard shows logs and traces for both.
+Aspire starts SQL Server, waits for it to be ready, starts the API, provisions a dev tunnel so
+the emulator can reach it, launches the Android emulator and deploys the app. The dashboard shows
+logs and traces across all of them.
+
+The database container is marked persistent, so the first run pulls the image and later runs
+reuse it.
 
 To drive the API directly while the app is running:
 

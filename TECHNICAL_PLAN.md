@@ -3,7 +3,9 @@
 **What Hyperwyc does today, and why it is built that way.** This document describes the
 shipped architecture. Anything not yet built lives in [ROADMAP.md](ROADMAP.md) and the
 [backlog index](Backlog/README.md); where current behaviour falls short of the intended
-design, this document says so and links to the item that closes the gap.
+design, this document says so and links to the item that closes the gap. Decisions about
+Hyperwyc's *scope* — what it deliberately does not do, and why — are recorded as
+[architecture decision records](docs/decisions/README.md).
 
 ## Overview
 
@@ -31,7 +33,9 @@ for applications that need explicit offline handling.
 4. **Storage pluggability** — The core package ships with interfaces only; store providers
    are separate, explicitly installed packages.
 5. **No architectural imposition** — Developers do not need to alter their domain models or
-   API design.
+   API design. This is not aspirational, it's a core principle: it is why Hyperwyc adds no headers
+   to outbound requests, and the basis of the scope test in
+   [ADR 0001](docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md).
 6. **Composability** — Integrates via `DelegatingHandler` and works alongside other handlers
    such as auth or logging.
 7. **Predictable behaviour** — Requests sent when possible, responses returned when possible,
@@ -104,8 +108,9 @@ no store is built (and no directory touched) unless something resolves it.
   retry wrapping the entire client (§3), this makes Hyperwyc's retry the outermost, last-resort
   one: it acts only on failures the application's own handlers — refresh-on-401, circuit
   breakers, custom retry — could not resolve. Hyperwyc therefore does not need configuring to
-  avoid interfering with them. The corollary is that an application retry handler nests inside
-  Hyperwyc's, multiplying total attempts.
+  avoid interfering with them. Since a flush makes only one attempt per envelope (§3), an
+  application's own retry handler composes rather than compounds: it retries within that single
+  attempt, and Hyperwyc decides only whether there should be a further attempt at all.
 
 ### 2. Request Handling Logic
 
@@ -114,23 +119,33 @@ The handler branches first on connectivity, then on whether the method is mutati
 
 #### Outgoing Requests (Write Operations)
 
-1. An `Idempotency-Key` header is injected on every mutating request unless the caller
-   supplied one. The same key is reused on replay, enabling server-side duplicate
-   suppression. The envelope's `Id` is taken from this key so the two never diverge.
-2. The handler checks connectivity via `IConnectivityService`.
-3. If **offline**:
+1. The handler checks connectivity via `IConnectivityService`.
+2. If **offline**:
    - Buffers and serialises the request into an envelope.
    - Persists it with `IsSynced = false`.
    - Returns a synthetic `202 Accepted` (`OfflineResponsePolicy.Transparent`, the default)
      or `503 Service Unavailable` (`Signal`), always with `X-Hyperwyc-Status: Queued`.
    - Publishes `OnQueued`.
-4. If **online**:
+3. If **online**:
    - Sends the request immediately.
    - On success, invalidates cached GETs sharing the URL prefix (configurable via
      `ISyncPolicy.ShouldInvalidateCacheOnWrite`), and publishes `OnSynced`.
 
 Online writes are not persisted to the outbox — they either succeed against the origin or
 their failure status is returned to the caller unchanged. Only offline writes are queued.
+
+**No headers are added to outbound requests.** Hyperwyc previously injected an
+`Idempotency-Key` on every mutating request, which is only useful if the backend implements
+it, and if the backend implements it, the client implements it. A transport-level library
+should not make of an API it knows nothing about (issue 39). Duplicate delivery is a
+property of retrying in general, not of Hyperwyc, and it is resolved between an application
+and its API.
+
+What Hyperwyc does guarantee is fidelity: request headers are captured into the envelope and
+replayed byte-identically on every attempt. An application that sets its own idempotency or
+correlation key at the call site — where "this is one logical operation" is actually known — gets
+that key carried through unchanged, however many retries it takes. `Envelope.Id` is internal
+bookkeeping and is never sent.
 
 #### Incoming Responses (Read Operations)
 

@@ -15,8 +15,6 @@ namespace Hyperwyc;
 /// </remarks>
 public sealed class HyperwycHandler : DelegatingHandler
 {
-    private const string _idempotencyKeyHeader = "Idempotency-Key";
-
     /// <summary>
     /// Marks a request as a replay from the outbox, so this handler passes it
     /// straight through instead of intercepting it again.
@@ -120,7 +118,6 @@ public sealed class HyperwycHandler : DelegatingHandler
         if (request.Content is not null)
             await request.Content.LoadIntoBufferAsync(ct).ConfigureAwait(false);
 
-        EnsureIdempotencyKey(request);
         var envelope = Envelope.ForRequest(request, _clientName);
         await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
 
@@ -164,7 +161,6 @@ public sealed class HyperwycHandler : DelegatingHandler
         HttpRequestMessage request,
         CancellationToken ct)
     {
-        EnsureIdempotencyKey(request);
         var response = await base.SendAsync(request, ct).ConfigureAwait(false);
 
         if (response.IsSuccessStatusCode)
@@ -283,17 +279,6 @@ public sealed class HyperwycHandler : DelegatingHandler
         }
 
         return response;
-    }
-
-    /// <summary>
-    /// Ensures a stable <c>Idempotency-Key</c> header exists on
-    /// <paramref name="request"/>. If the caller already supplied one it is
-    /// left unchanged; otherwise a fresh GUID is injected.
-    /// </summary>
-    private static void EnsureIdempotencyKey(HttpRequestMessage request)
-    {
-        if (!request.Headers.Contains(_idempotencyKeyHeader))
-            request.Headers.TryAddWithoutValidation(_idempotencyKeyHeader, Guid.NewGuid().ToString());
     }
 
     /// <summary>

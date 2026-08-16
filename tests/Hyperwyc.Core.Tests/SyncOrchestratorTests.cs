@@ -178,14 +178,19 @@ public class SyncOrchestratorTests
     }
 
     // -------------------------------------------------------------------------
-    // FlushAsync — idempotency key re-injection
+    // FlushAsync — stored headers are replayed as-is
     // -------------------------------------------------------------------------
 
+    // Replaces a test that asserted Hyperwyc re-injected an Idempotency-Key derived from
+    // the envelope id. It no longer adds anything of its own (issue #39); what it must do
+    // is carry the application's headers through unchanged.
     [Fact]
-    public async Task FlushAsync_ReInjectsIdempotencyKeyFromEnvelopeId()
+    public async Task FlushAsync_ReplaysStoredHeadersVerbatim()
     {
         var store = new InMemorySyncStore();
         var envelope = MakeOutboxEnvelope();
+        envelope.RequestHeaders["X-Correlation-Id"] = "abc-123";
+        envelope.RequestHeaders["X-Tenant"] = "acme";
         await store.UpsertAsync(envelope);
 
         HttpRequestMessage? captured = null;
@@ -199,8 +204,8 @@ public class SyncOrchestratorTests
         await orchestrator.FlushAsync();
 
         Assert.NotNull(captured);
-        Assert.True(captured!.Headers.TryGetValues("Idempotency-Key", out var values));
-        Assert.Equal(envelope.Id, values.First());
+        Assert.Equal("abc-123", captured!.Headers.GetValues("X-Correlation-Id").Single());
+        Assert.Equal("acme", captured.Headers.GetValues("X-Tenant").Single());
     }
 
     // -------------------------------------------------------------------------

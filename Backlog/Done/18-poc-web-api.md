@@ -66,6 +66,21 @@ sample/
 - [x] Shared `Product` and `Sale` used by the API.
 - [x] `POC.md` updated for the product/sales domain and the Aspire layout.
 
+## Subsequent change: persistence
+
+The API was later refactored from in-memory state to EF Core over SQL Server, provisioned by
+Aspire as a persistent container, with ASP.NET Core Identity endpoints alongside. Endpoint
+behaviour is unchanged; `POC.md` reflects the new shape.
+
+The original in-memory choice was about keeping the sample easy to run, and Aspire removes that
+cost — the container is provisioned for you. Persisting the catalogue also makes
+`POST /products/regenerate` the deliberate lever for cache staleness, rather than a side effect
+of restarting the process.
+
+The idempotency-key handling described above is gone: [issue 39](39-reconsider-idempotency.md)
+removed Hyperwyc's header injection, and `SalesService` deduplicates on the client-generated
+`Sale.Id` instead.
+
 ## Notes
 
 - Persistence is in-memory — no database setup required, and a restart is itself a useful way

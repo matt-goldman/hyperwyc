@@ -1,5 +1,13 @@
 # Issue 08 — Idempotency-Key Header Injection
 
+> **Superseded by [issue 39](39-reconsider-idempotency.md); the behaviour below was
+> removed.** Injecting the header only pays off if the backend implements it, which is an
+> assumption a transport-level library should not make of an API it knows nothing about — and it
+> conflicts with the "no architectural imposition" principle Hyperwyc is positioned on. Duplicate
+> delivery turned out not to be a Hyperwyc-specific problem at all: any retry can cause it, and it
+> is resolved between an application and its API. Kept for the record; the reasoning is worth
+> preserving rather than erasing.
+
 ## Summary
 
 Automatically inject an `Idempotency-Key` header on every mutating request (`POST`, `PUT`, `PATCH`, `DELETE`), using the envelope's `Id` (GUID) as the key value.

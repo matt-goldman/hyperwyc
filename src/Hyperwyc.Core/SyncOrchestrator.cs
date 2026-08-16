@@ -16,8 +16,6 @@ namespace Hyperwyc;
 /// </remarks>
 internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
 {
-    private const string _idempotencyKeyHeader = "Idempotency-Key";
-
     /// <summary>
     /// Ceiling on a computed backoff, so a generous retry budget cannot schedule an
     /// attempt absurdly far out — or overflow the arithmetic getting there.
@@ -366,15 +364,13 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         // the marker cannot be assumed to carry over.
         request.Options.Set(HyperwycHandler.ReplayMarker, true);
 
+        // Replayed verbatim, including anything the application set for its own
+        // duplicate suppression. Hyperwyc adds nothing of its own.
         foreach (var (key, value) in envelope.RequestHeaders)
         {
             if (!request.Headers.TryAddWithoutValidation(key, value))
                 request.Content?.Headers.TryAddWithoutValidation(key, value);
         }
-
-        // Re-inject the idempotency key from the envelope ID so retries are idempotent.
-        if (!request.Headers.Contains(_idempotencyKeyHeader))
-            request.Headers.TryAddWithoutValidation(_idempotencyKeyHeader, envelope.Id);
 
         if (envelope.RequestBody is not null)
             request.Content = new StringContent(envelope.RequestBody);

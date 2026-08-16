@@ -10,8 +10,9 @@ namespace Hyperwyc.Models;
 public sealed class Envelope
 {
     /// <summary>
-    /// Unique identifier for this envelope, also used as the <c>Idempotency-Key</c>
-    /// header value when the request is (re)sent. Assigned at construction time.
+    /// Unique identifier for this envelope, assigned at construction time. Internal to
+    /// Hyperwyc's own bookkeeping: it is not sent to the server and carries no meaning
+    /// to the application's API.
     /// </summary>
     public string Id { get; init; }
 
@@ -116,14 +117,9 @@ public sealed class Envelope
                 headers[key] = value;
         }
 
-        // Honour a pre-set Idempotency-Key so that replayed requests carry the same Id.
-        var idempotencyKey = request.Headers.TryGetValues("Idempotency-Key", out var keyValues)
-            ? keyValues.First()
-            : null;
-
         return new Envelope
         {
-            Id = idempotencyKey ?? Guid.NewGuid().ToString(),
+            Id = Guid.NewGuid().ToString(),
             Url = request.RequestUri?.ToString() ?? string.Empty,
             Method = request.Method.Method,
             ClientName = clientName,

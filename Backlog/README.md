@@ -14,6 +14,7 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | 🟡 Partial | Implemented in part; remaining work listed in the notes |
 | ⬜ Open | Not started |
 | 💭 Under consideration | Captured as a problem statement; not committed to a milestone |
+| ⛔ Superseded | Was implemented, then deliberately removed or replaced; kept for the reasoning |
 
 | Priority | Meaning |
 |---|---|
@@ -34,7 +35,7 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | 05 | [`SyncEventStream`](Done/05-sync-event-stream.md) | ✅ Done | P0 | Hand-rolled `IObservable<SyncEvent>`; no `System.Reactive` dependency |
 | 06 | [Handler — online path](Done/06-hyperwyc-handler-online-path.md) | ✅ Done | P0 | |
 | 07 | [Handler — offline path](Done/07-hyperwyc-handler-offline-path.md) | ✅ Done | P0 | |
-| 08 | [Idempotency-Key injection](Done/08-idempotency-key-injection.md) | ✅ Done | P0 | |
+| 08 | [Idempotency-Key injection](Done/08-idempotency-key-injection.md) | ⛔ Superseded | P0 | Removed by [39](Done/39-reconsider-idempotency.md) |
 | 09 | [Response cache for reads](Done/09-response-cache-read-operations.md) | ✅ Done | P0 | GET/HEAD/OPTIONS, TTL staleness, body-size cap |
 | 10 | [Write-triggered cache invalidation](Done/10-write-triggered-cache-invalidation.md) | ✅ Done | P0 | URL-prefix derivation strips trailing id/GUID segments |
 | 11 | [Sync flush orchestrator](Done/11-sync-flush-orchestrator.md) | ✅ Done | P0 | Debounce + single-flush semaphore |
@@ -51,11 +52,11 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | 27 | [`CacheStrategy` never applied](Done/27-cache-strategy-not-applied.md) | ✅ Done | P0 | All four presets now honoured on both read paths. Added `X-Hyperwyc-Status: CacheMiss` for a `CacheOnly` read with an empty cache |
 | 29 | [Policy TTL not reaching the evaluator](Done/29-default-ttl-propagation.md) | ✅ Done | P0 | Also fixed a second defect found alongside it: the default policy's TTL silently overwrote an explicitly set `DefaultCacheTtl` |
 | 31 | [Package structure](Done/31-package-structure.md) | ✅ Done | P0 | `Hyperwyc` (batteries, Cabinet default) over `Hyperwyc.Core`. Store is a type parameter on `AddHyperwycCore<TStore>()`; `HyperwycOptions.Store` removed |
+| 39 | [Idempotency is not Hyperwyc's remit](Done/39-reconsider-idempotency.md) | ✅ Done | P0 | Header injection removed; Hyperwyc sends the request the app made and adds nothing. Supersedes 08. Duplicate delivery is a property of retrying in general, resolved between an application and its API |
 | 18 | [Sample — product/sales API](Done/18-poc-web-api.md) | ✅ Done | P0 | Random catalogue, stock-decrementing sales, `Idempotency-Key` dedup and 400/404/409 failure paths, all verified against a running server |
 | **13** | [Connectivity reference implementation](13-connectivity-reference-implementation.md) | ⬜ Open | **P0** | Scope revised: `StaticConnectivityService` ships in core; MAUI stays reference code. `MauiConnectivityService` in core is rejected — it would force platform TFMs and a MAUI workload dependency. Blocks 19 |
 | **16** | [`ResetStoreAsync()`](16-reset-store-async.md) | 🟡 Partial | P0 | Method exists and delegates to `ISyncStore.ResetAsync`. Missing: flush-semaphore coordination (a reset during an in-flight flush is unguarded) and any unit tests |
 | **19** | [Sample — .NET MAUI app](19-poc-maui-app.md) | ⬜ Open | P0 | Aspire AppHost, MAUI project and `Shared` scaffolded; API done ([18](Done/18-poc-web-api.md)). Depends on 13 |
-| **32** | [Reconsider Idempotency](32-reconsider-idempotency.md) | ⬜ Open | P0 | Idempotency key violates the principle of not requiring you to re-architect your API to suit the client |
 
 ## v1.0
 
@@ -67,7 +68,7 @@ Suggested order: 25 first (breaking store change, best done before there are rea
 | 25 | [Binary request/response bodies](25-binary-request-response-bodies.md) | ⬜ Open | **P1 (with 37)** | Correctness gap, not ergonomics: bodies round-trip through `ReadAsStringAsync`. The item records the decision that no migration is required pre-1.0. Batch with 37 — both change the persisted envelope shape |
 | 30 | [Sensitive headers are persisted](30-sensitive-header-exclusion.md) | ⬜ Open | P1 | `Authorization` and `Cookie` are stored verbatim and replayed. Its hard half — how replays acquire credentials — was answered by 37, so this is now just the deny-list |
 | 32 | [Default encryption key](32-default-encryption-key.md) | 🟡 Partial | P1 (small) | **Decided:** keep the path-derived key as the free default. README and TECHNICAL_PLAN §9 now state plainly what it does and does not protect. Remaining: the MAUI `SecureStorage` reference implementation, which needs the POC |
-| 28 | [Retry state is never persisted](Done/28-persisted-retry-state.md) | ✅ Done | P1 | Closed by 38, which persists `RetryCount` and `NextRetryUtc` as the core of its model | `RetryCount` / `NextRetryUtc` / `GetDueForRetryAsync` are built and tested but unused. Decide: persist them, or delete them as dead surface. 
+| 28 | [Retry state is never persisted](Done/28-persisted-retry-state.md) | ✅ Done | P1 | Closed by 38, which persists `RetryCount` and `NextRetryUtc` as the core of its model |
 | 22 | [Per-route policies](22-v1-per-route-policies.md) | ⬜ Open | P1 | Largest v1.0 item. Delivers the per-route escape hatches the README already promises. Reuses the strategy resolution added by 27 |
 | 21 | [`Date` header rewriting](21-v1-date-header-rewriting.md) | ⬜ Open | P1 | Plus the `X-Hyperwyc-Cached-At` header |
 | 23 | [Diagnostics view](23-v1-diagnostics-view.md) | ⬜ Open | P1 | Read-only outbox/dead-letter queries on `IHyperwyc` + a sample page. Reports `RetryCount`, so reads better after 28 |
@@ -91,6 +92,11 @@ request grouping / bulk sync, and GraphQL support.
 
 ## Conventions
 
+- **Scope decisions get an ADR**, not just a backlog item. Anything that constrains what
+  Hyperwyc will and will not take responsibility for belongs in
+  [docs/decisions](../docs/decisions/README.md) — a `Done/` item stops being read, an ADR is
+  meant to be re-read. Run [the scope test](../docs/decisions/README.md#the-standing-scope-test)
+  before filing a feature.
 - **Public surface: start internal, widen on demand.** Pre-1.0 anything can be made public
   later; nothing can be taken back. See [36](Done/36-public-surface.md).
 - **Numbering is sequential and permanent.** Items keep their number when they move to
