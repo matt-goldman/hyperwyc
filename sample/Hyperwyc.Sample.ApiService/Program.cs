@@ -35,10 +35,6 @@ if (app.Environment.IsDevelopment())
 
 app.MapIdentityApi<IdentityUser>();
 
-// -----------------------------------------------------------------------------
-// Endpoints
-// -----------------------------------------------------------------------------
-
 app.MapGet("/", () => Results.Ok(new
 {
     service = "Hyperwyc sample API",
@@ -66,9 +62,6 @@ app.MapGet("/products/{id:int}", async (int id, [FromServices] ProductService se
 })
 .WithName("GetProduct");
 
-// Rebuilds the catalogue from scratch while the app is running. Restarting the API
-// would do the same, but this lets a client be caught holding a stale cache without
-// stopping anything — which is the behaviour worth demonstrating.
 app.MapPost("/products/regenerate", async (
         [FromServices] ProductService productService,
         [FromServices] SalesService salesService,
@@ -80,14 +73,16 @@ app.MapPost("/products/regenerate", async (
 
     return Results.Ok(products);
 })
-.WithName("RegenerateCatalogue");
+.WithName("RegenerateCatalogue")
+.RequireAuthorization();
 
 app.MapGet("/sales", async ([FromServices] SalesService service, CancellationToken token) =>
 {
     var sales = await service.GetAll(token);
     return Results.Ok(sales.OrderByDescending(s => s.SoldAt).ToList());
 })
-.WithName("GetSales");
+.WithName("GetSales")
+.RequireAuthorization();
 
 app.MapPost("/sales", async (
         [FromBody]Sale sale,
@@ -116,7 +111,8 @@ app.MapPost("/sales", async (
 
     return Results.InternalServerError("An error occurred.");
 })
-.WithName("RecordSale");
+.WithName("RecordSale")
+.RequireAuthorization();
 
 app.MapDefaultEndpoints();
 
