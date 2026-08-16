@@ -1,6 +1,24 @@
+using System.Net.Http.Json;
+using Shared;
+
 namespace Hyperwyc.Sample.Maui.Services;
 
-public class SalesApiClient
+public class SalesApiClient(HttpClient client)
 {
+    public async Task<List<Sale>> GetSalesAsync()
+    {
+        var sales = await client.GetFromJsonAsync<List<Sale>>("/sales");
+        return sales ?? [];
+    }
+
+    public async Task<Sale?> RecordSaleAsync(Sale sale)
+    {
+        var result = await client.PostAsJsonAsync("/sales", sale);
+
+        result.EnsureSuccessStatusCode();
+        var resultObj = await result.Content.ReadFromJsonAsync<Sale>();
+
+        return resultObj;
+    }
 
 }

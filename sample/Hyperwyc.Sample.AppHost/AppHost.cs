@@ -12,7 +12,7 @@ var apiService = builder.AddProject<Projects.Hyperwyc_Sample_ApiService>("apiser
 
 var publicDevTunnel = builder.AddDevTunnel("devtunnel-public")
     .WithAnonymousAccess()
-    .WithReference(apiService.GetEndpoint("https"));
+    .WithReference(apiService.GetEndpoint("http"));
 
 var maui = builder.AddMauiProject("mauiapp", "../Hyperwyc.Sample.Maui/Hyperwyc.Sample.Maui.csproj");
 

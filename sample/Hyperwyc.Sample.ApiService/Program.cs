@@ -3,6 +3,7 @@ using Hyperwyc.Sample.ApiService.Persistence;
 using Hyperwyc.Sample.ApiService.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Shared;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -99,7 +100,7 @@ app.MapPost("/sales", async (
 
         return result is null
             ? Results.NotFound(new { error = $"No product with id {sale.ProductId}." })
-            : Results.Created($"/sales/{result.Id}", result);
+            : Results.Created($"/sales/{result.Id}", result); // todo: this endpoint doesn't exist yet
     }
     catch (ArgumentOutOfRangeException e)
     {
@@ -115,5 +116,13 @@ app.MapPost("/sales", async (
 .RequireAuthorization();
 
 app.MapDefaultEndpoints();
+
+// run migrations
+
+using var scope = app.Services.CreateScope();
+var services = scope.ServiceProvider;
+var context = services.GetRequiredService<ApplicationDbContext>();
+await context.Database.EnsureCreatedAsync();
+await context.Database.MigrateAsync();
 
 app.Run();

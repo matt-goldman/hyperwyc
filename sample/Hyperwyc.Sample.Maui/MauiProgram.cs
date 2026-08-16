@@ -29,6 +29,15 @@ public static class MauiProgram
             client.BaseAddress = new Uri("https+http://apiservice");
         });
 
+        builder.Services.AddHttpClient<AuthenticationService>(client =>
+        {
+            client.BaseAddress = new Uri("https+http://apiservice");
+        });
+
+        builder.Services.AddSingleton<ProductsApiClient>();
+        builder.Services.AddSingleton<SalesApiClient>();
+        builder.Services.AddSingleton<AuthenticationService>();
+
 #if DEBUG
 		builder.Logging.AddDebug();
 #endif
