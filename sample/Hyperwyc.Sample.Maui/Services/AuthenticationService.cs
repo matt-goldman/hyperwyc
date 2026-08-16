@@ -101,12 +101,7 @@ public class AuthenticationService(HttpClient client)
 
         var tokenObj = JsonSerializer.Deserialize<StoredToken>(storedToken);
 
-        if (tokenObj is null)
-        {
-            return null;
-        }
-
-        return tokenObj;
+        return tokenObj ?? null;
     }
 }
 
