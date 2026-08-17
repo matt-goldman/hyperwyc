@@ -43,5 +43,9 @@ This page is for developer reference and POC validation; it does not need to be 
 
 ## Notes
 
+- **Depends on [issue 40](40-surface-deferred-outcomes.md).** `DeadLetteredItem` as sketched above
+  says only that something failed, not why. Issue 40 persists the failure detail on the envelope,
+  which is what would let this view answer the question a developer actually opens it to ask.
+
 - These methods are read-only; they do not modify the store.
 - Dead-letter requeue/dismiss is tracked separately in issue #24.

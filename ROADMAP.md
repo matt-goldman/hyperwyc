@@ -39,6 +39,7 @@ to its backlog item where one exists.
 
 **Remaining**
 
+- [ ] Surface the outcome of a deferred request ([40](Backlog/40-surface-deferred-outcomes.md)) — a queued write's eventual success or rejection is currently invisible to the application
 - [ ] `StaticConnectivityService` in core, MAUI connectivity as documented reference code ([13](Backlog/13-connectivity-reference-implementation.md)) — only `AlwaysOnlineConnectivityService` ships today
 - [ ] `IHyperwyc.ResetStoreAsync()` — flush coordination and test coverage ([16](Backlog/16-reset-store-async.md)); the method itself exists
 - [ ] Sample .NET MAUI app ([19](Backlog/19-poc-maui-app.md)) — see [POC.md](POC.md)

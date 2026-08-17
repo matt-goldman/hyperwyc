@@ -54,9 +54,10 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | 31 | [Package structure](Done/31-package-structure.md) | ✅ Done | P0 | `Hyperwyc` (batteries, Cabinet default) over `Hyperwyc.Core`. Store is a type parameter on `AddHyperwycCore<TStore>()`; `HyperwycOptions.Store` removed |
 | 39 | [Idempotency is not Hyperwyc's remit](Done/39-reconsider-idempotency.md) | ✅ Done | P0 | Header injection removed; Hyperwyc sends the request the app made and adds nothing. Supersedes 08. Duplicate delivery is a property of retrying in general, resolved between an application and its API |
 | 18 | [Sample — product/sales API](Done/18-poc-web-api.md) | ✅ Done | P0 | Random catalogue, stock-decrementing sales, `Idempotency-Key` dedup and 400/404/409 failure paths, all verified against a running server |
+| **40** | [Surface the outcome of a deferred request](40-surface-deferred-outcomes.md) | ⬜ Open | **P0** | `OnFailed` carries only type/URL/method/timestamp — not the status, the response body, or *which* queued write it was. A consumer cannot act on a rejection it cannot see. Blocks 19's per-sale status |
 | **13** | [Connectivity reference implementation](13-connectivity-reference-implementation.md) | ⬜ Open | **P0** | Scope revised: `StaticConnectivityService` ships in core; MAUI stays reference code. `MauiConnectivityService` in core is rejected — it would force platform TFMs and a MAUI workload dependency. Blocks 19 |
 | **16** | [`ResetStoreAsync()`](16-reset-store-async.md) | 🟡 Partial | P0 | Method exists and delegates to `ISyncStore.ResetAsync`. Missing: flush-semaphore coordination (a reset during an in-flight flush is unguarded) and any unit tests |
-| **19** | [Sample — .NET MAUI app](19-poc-maui-app.md) | ⬜ Open | P0 | Aspire AppHost, MAUI project and `Shared` scaffolded; API done ([18](Done/18-poc-web-api.md)). Depends on 13 |
+| **19** | [Sample — .NET MAUI app](19-poc-maui-app.md) | ⬜ Open | P0 | Aspire AppHost, MAUI project and `Shared` scaffolded; API done ([18](Done/18-poc-web-api.md)). Depends on 13 and 40 — its per-sale "Failed" badge needs event correlation |
 
 ## v1.0
 
