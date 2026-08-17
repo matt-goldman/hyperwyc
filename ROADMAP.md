@@ -50,6 +50,12 @@ to its backlog item where one exists.
 
 > **Goal:** Correctness, developer ergonomics, and operational visibility
 
+- [ ] Honour the server's cacheability directives ([41](Backlog/41-honour-cacheability-directives.md)) — `no-store` is currently ignored and the response written to disk
+- [ ] Bound the cache and evict ([42](Backlog/42-cache-eviction.md)) — nothing currently limits total entries or size
+- [ ] Honour `Vary` ([43](Backlog/43-honour-vary-header.md)) — the cache key is the URL alone, so content-negotiated endpoints serve the wrong variant
+- [ ] Cache generation, so an app upgrade discards incompatible cached bodies ([44](Backlog/44-cache-generation.md))
+- [ ] `StaleWhileRevalidate` strategy ([45](Backlog/45-stale-while-revalidate.md)) — instant from cache, refreshed in the background
+- [ ] Conditional revalidation with `ETag` / `Last-Modified` ([46](Backlog/46-conditional-requests.md)) — a `304` instead of a full re-download
 - [ ] Binary request and response bodies ([25](Backlog/25-binary-request-response-bodies.md)) — lifts the current text-only limitation; breaking change to the persisted shape, so it lands first
 - [ ] Sensitive-header exclusion from persisted envelopes ([30](Backlog/30-sensitive-header-exclusion.md)) — its credentials question was answered by [37](Backlog/Done/37-replay-through-pipeline.md)
 - [ ] MAUI `SecureStorage` reference implementation for the store encryption key ([32](Backlog/32-default-encryption-key.md)) — the path-derived key stays as the free default, and is now documented as such

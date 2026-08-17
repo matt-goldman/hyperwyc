@@ -41,6 +41,58 @@ again.
   most useful part.
 - Link to the backlog item that implemented it, so the *what* is one hop away.
 
+## Reference models
+
+Hyperwyc is positioned as "a Service Worker for .NET", so **Service Workers and
+[Workbox](https://developer.chrome.com/docs/workbox) are the reference model** — the place to
+look before inventing a mechanism, and the vocabulary to borrow when one already has a name.
+
+Some of that is deliberate borrowing and some is convergence, both worth knowing about:
+
+| Hyperwyc | Web equivalent |
+|---|---|
+| `HyperwycHandler` in the `HttpClient` pipeline | The `fetch` event and `respondWith` |
+| `CacheStrategy` — cache-first, API-first, cache-only, network-only | Workbox's strategies, one for one |
+| `DefaultCacheTtl`, `MaxCachedResponseBodyBytes` | Workbox's `ExpirationPlugin`, `CacheableResponsePlugin` |
+| Outbox, and replay on connectivity change | Background Sync, and Workbox's `BackgroundSyncPlugin` queue |
+| `IObservable<SyncEvent>` | `clients.postMessage`, and `BroadcastUpdatePlugin` for cache updates |
+| Prefetch on boot (v2.0) | Precaching |
+| Background sync scheduler (v2.0) | Periodic Background Sync |
+
+Two of those were arrived at independently and only recognised afterwards, which is reassuring
+rather than embarrassing: the retry model in
+[issue 38](../../Backlog/Done/38-retry-classification.md) is essentially Background Sync's, and
+the conclusion in [issue 34](../../Backlog/Done/34-app-lifecycle-integration.md) that durability
+comes from persistence rather than shutdown hooks is exactly why Background Sync is
+browser-managed rather than page-managed.
+
+### Where the analogy does not carry
+
+- **Opaque responses, CORS, navigation preload, `skipWaiting`/`clients.claim`, Push.** Browser
+  concerns with no counterpart in an in-process HTTP handler.
+- **Range and partial responses.** Workbox has `createPartialResponse`; treated as out of scope
+  alongside streaming bodies.
+- **Storage quota.** This one inverts. A browser hands an origin a quota and evicts under
+  pressure, so a Service Worker cooperates with a system that is already managing growth.
+  Hyperwyc has no such backstop, which is why bounding the cache
+  ([issue 42](../../Backlog/42-cache-eviction.md)) is work we have to do rather than behaviour we
+  inherit.
+
+### The trap: borrowing a stance without its precondition
+
+Worth stating on its own, because it was found the hard way.
+
+A Service Worker's cache ignores `Cache-Control` entirely. That is defensible **because a
+Service Worker caches only what you opted in, route by route** — the developer named the
+resource, so the server's opinion is secondary to an explicit local decision.
+
+Hyperwyc caches every GET by default. It had adopted the same stance without the opt-in that
+justified it, and so was storing responses whose servers had said `no-store`
+([issue 41](../../Backlog/41-honour-cacheability-directives.md)).
+
+When borrowing from the reference model, borrow the *reasoning*, not just the behaviour, and
+check that the conditions making it safe there also hold here.
+
 ## The standing scope test
 
 [ADR 0001](0001-idempotency-is-not-hyperwycs-remit.md) derives a test for whether a capability

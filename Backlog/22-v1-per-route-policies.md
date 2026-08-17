@@ -49,6 +49,11 @@ options.RoutePolicy = new RoutePolicyMap()
 
 ## Notes
 
+- **Rename `SyncPolicy.ApiFirst()` to `NetworkFirst()` while touching this area.** It is
+  Workbox's name for the same strategy, and Hyperwyc already uses `NetworkOnly`, so the current
+  naming is inconsistent internally as well as diverging from the vocabulary developers arrive
+  with. Free before release.
+
 - Full regex/glob pattern matching is not required for v1.0; prefix/suffix wildcards are sufficient.
 - The staleness evaluator receives the TTL from the matched policy; `TtlStalenessEvaluator` should accept a TTL parameter.
 - `OfflineResponsePolicy.Transparent` (200 OK) is the global default. Per-route `Signal` is the opt-in for routes where callers need explicit offline indication.

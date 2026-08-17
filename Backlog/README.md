@@ -61,11 +61,22 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 
 ## v1.0
 
-Suggested order: 25 first (breaking store change, best done before there are real users), then
-30, then the ergonomics items.
+Suggested order: **41** first — it is on-by-default behaviour contradicting an explicit server
+instruction. Then **25 with 43 and 44**, which all change how a cached entry is keyed or stored
+and share one migration conversation. Then **46 before 45**, since cheap revalidation is what
+makes stale-while-revalidate affordable. Then 30 and the ergonomics items.
+
+Items 41–46 came out of an audit against Service Worker and Workbox — see
+[reference models](../docs/decisions/README.md#reference-models).
 
 | # | Item | Status | Priority | Notes |
 |---|---|---|---|---|
+| 41 | [Honour cacheability directives](41-honour-cacheability-directives.md) | ⬜ Open | **P1 (first)** | `Cache-Control: no-store` is ignored and the response written to disk. Service Workers ignore these headers too, but only because you opt in route by route — Hyperwyc caches every GET, so it inherited the stance without the precondition |
+| 42 | [Cache grows without bound](42-cache-eviction.md) | ⬜ Open | P1 | Individual bodies are capped; the cache as a whole is not. No entry limit, size limit or eviction. Browsers give you a quota and evict for you — nothing does that here |
+| 43 | [`Vary` not honoured](43-honour-vary-header.md) | ⬜ Open | P1 | Cache keyed on URL alone, so a content-negotiated endpoint serves the wrong variant. Silent, and looks like a server bug. Sequence with 25 — both change how entries are keyed |
+| 44 | [No cache generation](44-cache-generation.md) | ⬜ Open | P1 | Cached bodies outlive app upgrades, so changed DTO shapes deserialise wrongly. Land with 25, which already carries a one-time reset |
+| 45 | [`StaleWhileRevalidate` strategy](45-stale-while-revalidate.md) | ⬜ Open | P1 | The one Workbox strategy missing. Instant render from cache plus a silent refresh — the right behaviour for a catalogue screen. Needs 40's richer `OnUpdated` |
+| 46 | [Conditional revalidation](46-conditional-requests.md) | ⬜ Open | P1 | `ETag` is already stored and never used, so every refresh re-downloads the whole body. A `304` instead would be a real saving on mobile. Composes with 41 and 45 |
 | 25 | [Binary request/response bodies](25-binary-request-response-bodies.md) | ⬜ Open | **P1 (with 37)** | Correctness gap, not ergonomics: bodies round-trip through `ReadAsStringAsync`. The item records the decision that no migration is required pre-1.0. Batch with 37 — both change the persisted envelope shape |
 | 30 | [Sensitive headers are persisted](30-sensitive-header-exclusion.md) | ⬜ Open | P1 | `Authorization` and `Cookie` are stored verbatim and replayed. Its hard half — how replays acquire credentials — was answered by 37, so this is now just the deny-list |
 | 32 | [Default encryption key](32-default-encryption-key.md) | 🟡 Partial | P1 (small) | **Decided:** keep the path-derived key as the free default. README and TECHNICAL_PLAN §9 now state plainly what it does and does not protect. Remaining: the MAUI `SecureStorage` reference implementation, which needs the POC |
