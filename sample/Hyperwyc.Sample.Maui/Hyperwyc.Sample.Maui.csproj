@@ -73,6 +73,7 @@
 
     <ItemGroup>
 	  <ProjectReference Include="..\..\src\Hyperwyc.Core\Hyperwyc.Core.csproj" />
+	  <ProjectReference Include="..\..\src\Hyperwyc\Hyperwyc.csproj" />
 	  <ProjectReference Include="..\Hyperwyc.Sample.MauiServiceDefaults\Hyperwyc.Sample.MauiServiceDefaults.csproj" />
 	  <ProjectReference Include="..\Shared\Shared.csproj" />
 	</ItemGroup>

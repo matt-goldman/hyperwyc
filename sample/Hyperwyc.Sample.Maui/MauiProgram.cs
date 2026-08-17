@@ -19,15 +19,24 @@ public static class MauiProgram
 
         builder.AddServiceDefaults();
 
+        builder.Services.AddHyperwyc(configure: config =>
+        {
+            config.Connectivity = new MauiConnectivityService();
+        });
+
         builder.Services.AddHttpClient<ProductsApiClient>(client =>
         {
             client.BaseAddress = new Uri("https+http://apiservice");
-        });
+        })
+        .AddHyperwycHandler()
+        .AddHttpMessageHandler<AuthHandler>();
 
         builder.Services.AddHttpClient<SalesApiClient>(client =>
         {
             client.BaseAddress = new Uri("https+http://apiservice");
-        });
+        })
+        .AddHyperwycHandler()
+        .AddHttpMessageHandler<AuthHandler>();
 
         builder.Services.AddHttpClient<AuthenticationService>(client =>
         {
