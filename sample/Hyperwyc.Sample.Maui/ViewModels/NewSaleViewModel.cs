@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Hyperwyc.Sample.Maui.Services;
 using Shared;
 
@@ -14,12 +15,14 @@ public partial class NewSaleViewModel(SalesApiClient client) : ObservableObject,
 
     [ObservableProperty]
     public partial Product? Product { get; set; }
+
     public void ApplyQueryAttributes(IDictionary<string, object> query)
     {
         Product = query["product"] as Product;
         ProductMissing = Product == null;
     }
 
+    [RelayCommand]
     private async Task RecordSale()
     {
         var sale = new Sale()
@@ -31,10 +34,16 @@ public partial class NewSaleViewModel(SalesApiClient client) : ObservableObject,
 
         var result = await client.RecordSaleAsync(sale);
 
+        var isValid = ValidateSale(sale, result);
 
+        var title = isValid ? "Sale Recorded" : "Sale Failed";
+
+        var message = isValid ? $"Sale of {sale.Quantity} x {Product.Name} successfully recorded" : "Something went wrong and the sale could not be recorded";
+
+        await Application.Current!.Windows[0].Page!.DisplayAlertAsync(title, message, "Ok");
     }
 
-    private bool ValidateSale(Sale soldItem, Sale? returnedItem)
+    private static bool ValidateSale(Sale soldItem, Sale? returnedItem)
     {
         if (returnedItem is null) return false;
 
