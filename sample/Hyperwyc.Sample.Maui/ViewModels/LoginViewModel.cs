@@ -18,11 +18,27 @@ public partial class LoginViewModel(AuthenticationService authService) : Observa
         try
         {
             await authService.LoginAsync(Email, Password);
+            await Application.Current!.Windows[0].Page!.DisplayAlertAsync("Success", "You are now logged in.", "OK");
+            await Application.Current!.Windows[0].Page!.Navigation.PopModalAsync();
         }
         catch (Exception e)
         {
             Console.WriteLine(e);
             await Application.Current!.Windows[0].Page!.DisplayAlertAsync("Error", e.Message, "OK");
+        }
+    }
+
+    [RelayCommand]
+    public async Task Register()
+    {
+        try
+        {
+            await authService.RegisterAsync(Email, Password);
+            await Application.Current!.Windows[0].Page!.DisplayAlertAsync("Success", "You are now registered, please login", "OK");
+        }
+        catch (Exception)
+        {
+            await Application.Current!.Windows[0].Page!.DisplayAlertAsync("Error", "Couldn't register you, please make sure you are online and not using an existing account.", "OK");
         }
     }
 }

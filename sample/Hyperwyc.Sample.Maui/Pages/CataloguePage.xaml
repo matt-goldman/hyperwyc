@@ -2,8 +2,66 @@
 
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Hyperwyc.Sample.Maui.ViewModels"
+             xmlns:models="clr-namespace:Shared;assembly=Shared"
+             x:DataType="vm:CatalogueViewModel"
              x:Class="Hyperwyc.Sample.Maui.Pages.CataloguePage">
-    <ContentPage.Content>
-        
-    </ContentPage.Content>
+    <Grid>
+        <VerticalStackLayout HorizontalOptions="Fill"
+                             VerticalOptions="Fill">
+            <Label Text="Product Catalogue"
+                   FontSize="Title"
+                   VerticalOptions="Center"
+                   HorizontalOptions="Center"
+                   HorizontalTextAlignment="Center"
+                   Margin="20"/>
+
+            <CollectionView ItemsSource="{Binding Products}"
+                            SelectionMode="Single"
+                            SelectionChangedCommand="{Binding SellProductCommand}"
+                            SelectedItem="{Binding SelectedProduct}">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <Border StrokeShape="RoundRectangle 20"
+                                Margin="20"
+                                Padding="10">
+                            <Grid HorizontalOptions="Fill"
+                                  VerticalOptions="Fill"
+                                  HeightRequest="100"
+                                  ColumnDefinitions="*,*"
+                                  RowDefinitions="*,*"
+                                  x:DataType="models:Product">
+                                <Label Grid.ColumnSpan="2"
+                                       FontSize="Header"
+                                       Text="{Binding Name}"/>
+
+                                <VerticalStackLayout Grid.Row="1">
+                                    <Label FontAttributes="Bold"
+                                           FontFamily="OpenSansSemibold"
+                                           Text="Price" />
+
+                                    <Label Text="{Binding Price, StringFormat='0:C'}" />
+                                </VerticalStackLayout>
+
+                                <VerticalStackLayout Grid.Row="1"
+                                                     Grid.Column="1">
+                                    <Label FontAttributes="Bold"
+                                           FontFamily="OpenSansSemibold"
+                                           Text="Available" />
+
+                                    <Label Text="{Binding StockLevel}" />
+                                </VerticalStackLayout>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </VerticalStackLayout>
+
+        <ActivityIndicator VerticalOptions="Center"
+                           HorizontalOptions="Center"
+                           HeightRequest="20"
+                           IsVisible="{Binding IsLoading}"
+                           IsRunning="True" />
+    </Grid>
 </ContentPage>

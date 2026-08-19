@@ -2,8 +2,27 @@
 
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Hyperwyc.Sample.Maui.ViewModels"
+             x:DataType="vm:LoginViewModel"
              x:Class="Hyperwyc.Sample.Maui.Pages.LoginPage">
-    <ContentPage.Content>
-        
-    </ContentPage.Content>
+    <VerticalStackLayout HorizontalOptions="Center"
+                         VerticalOptions="Center"
+                         Spacing="20">
+        <Entry Placeholder="Enter your email"
+               Text="{Binding Email}"/>
+
+        <Entry Placeholder="Password"
+               Text="{Binding Password}"
+               IsPassword="True" />
+
+        <HorizontalStackLayout VerticalOptions="Center"
+                               HorizontalOptions="Center"
+                               Spacing="20">
+            <Button Text="Register"
+                    Command="{Binding RegisterCommand}"/>
+
+            <Button Text="Login"
+                    Command="{Binding LoginCommand}" />
+        </HorizontalStackLayout>
+    </VerticalStackLayout>
 </ContentPage>

@@ -66,10 +66,13 @@ public class AuthenticationService(HttpClient client)
         return storedToken?.AccessToken;
     }
 
-    public void Logout()
+    public async Task<bool> GetIsLoggedInAsync()
     {
-        SecureStorage.Default.Remove("token");
+        var storedToken = await GetStoredTokenAsync();
+        return storedToken is not null;
     }
+
+    public static void Logout() => SecureStorage.Default.Remove("token");
 
     private async Task RefreshTokenAsync()
     {
@@ -91,7 +94,7 @@ public class AuthenticationService(HttpClient client)
         await SecureStorage.Default.SetAsync("token", storedTokenJson);
     }
 
-    private async Task<StoredToken?> GetStoredTokenAsync()
+    private static async Task<StoredToken?> GetStoredTokenAsync()
     {
         var storedToken = await SecureStorage.Default.GetAsync("token");
         if (storedToken is null)

@@ -2,8 +2,63 @@
 
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Hyperwyc.Sample.Maui.ViewModels"
+             xmlns:models="clr-namespace:Shared;assembly=Shared"
+             x:DataType="vm:SalesViewModel"
              x:Class="Hyperwyc.Sample.Maui.Pages.SalesPage">
-    <ContentPage.Content>
-        
-    </ContentPage.Content>
+    <Grid>
+        <VerticalStackLayout HorizontalOptions="Fill"
+                             VerticalOptions="Fill">
+            <Label Text="Product Catalogue"
+                   FontSize="Title"
+                   VerticalOptions="Center"
+                   HorizontalOptions="Center"
+                   HorizontalTextAlignment="Center"
+                   Margin="20"/>
+
+            <CollectionView ItemsSource="{Binding Sales}">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <Border StrokeShape="RoundRectangle 20"
+                                Margin="20"
+                                Padding="10">
+                            <Grid HorizontalOptions="Fill"
+                                  VerticalOptions="Fill"
+                                  HeightRequest="100"
+                                  ColumnDefinitions="*,*"
+                                  RowDefinitions="*,*"
+                                  x:DataType="models:Sale">
+                                <Label Grid.ColumnSpan="2"
+                                       FontSize="Header"
+                                       Text="{Binding ProductName}"/>
+
+                                <VerticalStackLayout Grid.Row="1">
+                                    <Label FontAttributes="Bold"
+                                           FontFamily="OpenSansSemibold"
+                                           Text="Quantity" />
+
+                                    <Label Text="{Binding Quantity}" />
+                                </VerticalStackLayout>
+
+                                <VerticalStackLayout Grid.Row="1"
+                                                     Grid.Column="1">
+                                    <Label FontAttributes="Bold"
+                                           FontFamily="OpenSansSemibold"
+                                           Text="Sold at" />
+
+                                    <Label Text="{Binding SoldAt, StringFormat='0:dd MMM yyyy'}" />
+                                </VerticalStackLayout>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </VerticalStackLayout>
+
+        <ActivityIndicator VerticalOptions="Center"
+                           HorizontalOptions="Center"
+                           HeightRequest="20"
+                           IsVisible="{Binding IsLoading}"
+                           IsRunning="True" />
+    </Grid>
 </ContentPage>

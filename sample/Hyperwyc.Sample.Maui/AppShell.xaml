@@ -3,12 +3,22 @@
     x:Class="Hyperwyc.Sample.Maui.AppShell"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-    xmlns:local="clr-namespace:Hyperwyc.Sample.Maui"
+    xmlns:pages="clr-namespace:Hyperwyc.Sample.Maui.Pages"
     Title="Hyperwyc.Sample.Maui">
 
-    <ShellContent
-        Title="Home"
-        ContentTemplate="{DataTemplate local:MainPage}"
-        Route="MainPage" />
+    <FlyoutItem Title="Catalogue">
+        <ShellContent
+            Title="Products"
+            ContentTemplate="{DataTemplate pages:CataloguePage}"
+            Route="Products" />
+
+        <ShellContent
+            Title="Sales"
+            ContentTemplate="{DataTemplate pages:SalesPage}"
+            Route="Sales" />
+    </FlyoutItem>
+
+    <MenuItem Text="Login"
+              Clicked="LoginMenuItem_OnClicked"/>
 
 </Shell>

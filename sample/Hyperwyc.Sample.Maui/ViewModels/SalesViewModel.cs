@@ -5,14 +5,33 @@ using Shared;
 
 namespace Hyperwyc.Sample.Maui.ViewModels;
 
-public partial class SalesViewModel(SalesApiClient client) : ObservableObject
+public partial class SalesViewModel(
+    SalesApiClient client,
+    AuthenticationService authService) : ObservableObject
 {
     public ObservableCollection<Sale> Sales { get; set; } = [];
 
+    [ObservableProperty]
+    public partial bool IsLoading { get; set; }
+
     public async Task LoadApiSales()
     {
-        var apiSales = await client.GetSalesAsync();
+        var isLoggedIn = await authService.GetIsLoggedInAsync();
 
-        Sales = new ObservableCollection<Sale>(apiSales);
+        if (isLoggedIn)
+        {
+            IsLoading = true;
+
+            var apiSales = await client.GetSalesAsync();
+
+            Sales = new ObservableCollection<Sale>(apiSales);
+
+            IsLoading = false;
+        }
+        else
+        {
+            await Application.Current!.Windows[0].Page!.DisplayAlertAsync("Not logged in", "You must be logged in to view sales. Please log in via the menu.", "OK");
+            await Shell.Current.GoToAsync("..");
+        }
     }
 }

@@ -39,6 +39,7 @@ public class SalesService(ApplicationDbContext context)
             ProductId   = sale.ProductId,
             Quantity    = sale.Quantity,
             SoldAt      = DateTime.UtcNow,
+            ProductName = product.Name,
         };
 
         context.Sales.Add(recorded);

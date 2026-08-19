@@ -1,16 +1,18 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using Hyperwyc.Sample.Maui.ViewModels;
 
 namespace Hyperwyc.Sample.Maui.Pages;
 
 public partial class NewSalePage : ContentPage
 {
-    public NewSalePage()
+    private readonly NewSaleViewModel _viewModel;
+
+    public NewSalePage(NewSaleViewModel viewModel)
     {
         InitializeComponent();
+        _viewModel = viewModel;
+        BindingContext = _viewModel;
     }
+
+    private void InputView_OnTextChanged(object? sender, TextChangedEventArgs e) => _viewModel.ValidateSale();
 }
 
