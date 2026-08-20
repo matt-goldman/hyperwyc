@@ -12,14 +12,14 @@
                              Spacing="30">
 
             <Label Text="New Sale"
-                   FontSize="Title"
+                   FontSize="24"
                    VerticalOptions="Center"
                    HorizontalOptions="Center"
                    HorizontalTextAlignment="Center"
                    Margin="20"/>
 
             <Label Text="Error: product missing"
-                   FontSize="Title"
+                   FontSize="18"
                    TextColor="Red"
                    VerticalOptions="Center"
                    HorizontalOptions="Center"

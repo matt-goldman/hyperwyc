@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <RootNamespace>Hyperwyc</RootNamespace>
     <Description>Core of Hyperwyc, a service-worker-inspired HTTP handler for .NET. Contains the handler, sync orchestrator and storage interfaces, with no storage dependency. Install this only if you are supplying your own ISyncStore — most consumers want the Hyperwyc package instead.</Description>

@@ -10,7 +10,7 @@
         <VerticalStackLayout HorizontalOptions="Fill"
                              VerticalOptions="Fill">
             <Label Text="Product Catalogue"
-                   FontSize="Title"
+                   FontSize="24"
                    VerticalOptions="Center"
                    HorizontalOptions="Center"
                    HorizontalTextAlignment="Center"
@@ -32,7 +32,7 @@
                                   RowDefinitions="*,*"
                                   x:DataType="models:Product">
                                 <Label Grid.ColumnSpan="2"
-                                       FontSize="Header"
+                                       FontSize="16"
                                        Text="{Binding Name}"/>
 
                                 <VerticalStackLayout Grid.Row="1">
