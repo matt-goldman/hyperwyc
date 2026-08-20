@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Hyperwyc.Sample.ApiService.Persistence;
 using Hyperwyc.Sample.ApiService.Services;
 using Microsoft.AspNetCore.Identity;
@@ -15,6 +14,9 @@ builder.AddServiceDefaults();
 builder.Services.AddProblemDetails();
 
 builder.AddSqlServerDbContext<ApplicationDbContext>(connectionName: "database");
+
+builder.Services.AddScoped<ProductService>();
+builder.Services.AddScoped<SalesService>();
 
 builder.Services.AddAuthorization();
 
