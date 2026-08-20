@@ -28,27 +28,43 @@ public static class MauiProgram
             config.Connectivity = new MauiConnectivityService();
         });
 
+        // MAUI integration with Aspire doesn't currently work.
+        // Specific issue currently blocking this:
+        // https://github.com/microsoft/aspire/pull/19383
+        // Other fixes pending but this is the one that should
+        // unblock this and let Aspire actually start the MAUI
+        // app. After that, remains to be seen what other fixes
+        // will be required. Once it's working you can use Aspire
+        // here, and change the base address on all HTTPClients
+        // to `new Uri("https+http://aspireservice");`. In the
+        // meantime, start your AppHost (and devtunnel separately
+        // if needed) and set the address here. Alternatively
+        // as we are only using the Android emulator we should
+        // be able to use the special host address. Just can't
+        // use it easily with HTTPS, but that's not a blocker.
+        const string apiAddress = "http://10.0.2.2:5401";
+
+        builder.Services.AddSingleton<AuthHandler>();
+
         builder.Services.AddHttpClient<ProductsApiClient>(client =>
         {
-            client.BaseAddress = new Uri("https+http://apiservice");
+            client.BaseAddress = new Uri(apiAddress);
         })
         .AddHyperwycHandler()
         .AddHttpMessageHandler<AuthHandler>();
 
         builder.Services.AddHttpClient<SalesApiClient>(client =>
         {
-            client.BaseAddress = new Uri("https+http://apiservice");
+            client.BaseAddress = new Uri(apiAddress);
         })
         .AddHyperwycHandler()
         .AddHttpMessageHandler<AuthHandler>();
 
         builder.Services.AddHttpClient<AuthenticationService>(client =>
         {
-            client.BaseAddress = new Uri("https+http://apiservice");
+            client.BaseAddress = new Uri(apiAddress);
         });
 
-        builder.Services.AddSingleton<ProductsApiClient>();
-        builder.Services.AddSingleton<SalesApiClient>();
         builder.Services.AddSingleton<AuthenticationService>();
 
         builder.Services.AddSingleton<CatalogueViewModel>();
