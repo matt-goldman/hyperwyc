@@ -7,7 +7,7 @@ public class SalesApiClient(HttpClient client)
 {
     public async Task<List<Sale>> GetSalesAsync()
     {
-        var sales = await client.GetFromJsonAsync<List<Sale>>("/sales");
+        var sales = await client.GetFromJsonAsync<List<Sale>>("/sales", options: JsonOptions.GlobalOptions);
         return sales ?? [];
     }
 

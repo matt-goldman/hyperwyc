@@ -22,7 +22,11 @@ public partial class CatalogueViewModel(
     {
         IsLoading = true;
         var apiProducts = await productsClient.GetProductsAsync();
-        Products = new ObservableCollection<Product>(apiProducts);
+        Products.Clear();
+        foreach (var apiProduct in apiProducts)
+        {
+            Products.Add(apiProduct);
+        }
         IsLoading = false;
     }
 

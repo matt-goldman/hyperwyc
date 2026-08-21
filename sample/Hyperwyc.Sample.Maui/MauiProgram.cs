@@ -44,7 +44,7 @@ public static class MauiProgram
         // use it easily with HTTPS, but that's not a blocker.
         const string apiAddress = "http://10.0.2.2:5401";
 
-        builder.Services.AddSingleton<AuthHandler>();
+        builder.Services.AddTransient<AuthHandler>();
 
         builder.Services.AddHttpClient<ProductsApiClient>(client =>
         {

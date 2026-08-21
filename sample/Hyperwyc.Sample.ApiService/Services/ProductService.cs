@@ -20,13 +20,13 @@ public class ProductService(ApplicationDbContext context)
 
     public async Task<Product?> GetProduct(int id, CancellationToken token)
     {
-        var product = await context.Products.FindAsync(id, token);
+        var product = await context.Products.FindAsync([id], token);
         return product;
     }
 
     public async Task Regenerate(CancellationToken token)
     {
-        var products = await GetProducts(token);
+        var products = await context.Products.ToListAsync(token);
         var catalogue = new Catalogue();
         context.Products.RemoveRange(products);
         context.Products.AddRange(catalogue.Products);

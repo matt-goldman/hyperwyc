@@ -33,23 +33,33 @@
                                   x:DataType="models:Product">
                                 <Label Grid.ColumnSpan="2"
                                        FontSize="16"
+                                       HorizontalOptions="Center"
+                                       HorizontalTextAlignment="Center"
                                        Text="{Binding Name}"/>
 
                                 <VerticalStackLayout Grid.Row="1">
                                     <Label FontAttributes="Bold"
                                            FontFamily="OpenSansSemibold"
+                                           HorizontalOptions="Center"
+                                           HorizontalTextAlignment="Center"
                                            Text="Price" />
 
-                                    <Label Text="{Binding Price, StringFormat='0:C'}" />
+                                    <Label Text="{Binding Price, StringFormat='0:C'}"
+                                           HorizontalOptions="Center"
+                                           HorizontalTextAlignment="Center"/>
                                 </VerticalStackLayout>
 
                                 <VerticalStackLayout Grid.Row="1"
                                                      Grid.Column="1">
                                     <Label FontAttributes="Bold"
                                            FontFamily="OpenSansSemibold"
-                                           Text="Available" />
+                                           Text="Available"
+                                           HorizontalOptions="Center"
+                                           HorizontalTextAlignment="Center"/>
 
-                                    <Label Text="{Binding StockLevel}" />
+                                    <Label Text="{Binding StockLevel}"
+                                           HorizontalOptions="Center"
+                                           HorizontalTextAlignment="Center"/>
                                 </VerticalStackLayout>
                             </Grid>
                         </Border>

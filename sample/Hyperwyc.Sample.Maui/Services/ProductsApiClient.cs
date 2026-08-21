@@ -7,7 +7,7 @@ public class ProductsApiClient(HttpClient client)
 {
     public async Task<List<Product>> GetProductsAsync()
     {
-        var products = await client.GetFromJsonAsync<List<Product>>("/products");
+        var products = await client.GetFromJsonAsync<List<Product>>("/products", options: JsonOptions.GlobalOptions);
         return products ?? [];
     }
 

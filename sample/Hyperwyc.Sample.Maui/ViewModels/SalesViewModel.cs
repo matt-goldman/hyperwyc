@@ -24,7 +24,11 @@ public partial class SalesViewModel(
 
             var apiSales = await client.GetSalesAsync();
 
-            Sales = new ObservableCollection<Sale>(apiSales);
+            Sales.Clear();
+            foreach (var sale in apiSales)
+            {
+                Sales.Add(sale);
+            }
 
             IsLoading = false;
         }
