@@ -16,7 +16,7 @@ replayed transparently — the consuming code never needs to branch on online/of
 
 Its core design prioritises invisibility: offline writes return `202 Accepted` by default
 (with an `X-Hyperwyc-Status: Queued` header for code that wants to know), offline reads with
-no cached data return `200 OK` with an empty body, and cached reads are served with their
+no cached data return `200 OK` with a `null` body, and cached reads are served with their
 originally cached status codes. An opt-in `OfflineResponsePolicy.Signal` mode returns `503`
 for applications that need explicit offline handling.
 
@@ -47,7 +47,7 @@ for applications that need explicit offline handling.
 
 | Package | Assembly | Contents |
 |---------|----------|----------|
-| `Hyperwyc.Core` | `Hyperwyc.Core.dll` | `HyperwycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `SyncEventStream`, `IHyperwyc`, `InMemorySyncStore`, `AlwaysOnlineConnectivityService`, `TtlStalenessEvaluator`. Depends on `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Hosting.Abstractions` and `Microsoft.Extensions.Http`; no storage dependency. |
+| `Hyperwyc.Core` | `Hyperwyc.Core.dll` | `HyperwycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `SyncEventStream`, `IHyperwyc`, `InMemorySyncStore`, `AlwaysOnlineConnectivityService`, `NetworkAvailabilityConnectivityService`, `TtlStalenessEvaluator`. Depends on `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Hosting.Abstractions` and `Microsoft.Extensions.Http`; no storage dependency. |
 | `Hyperwyc` | `Hyperwyc.dll` | `CabinetSyncStore` backed by [Cabinet](https://github.com/mattgoldman/cabinet), `CabinetStoreOptions`, and the batteries-included `AddHyperwyc()`. Depends on `Hyperwyc.Core` and `Cabinet`. |
 
 `Hyperwyc` is the package almost everyone installs: `AddHyperwyc()` with no arguments produces
@@ -103,9 +103,9 @@ no store is built (and no directory touched) unless something resolves it.
     envelope reflects the request as Hyperwyc saw it. It will not contain an `Authorization`
     header added further down. This is why replays must traverse the pipeline rather than being
     replayed verbatim.
-- **Failure observation.** Pipelines are first-in, last-out, so a handler registered after
-  `HyperwycHandler` observes each response *before* Hyperwyc does. Combined with the replay
-  retry wrapping the entire client (§3), this makes Hyperwyc's retry the outermost, last-resort
+- **Failure observation.** The first handler added is the last to see the response, so a handler
+  registered after `HyperwycHandler` observes each response *before* Hyperwyc does. Combined with
+  the replay retry wrapping the entire client (§3), this makes Hyperwyc's retry the last-resort
   one: it acts only on failures the application's own handlers — refresh-on-401, circuit
   breakers, custom retry — could not resolve. Hyperwyc therefore does not need configuring to
   avoid interfering with them. Since a flush makes only one attempt per envelope (§3), an
@@ -170,6 +170,12 @@ already considered the cache and judged it stale.
 Synthetic read responses carry `X-Hyperwyc-Status: Offline`, except a `CacheOnly` read that
 finds nothing cached, which carries `CacheMiss` — the device may well be online, and the
 request was withheld by policy rather than by connectivity.
+
+**Every synthetic response carries the JSON `null` literal as its body**, including the `202`
+for a queued write. An empty body is not JSON, so `GetFromJsonAsync<T>` throws on it — for a
+single object as much as for a collection. `null` deserialises cleanly to a case application
+code already has to handle. A collection still arrives as `null` rather than `[]`; emitting `[]`
+needs per-route knowledge, tracked in [issue 26](Backlog/26-v2-typed-response-shaping.md).
 
 #### Cache Invalidation Prefix
 
@@ -271,10 +277,11 @@ semaphore's `AvailableWaitHandle` is never used and the invoker does not own its
 | `HyperwycHostedService` | Triggers the startup flush |
 | `HyperwycService` | Default `IHyperwyc` — exposes `SyncEvents`, `FlushAsync` and `ResetStoreAsync` |
 | `ISyncStore` | CRUD over stored envelopes; pluggable |
-| `InMemorySyncStore` | Default non-durable store; the fallback when none is configured |
+| `InMemorySyncStore` | Non-durable store, for tests and for consumers who genuinely want no persistence. Never selected implicitly |
 | `CabinetSyncStore` | Durable `ISyncStore` using Cabinet |
 | `IConnectivityService` | Reports online/offline state and raises change events |
-| `AlwaysOnlineConnectivityService` | Default implementation; always reports connected |
+| `AlwaysOnlineConnectivityService` | Always reports connected. Opt-in only; nothing is queued or replayed under it |
+| `NetworkAvailabilityConnectivityService` | BCL-backed `IConnectivityService` over `NetworkInterface.GetIsNetworkAvailable()`. Opt-in; detects hard-offline, not an unreachable API |
 | `ISyncPolicy` | Cache strategy, write-invalidation rules, and retry configuration per request |
 | `IStalenessEvaluator` | Determines whether a cached response is still fresh |
 | `TtlStalenessEvaluator` | Default evaluator; stale once `CachedAt + TTL` has elapsed |
@@ -382,13 +389,14 @@ services.AddHyperwyc();
 
 `AddHyperwyc` builds a `HyperwycOptions` instance, applies the caller's delegate, and
 registers the resolved services as singletons — except `HyperwycHandler`, which is transient.
-Unset options fall back to `AlwaysOnlineConnectivityService`, `TtlStalenessEvaluator` and
-`SyncPolicy.CacheFirst(1 day)`. The store has no default on this class; see Registration above.
+Unset options fall back to `TtlStalenessEvaluator` and `SyncPolicy.CacheFirst(1 day)`.
+Neither the store nor connectivity has a default; see Registration above and Connectivity
+below.
 
 | Option | Default |
 |---|---|
 | `DefaultPolicy` | `SyncPolicy.CacheFirst()` — TTL taken from `DefaultCacheTtl` |
-| `Connectivity` | `AlwaysOnlineConnectivityService` |
+| `Connectivity` | **No default — required.** Usually supplied by registering an `IConnectivityService` rather than by setting this; resolving throws if neither is done |
 | `StalenessEvaluator` | `null` — a `TtlStalenessEvaluator` is built at registration from the effective TTL |
 | `DefaultCacheTtl` | 5 minutes |
 | `OfflineResponsePolicy` | `Transparent` |
@@ -397,6 +405,49 @@ Unset options fall back to `AlwaysOnlineConnectivityService`, `TtlStalenessEvalu
 | `ConnectivityDebounceDelay` | 2 seconds |
 | `FlushOnStartup` | `true` |
 | `DefaultRetryOptions` | 5 retries, 2s initial delay, ×2 backoff |
+
+#### Connectivity has no default
+
+`Connectivity` is the one required setting, and the only one most consumers satisfy through
+the container rather than through options:
+
+```csharp
+services.AddSingleton<IConnectivityService, MyConnectivityService>();
+```
+
+This is a deliberate departure from the batteries-included posture applied everywhere else.
+The distinction is what the library can legitimately decide on the consumer's behalf: any
+durable store will do, so Hyperwyc picks one, but the correct connectivity source depends on
+the platform, which only the application knows. Defaulting to `AlwaysOnlineConnectivityService`
+fails silently — every request takes the network path, nothing is queued, nothing is replayed,
+and the library appears to work.
+
+**The check is deferred rather than made at registration.** When `Connectivity` is unset,
+`AddCoreServices` registers a placeholder factory that throws an `InvalidOperationException`
+naming all three implementations, instead of throwing on the spot. That makes the container
+route order-independent in both directions: `TryAdd` stands aside for a registration that came
+first, and a registration that comes later wins, because the last descriptor for a service is
+the one the container resolves.
+
+Order-independence matters more than failing at startup. A consumer should not have to know
+where `AddHyperwyc` sits relative to their own registrations, and a source generator wiring up
+an `IConnectivityService` has no say in where its output lands. The cost is that a consumer who
+supplies nothing finds out on first use — resolving `IHyperwyc`, `HyperwycHandler` or the
+startup flush — rather than at registration. The message is the same either way.
+
+When both routes are used, the container registration wins, matching the precedence every other
+service here follows.
+
+The three supported implementations, in the order most consumers should consider them:
+
+| Implementation | Ships in | Detects |
+|---|---|---|
+| One written against the platform (`Connectivity.Current` on MAUI, ~20 lines) | Copied from the sample | Whatever the platform reports, including `ConstrainedInternet` |
+| `NetworkAvailabilityConnectivityService` | `Hyperwyc.Core` | An operational non-loopback interface. Not a captive portal, not an unreachable API |
+| `AlwaysOnlineConnectivityService` | `Hyperwyc.Core` | Nothing. Reports connected always |
+
+A false positive costs a wasted attempt, not correctness: the request fails at the transport
+and `SyncOrchestrator` abandons the flush and waits for the next signal (§3).
 
 `CabinetStoreOptions`, configured through `AddHyperwyc`'s second delegate, carries the
 storage-specific settings — `DirectoryPath` (default `{LocalApplicationData}/Hyperwyc`) and

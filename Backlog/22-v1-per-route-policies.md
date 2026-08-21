@@ -49,6 +49,11 @@ options.RoutePolicy = new RoutePolicyMap()
 
 ## Notes
 
+- **The `EmptyOfflineBody` this item anticipates should be a `ReturnsCollection` boolean
+  instead.** Synthetic responses now return the JSON `null` literal rather than an empty body, so
+  objects already deserialise cleanly ([issue 26](26-v2-typed-response-shaping.md), layer 0). All
+  that is left for per-route configuration is upgrading a collection route from `null` to `[]` —
+  one boolean, rather than the consumer composing a body string and a content type.
 - **Rename `SyncPolicy.ApiFirst()` to `NetworkFirst()` while touching this area.** It is
   Workbox's name for the same strategy, and Hyperwyc already uses `NetworkOnly`, so the current
   naming is inconsistent internally as well as diverging from the vocabulary developers arrive

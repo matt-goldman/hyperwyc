@@ -227,6 +227,52 @@ public class ReplayPipelineTests
     }
 
     // -------------------------------------------------------------------------
+    // Typed clients
+    // -------------------------------------------------------------------------
+
+    /// <summary>A typed client, as most applications actually register them.</summary>
+    private sealed class TypedApiClient(HttpClient http)
+    {
+        public Task<HttpResponseMessage> RecordAsync(string url) =>
+            http.PostAsync(url, new StringContent("{}"));
+    }
+
+    [Fact]
+    public async Task TypedClient_QueuesWithItsNameAndReplaysThroughItsPipeline()
+    {
+        var store = new InMemorySyncStore();
+        var transport = new RecordingTransport();
+        var connectivity = new FakeConnectivityService(isConnected: false);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConnectivityService>(connectivity);
+        services.AddTransient(_ => new TokenStampingHandler(() => "typed-token"));
+
+        // AddHttpClient<T>() rather than AddHttpClient("name") — the registration style
+        // the sample uses, and the one most applications reach for.
+        services.AddHttpClient<TypedApiClient>()
+            .AddHyperwycHandler()
+            .AddHttpMessageHandler<TokenStampingHandler>()
+            .ConfigurePrimaryHttpMessageHandler(() => transport);
+
+        services.AddHyperwycCore(_ => store, o => o.FlushOnStartup = false);
+        using var sp = services.BuildServiceProvider();
+
+        await sp.GetRequiredService<TypedApiClient>().RecordAsync(Url);
+
+        // A typed client is a named client whose name is the type name, so the envelope
+        // has something to replay through.
+        var queued = Assert.Single(await store.GetPendingOutboxAsync());
+        Assert.Equal(nameof(TypedApiClient), queued.ClientName);
+
+        connectivity.IsConnected = true;
+        await sp.GetRequiredService<IHyperwyc>().FlushAsync();
+
+        var replayed = Assert.Single(transport.Requests);
+        Assert.Equal("Bearer typed-token", replayed.Headers.GetValues("Authorization").Single());
+    }
+
+    // -------------------------------------------------------------------------
     // Fallback when no client name is available
     // -------------------------------------------------------------------------
 

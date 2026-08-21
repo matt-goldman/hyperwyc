@@ -6,9 +6,14 @@ using Xunit;
 namespace Hyperwyc.Tests;
 
 /// <summary>
-/// Covers the batteries-included entry point: <c>AddHyperwyc()</c> with no arguments
-/// must produce a working, durable configuration.
+/// Covers the batteries-included entry point: <c>AddHyperwyc()</c> must supply durable
+/// Cabinet-backed storage without being asked.
 /// </summary>
+/// <remarks>
+/// Batteries-included stops at storage. Connectivity is still the consumer's to state
+/// (issue #47), so every registration below supplies one, and one test covers the
+/// failure when none is given.
+/// </remarks>
 public sealed class CabinetRegistrationTests : IDisposable
 {
     private readonly string _tempDir =
@@ -24,7 +29,7 @@ public sealed class CabinetRegistrationTests : IDisposable
     public void AddHyperwyc_NoConfiguration_ResolvesCabinetStore()
     {
         var services = new ServiceCollection();
-        services.AddHyperwyc(configureStore: o => o.DirectoryPath = _tempDir);
+        services.AddHyperwyc(Connectivity, o => o.DirectoryPath = _tempDir);
 
         using var sp = services.BuildServiceProvider();
         var store = sp.GetRequiredService<ISyncStore>();
@@ -36,7 +41,7 @@ public sealed class CabinetRegistrationTests : IDisposable
     public void AddHyperwyc_NoConfiguration_RegistersCoreServices()
     {
         var services = new ServiceCollection();
-        services.AddHyperwyc(configureStore: o => o.DirectoryPath = _tempDir);
+        services.AddHyperwyc(Connectivity, o => o.DirectoryPath = _tempDir);
 
         using var sp = services.BuildServiceProvider();
 
@@ -51,7 +56,11 @@ public sealed class CabinetRegistrationTests : IDisposable
     {
         var services = new ServiceCollection();
         services.AddHyperwyc(
-            o => o.OfflineResponsePolicy = OfflineResponsePolicy.Signal,
+            o =>
+            {
+                Connectivity(o);
+                o.OfflineResponsePolicy = OfflineResponsePolicy.Signal;
+            },
             o => o.DirectoryPath = _tempDir);
 
         using var sp = services.BuildServiceProvider();
@@ -64,7 +73,7 @@ public sealed class CabinetRegistrationTests : IDisposable
     public void AddHyperwyc_StoreIsNotConstructedUntilResolved()
     {
         var services = new ServiceCollection();
-        services.AddHyperwyc(configureStore: o => o.DirectoryPath = _tempDir);
+        services.AddHyperwyc(Connectivity, o => o.DirectoryPath = _tempDir);
 
         using var sp = services.BuildServiceProvider();
 
@@ -82,11 +91,36 @@ public sealed class CabinetRegistrationTests : IDisposable
         var custom = new InMemorySyncStore();
         var services = new ServiceCollection();
         services.AddSingleton<ISyncStore>(custom);
-        services.AddHyperwyc(configureStore: o => o.DirectoryPath = _tempDir);
+        services.AddHyperwyc(Connectivity, o => o.DirectoryPath = _tempDir);
 
         using var sp = services.BuildServiceProvider();
 
         Assert.Same(custom, sp.GetRequiredService<ISyncStore>());
+    }
+
+    [Fact]
+    public void AddHyperwyc_NoConnectivity_ThrowsOnResolve()
+    {
+        var services = new ServiceCollection();
+        services.AddHyperwyc(configureStore: o => o.DirectoryPath = _tempDir);
+        using var sp = services.BuildServiceProvider();
+
+        // Cabinet makes storage a non-decision; connectivity stays a decision, because
+        // only the application knows how its platform reports it.
+        Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<IHyperwyc>());
+    }
+
+    [Fact]
+    public void AddHyperwyc_ConnectivityRegisteredAfterwards_IsUsed()
+    {
+        // The shortest working setup, and the one the docs lead with.
+        var services = new ServiceCollection();
+        services.AddHyperwyc(configureStore: o => o.DirectoryPath = _tempDir);
+        services.AddSingleton<IConnectivityService, AlwaysOnlineConnectivityService>();
+
+        using var sp = services.BuildServiceProvider();
+
+        Assert.NotNull(sp.GetRequiredService<IHyperwyc>());
     }
 
     [Fact]
@@ -135,4 +169,8 @@ public sealed class CabinetRegistrationTests : IDisposable
     [Fact]
     public void CabinetSyncStore_OptionsConstructor_NullOptions_Throws() =>
         Assert.Throws<ArgumentNullException>(() => new CabinetSyncStore((CabinetStoreOptions)null!));
+
+    /// <summary>Supplies the required connectivity service. See issue #47.</summary>
+    private static void Connectivity(HyperwycOptions options) =>
+        options.Connectivity = new AlwaysOnlineConnectivityService();
 }

@@ -111,8 +111,21 @@ public static class ServiceCollectionExtensions
         // and SyncOrchestrator can receive it via constructor injection.
         services.AddSingleton(options);
 
-        // Interfaces resolved from the options instance.
-        services.TryAddSingleton<IConnectivityService>(_ => options.Connectivity);
+        // Connectivity has no default on purpose: see HyperwycOptions.Connectivity.
+        //
+        // Registering an IConnectivityService in the container is the expected route, so this
+        // must not care whether that registration comes before or after AddHyperwyc — a
+        // consumer choosing the order, or a source generator wiring it up, should both work.
+        // Hence a placeholder that throws when resolved rather than a check here: TryAdd
+        // stands aside for an earlier registration, and a later one wins because the last
+        // descriptor for a service is the one the container resolves. The failure lands on
+        // first use instead of at startup, which is the price of not being order-dependent.
+        if (options.Connectivity is { } connectivity)
+            services.TryAddSingleton(_ => connectivity);
+        else
+            services.TryAddSingleton<IConnectivityService>(
+                _ => throw new InvalidOperationException(NoConnectivityMessage));
+
         services.TryAddSingleton<ISyncPolicy>(_ => options.DefaultPolicy);
         services.TryAddSingleton<IStalenessEvaluator>(_ => stalenessEvaluator);
 
@@ -145,4 +158,31 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
+
+    private const string NoConnectivityMessage =
+        """
+        Hyperwyc needs an IConnectivityService and deliberately has no default, because
+        detecting connectivity depends on the platform — something only your application
+        knows. Defaulting to "always online" would leave Hyperwyc caching responses while
+        never queueing or replaying anything, which looks like it is working and is not.
+
+        Register your implementation in the container:
+
+            services.AddSingleton<IConnectivityService, MyConnectivityService>();
+
+        Before or after AddHyperwyc; either order works. Alternatively, set
+        HyperwycOptions.Connectivity when you register Hyperwyc.
+
+        If you do not have an implementation yet:
+
+          - On .NET MAUI, one over Connectivity.Current is about twenty lines. The sample
+            application has one to copy.
+
+          - NetworkAvailabilityConnectivityService ships with Hyperwyc. BCL-only, no platform
+            dependency. Detects a hard-offline device, but reports "connected" behind a
+            captive portal or when the network is up and your API is not.
+
+          - AlwaysOnlineConnectivityService, if this host is genuinely always connected or you
+            only want the response cache. Nothing is ever queued or replayed under it.
+        """;
 }

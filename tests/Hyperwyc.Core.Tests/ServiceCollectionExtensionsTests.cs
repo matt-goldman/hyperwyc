@@ -77,7 +77,7 @@ public sealed class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddHyperwycCore_Defaults_RegistersIConnectivityServiceFromOptionsInstance()
+    public void AddHyperwycCore_RegistersIConnectivityServiceFromOptionsInstance()
     {
         var sp = BuildProvider(null);
 
@@ -148,7 +148,7 @@ public sealed class ServiceCollectionExtensionsTests
             new HttpResponseMessage(System.Net.HttpStatusCode.OK));
 
         var services = new ServiceCollection();
-        services.AddHyperwycCore(_ => store, o => o.ReplayTransport = transport);
+        services.AddHyperwycCore(_ => store, WithConnectivity(o => o.ReplayTransport = transport));
         using var sp = services.BuildServiceProvider();
 
         // Reaching a flush must not require the concrete orchestrator, which is internal.
@@ -164,7 +164,7 @@ public sealed class ServiceCollectionExtensionsTests
         var transport = new DisposalTrackingHandler();
 
         var services = new ServiceCollection();
-        services.AddHyperwycCore<InMemorySyncStore>(o => o.ReplayTransport = transport);
+        services.AddHyperwycCore<InMemorySyncStore>(WithConnectivity(o => o.ReplayTransport = transport));
         var sp = services.BuildServiceProvider();
         sp.GetRequiredService<IHyperwyc>();
 
@@ -193,7 +193,7 @@ public sealed class ServiceCollectionExtensionsTests
     {
         var services = new ServiceCollection();
         services.AddSingleton(new StoreDependency());
-        services.AddHyperwycCore<StoreWithDependency>();
+        services.AddHyperwycCore<StoreWithDependency>(WithConnectivity());
 
         var store = services.BuildServiceProvider().GetRequiredService<ISyncStore>();
 
@@ -205,7 +205,7 @@ public sealed class ServiceCollectionExtensionsTests
     {
         var customStore = new InMemorySyncStore();
         var services = new ServiceCollection();
-        services.AddHyperwycCore(_ => customStore);
+        services.AddHyperwycCore(_ => customStore, WithConnectivity());
 
         var resolved = services.BuildServiceProvider().GetRequiredService<ISyncStore>();
 
@@ -217,11 +217,13 @@ public sealed class ServiceCollectionExtensionsTests
     {
         var invoked = false;
         var services = new ServiceCollection();
-        services.AddHyperwycCore(_ =>
-        {
-            invoked = true;
-            return new InMemorySyncStore();
-        });
+        services.AddHyperwycCore(
+            _ =>
+            {
+                invoked = true;
+                return new InMemorySyncStore();
+            },
+            WithConnectivity());
 
         using var sp = services.BuildServiceProvider();
         Assert.False(invoked);
@@ -308,6 +310,110 @@ public sealed class ServiceCollectionExtensionsTests
     }
 
     // -------------------------------------------------------------------------
+    // Connectivity is required
+    //
+    // There is no safe default: silently assuming "always online" produces a
+    // library that caches but never queues or replays. See issue #47.
+    //
+    // A container registration is the expected route, so these also pin that it
+    // works in either order relative to AddHyperwyc — a source generator wiring
+    // one up has no say in where its registration lands.
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void ConnectivityRegisteredBeforeHyperwyc_IsUsed()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IConnectivityService, AlwaysOnlineConnectivityService>();
+
+        services.AddHyperwycCore<InMemorySyncStore>();
+
+        using var sp = services.BuildServiceProvider();
+        Assert.IsType<AlwaysOnlineConnectivityService>(sp.GetRequiredService<IConnectivityService>());
+    }
+
+    [Fact]
+    public void ConnectivityRegisteredAfterHyperwyc_IsUsed()
+    {
+        var services = new ServiceCollection();
+        services.AddHyperwycCore<InMemorySyncStore>();
+
+        services.AddSingleton<IConnectivityService, AlwaysOnlineConnectivityService>();
+
+        using var sp = services.BuildServiceProvider();
+        Assert.IsType<AlwaysOnlineConnectivityService>(sp.GetRequiredService<IConnectivityService>());
+    }
+
+    [Fact]
+    public void ConnectivityRegisteredAfterHyperwyc_ReachesTheOrchestrator()
+    {
+        // Resolving the interface directly is not enough: the placeholder must also be out
+        // of the way for everything Hyperwyc injects it into.
+        var services = new ServiceCollection();
+        services.AddHyperwycCore<InMemorySyncStore>(o => o.FlushOnStartup = false);
+        services.AddSingleton<IConnectivityService>(new FakeConnectivityService(isConnected: true));
+
+        using var sp = services.BuildServiceProvider();
+
+        Assert.NotNull(sp.GetRequiredService<IHyperwyc>());
+        Assert.NotNull(sp.GetRequiredService<HyperwycHandler>());
+    }
+
+    [Fact]
+    public void ConnectivityInBothPlaces_TheContainerRegistrationWins()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IConnectivityService, AlwaysOnlineConnectivityService>();
+
+        services.AddHyperwycCore<InMemorySyncStore>(
+            o => o.Connectivity = new NetworkAvailabilityConnectivityService());
+
+        using var sp = services.BuildServiceProvider();
+
+        // TryAdd leaves the earlier registration alone, so an explicit container
+        // registration beats the option — the same precedence every other service
+        // here follows. Recorded so it is not accidental.
+        Assert.IsType<AlwaysOnlineConnectivityService>(sp.GetRequiredService<IConnectivityService>());
+    }
+
+    [Fact]
+    public void NoConnectivityAnywhere_ThrowsOnResolve()
+    {
+        var services = new ServiceCollection();
+        services.AddHyperwycCore<InMemorySyncStore>();
+        using var sp = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => sp.GetRequiredService<IConnectivityService>());
+
+        // The message has to name the ways out, because the fix is a choice.
+        Assert.Contains("AddSingleton<IConnectivityService", ex.Message);
+        Assert.Contains(nameof(NetworkAvailabilityConnectivityService), ex.Message);
+        Assert.Contains(nameof(AlwaysOnlineConnectivityService), ex.Message);
+    }
+
+    [Fact]
+    public void NoConnectivityAnywhere_ThrowsWhenTheHandlerIsResolved()
+    {
+        // The failure a consumer who ignored the docs actually meets: the first request.
+        var services = new ServiceCollection();
+        services.AddHyperwycCore<InMemorySyncStore>(o => o.FlushOnStartup = false);
+        using var sp = services.BuildServiceProvider();
+
+        Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<IHyperwyc>());
+    }
+
+    [Fact]
+    public void NoConnectivityAnywhere_RegistrationItselfDoesNotThrow()
+    {
+        var services = new ServiceCollection();
+
+        // Deliberate: throwing here would make the container route order-dependent, so the
+        // check has to wait until something asks for the service.
+        services.AddHyperwycCore<InMemorySyncStore>();
+    }
+
+    // -------------------------------------------------------------------------
     // Null-safety
     // -------------------------------------------------------------------------
 
@@ -351,9 +457,22 @@ public sealed class ServiceCollectionExtensionsTests
     private static ServiceProvider BuildProvider(Action<HyperwycOptions>? configure)
     {
         var services = new ServiceCollection();
-        services.AddHyperwycCore<InMemorySyncStore>(configure);
+        services.AddHyperwycCore<InMemorySyncStore>(WithConnectivity(configure));
         return services.BuildServiceProvider();
     }
+
+    /// <summary>
+    /// Connectivity has no default and registration throws without one (issue #47), so
+    /// every registration in this file states one before applying the test's own
+    /// configuration.
+    /// </summary>
+    private static Action<HyperwycOptions> WithConnectivity(
+        Action<HyperwycOptions>? configure = null) =>
+        o =>
+        {
+            o.Connectivity = new AlwaysOnlineConnectivityService();
+            configure?.Invoke(o);
+        };
 
     /// <summary>Records whether anything disposed it.</summary>
     private sealed class DisposalTrackingHandler : HttpMessageHandler

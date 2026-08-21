@@ -30,6 +30,8 @@ dotnet add package Hyperwyc
 ```
 
 ```csharp
+services.AddSingleton<IConnectivityService, MyConnectivityService>();
+
 services.AddHttpClient("MyApi")
     .AddHyperwycHandler()
     .AddHttpMessageHandler<AuthHandler>();
@@ -37,13 +39,20 @@ services.AddHttpClient("MyApi")
 services.AddHyperwyc();
 ```
 
-That's the whole setup. `AddHyperwyc()` with no arguments gives you durable, encrypted storage — no store to choose, nothing to wire up. Configure it when you want to:
+That's the whole setup. Storage needs no decision — `AddHyperwyc()` gives you a durable,
+encrypted store out of the box.
+
+The one thing Hyperwyc can't decide for you is how to tell whether the device is online, so
+you supply an `IConnectivityService`. Register it like any other service and you're done; if
+you don't have an implementation, [Connectivity](#connectivity) covers your options, one of
+which ships in the box.
+
+Everything else has a working default, and is there when you want it:
 
 ```csharp
 services.AddHyperwyc(options =>
 {
     options.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromDays(1));
-    options.Connectivity = new MauiConnectivityService();   // see Connectivity, below
 });
 ```
 
@@ -102,7 +111,7 @@ Hyperwyc sits in your `HttpClient` pipeline as a `DelegatingHandler` — the sam
 
 - **Online:** Requests are sent immediately. Responses are optionally cached according to your staleness policy.
 - **Offline writes:** Requests are serialised and queued locally. The caller receives a `202 Accepted` (by default) with an `X-Hyperwyc-Status: Queued` header. When connectivity is restored, the queue is replayed in order. `202` is used rather than `200` because the request has been accepted for later processing but not yet performed against the origin server — once sync-status inspection lands, callers will be able to confirm the eventual outcome.
-- **Offline reads:** Served from cache if available (even if stale — any data is better than no data offline). If no cache exists, the caller receives a `200 OK` with `X-Hyperwyc-Status: Offline` and an empty body.
+- **Offline reads:** Served from cache if available (even if stale — any data is better than no data offline). If no cache exists, the caller receives a `200 OK` with `X-Hyperwyc-Status: Offline` and a body of `null`.
 - **Online reads (GET/HEAD/OPTIONS):** Served from cache if fresh; fetched from the API if stale or missing.
 
 ### Caching strategies
@@ -130,13 +139,41 @@ The app doesn't need to know the difference. Your existing code doesn't change.
 
 ### Designing your responses
 
-Transparent offline reads can return a `200 OK` with an empty body. How (and whether) that affects your code depends on how you deserialise responses:
+When Hyperwyc has nothing to give you — an offline read with no cached copy, or a write it has
+only queued — it returns the JSON `null` literal, not an empty body. That distinction matters
+more than it looks:
 
-- **Using `HttpClientJsonExtensions` (e.g. `GetFromJsonAsync<T>`, `ReadFromJsonAsync<T>`).** The empty body throws a `JsonException` from inside the extension, so the call site must wrap the whole chain in a `try`/`catch` that distinguishes "deserialisation failure" from "genuine API error" — typically by also re-checking the HTTP status code, which the extension has already discarded. This is awkward, so the recommended approach is to adopt an **envelope or result pattern** in your API responses (see for example [`Ardalis.Result`](https://github.com/ardalis/Result), or a small hand-rolled `ApiResponse<T>`). An empty body then deserialises to `null` or a default, which application code can handle uniformly online and offline.
-- **Calling `SendAsync` / `GetAsync` and deserialising the response yourself.** No library change is needed: wrap just the deserialisation step in a `try`/`catch` (or check `Content.Headers.ContentLength`) and treat "no body" as "no data". The envelope pattern is still a nice-to-have but no longer load-bearing.
-- **Per-route opt-out.** If neither option fits a particular route, set `OfflineResponsePolicy.Signal` on it and branch on `503`. Per-route policies are planned for v1.0.
+```csharp
+var product  = await http.GetFromJsonAsync<Product>("/products/1");        // null
+var products = await http.GetFromJsonAsync<List<Product>>("/products");    // null
+```
 
-A future per-route option will let Hyperwyc return a caller-supplied default body (e.g. `"[]"`) on offline reads so that even `GetFromJsonAsync<List<T>>` works without an envelope — tracked in the roadmap.
+Both return `null` rather than throwing. An *empty* body would throw `JsonException` from inside
+the extension method — for a single object every bit as much as for a collection — because an
+empty body is not "no data", it is not JSON at all.
+
+So the case you need to handle is the one you already handle: a `null` result.
+
+```csharp
+var products = await http.GetFromJsonAsync<List<Product>>("/products");
+
+if (products is null)
+{
+    // Offline with nothing cached. Show an empty state, or check
+    // X-Hyperwyc-Status if you want to say why.
+    return [];
+}
+```
+
+**A collection comes back as `null`, not empty.** Returning `[]` would need Hyperwyc to know the
+route returns a collection, which is per-route knowledge it does not have — planned as part of
+per-route policies. Until then, a null-coalesce at the call site covers it.
+
+If you would rather branch on status codes than on `null`, set
+`OfflineResponsePolicy.Signal` to receive `503 Service Unavailable` instead. And if your API
+already uses an envelope or result type — [`Ardalis.Result`](https://github.com/ardalis/Result)
+or a hand-rolled `ApiResponse<T>` — that keeps working, since the envelope simply deserialises
+to `null` and your existing handling takes over.
 
 ### Current limitations
 
@@ -170,8 +207,8 @@ custom retry. Register it after `AddHyperwycHandler()` and replays get it too.
 
 ### What Hyperwyc sees, and what it leaves alone
 
-Handler pipelines are **first in, last out**: the first handler you add is the first to see the
-request and the *last* to see the response.
+Handler order follows the order you add them: **the first handler you add is the first to see
+the request, and the last to see the response.**
 
 ```
 request  →  Hyperwyc  →  AuthHandler  →  network
@@ -183,7 +220,7 @@ does, and can resolve failures Hyperwyc never learns about. If you already have 
 catches a `401`, refreshes the token and retries, that is exactly what happens — Hyperwyc sees
 the successful retry, not the `401`.
 
-That's deliberate. **Hyperwyc's replay retry is the outermost, last-resort retry**: it wraps the
+That's deliberate. **Hyperwyc's replay retry is the last-resort retry**: it wraps the
 whole pipeline, so it only ever acts on failures your own handlers couldn't fix. It won't
 second-guess your auth, your circuit breaker or your fallbacks, and you don't need to configure
 it to stay out of their way.
@@ -223,6 +260,74 @@ hyperwyc.SyncEvents.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
 These are Hyperwyc's own events, not your app's lifecycle — see below for how the two relate.
 
 ---
+
+## Connectivity
+
+Hyperwyc needs to know whether the device can reach the network, and it has **no default for
+this, on purpose**.
+
+That is a deliberate exception to how the rest of the library behaves. Hyperwyc can pick a
+store for you because any durable store will do. It cannot pick a connectivity source, because
+the right answer depends on the platform — and a wrong one fails quietly. If it assumed
+"always online", every request would take the network path, nothing would ever be queued, and
+nothing would ever be replayed. You'd have a caching library that looked like it was working.
+
+### Register it in your container
+
+```csharp
+services.AddSingleton<IConnectivityService, MyConnectivityService>();
+```
+
+That's it. Order doesn't matter — before or after `AddHyperwyc()`, whichever suits how your
+registrations are organised, and it works the same if something else in your startup registers
+it on your behalf.
+
+If you'd rather keep the configuration in one place, or you already hold an instance, set it on
+the options instead:
+
+```csharp
+services.AddHyperwyc(options =>
+{
+    options.Connectivity = myConnectivityService;
+});
+```
+
+A container registration wins if you do both. Do neither and Hyperwyc throws the first time
+anything needs it, with a message listing these options.
+
+### Which implementation
+
+**Write one against your platform.** `IConnectivityService` is two members, so on .NET MAUI
+this is about twenty lines over `Connectivity.Current`, and it's what most apps should use.
+`MauiConnectivityService` in the [sample app](sample/) is a complete implementation to copy.
+
+It's a copy rather than a package because taking it as a dependency would put MAUI in
+Hyperwyc's dependency graph for everyone, including the console apps, services and Blazor hosts
+that have no use for it. Owning twenty lines costs you very little, and it leaves you free to
+define "connected" as your app needs — treating `ConstrainedInternet` as offline, say, or
+folding in a health check against your own API.
+
+**`NetworkAvailabilityConnectivityService`** ships in the box if you'd rather not, built on
+`NetworkInterface.GetIsNetworkAvailable()` with no platform dependency:
+
+```csharp
+services.AddSingleton<IConnectivityService, NetworkAvailabilityConnectivityService>();
+```
+
+> **It reports whether a network is available, not whether your API is reachable.** It catches
+> the hard-offline cases — aeroplane mode, Wi-Fi off, cable unplugged — but reports connected
+> behind a captive portal, on a router with no upstream, or on a mobile signal too weak to
+> carry a request.
+
+In practice that costs less than it sounds like. Connectivity is a hint about which path to
+take; a false positive means the request goes out and fails at the transport, which Hyperwyc
+already handles by abandoning the flush and waiting for the next signal. You lose a wasted
+attempt and some latency, not correctness. It's a reasonable choice for a desktop or server
+host, and a reasonable starting point on mobile until you write the platform version.
+
+**`AlwaysOnlineConnectivityService`** reports connected, always. Legitimate for a host that
+genuinely is — or when you want the response cache and nothing else. **Nothing is ever queued
+or replayed under it**, so don't reach for it just to get past the startup error.
 
 ## When Hyperwyc Syncs
 

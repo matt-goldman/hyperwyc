@@ -1,4 +1,10 @@
-# Issue 30 — Sensitive Headers Are Persisted
+# Issue 30 — Document That Caller-Set Headers Are Persisted
+
+> **Reversed: this is now a documentation item, not a deny-list.** Stripping caller-set headers
+> would violate the fidelity obligation in
+> [ADR 0001](../docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md) and break replay for
+> anyone whose credential is still valid at replay time. See "Why a deny-list is the wrong
+> answer" below.
 
 ## Summary
 
@@ -40,11 +46,77 @@ actually goes on the wire during a flush.
 
 ## Acceptance Criteria
 
-- [ ] Default deny-list applied in `Envelope.ForRequest` (and therefore `ForCachedResponse`).
-- [ ] Deny-list is configurable and extendable via `HyperwycOptions`.
-- [ ] Opt-in flag restores full header persistence.
-- [ ] Unit tests assert `Authorization` is absent from a persisted envelope by default, present when opted in, and that a custom deny-list entry is honoured.
-- [ ] TECHNICAL_PLAN §9 matches the shipped behaviour.
+- [ ] README states that headers set before Hyperwyc sees the request — credentials included —
+      are persisted with the envelope, and why that is necessary rather than incidental.
+- [ ] That guidance sits alongside, and links to, the encryption-key documentation, so the
+      exposure and its mitigation are read together.
+- [ ] The handler-ordering recommendation gains its second reason: credentials added after
+      Hyperwyc are never stored at all.
+- [ ] TECHNICAL_PLAN §9 states the same, replacing the claim that sensitive headers are excluded.
+- [ ] Unit test: a caller-set `Authorization` survives queueing and replay unchanged — the
+      fidelity guarantee, pinned so a future "security fix" cannot quietly break replay.
+- [ ] Decision recorded on whether an opt-in deny-list ships at all.
+
+## Why a deny-list is the wrong answer
+
+Two things changed the conclusion.
+
+**[ADR 0002](../docs/decisions/0002-replays-traverse-the-pipeline.md) removed most of the
+exposure.** With the recommended ordering, a credential added by a *handler* is never captured —
+the handler runs after Hyperwyc has serialised the envelope. `Cookie` is never captured either,
+since cookies are attached by the primary handler's `CookieContainer`, below Hyperwyc. What is
+left is the credential a caller sets directly on the request.
+
+**And that one must be persisted.** [ADR 0001](../docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md)
+commits Hyperwyc to fidelity: *"Being naive must not mean being lossy. If Hyperwyc declines to
+add anything, it must faithfully carry everything the application did set."* A deny-list that
+silently drops a caller-set header is exactly the lossiness that obligation rules out.
+
+It is not merely inconsistent, it would break working applications. A credential is not always a
+short-lived token:
+
+| Credential | Still valid at replay? |
+|---|---|
+| Bearer token, short-lived | No — but that one is added by a handler and never captured |
+| API key | Yes |
+| Basic auth | Yes |
+| HMAC over stable request content | Yes |
+
+For three of those four, stripping the header turns a replay that would have succeeded into one
+that cannot. Hyperwyc would be breaking delivery in the name of protecting the consumer from a
+decision the consumer made deliberately.
+
+There is a deeper point. Deciding which headers are "sensitive" is a judgement about the
+application's threat model, made by a transport library that knows nothing about it. That is the
+same imposition [ADR 0001](../docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md) declined
+over idempotency, and the answer is the same: surface the fact, do not decide on their behalf.
+
+## What this becomes instead
+
+**Documentation, stated plainly and where people will meet it.**
+
+Anything attached to a request before it reaches Hyperwyc — including credentials — is persisted
+to disk with the queued envelope, because that is the only way a replay can reproduce the request
+the application made. Consumers should know that, and should know the two levers they have:
+
+- Add credentials in a handler registered *after* `AddHyperwycHandler()`, in which case they are
+  never captured at all and are minted fresh at replay time. This is already the recommended
+  ordering, now with a second reason behind it.
+- Supply their own encryption key via `CabinetStoreOptions.EncryptionKey` if what does get stored
+  warrants better than the path-derived default ([issue 32](32-default-encryption-key.md)).
+
+The deterministic default key is the sharper end of this, and the documentation should connect
+the two rather than treating them as unrelated topics: *these are the circumstances in which
+something worth protecting ends up on disk, and this is how you protect it properly.*
+
+### An optional deny-list, inverted
+
+If the capability is wanted at all, it should invert from what this item originally proposed:
+persist everything by default — fidelity — with an **opt-in** list of header names a consumer
+chooses to have stripped. That way the consumer makes the judgement about their own threat model,
+and accepts the replay consequences knowingly, rather than Hyperwyc deciding for them.
+
+Worth doing only if someone asks for it. The documentation is the part that is actually needed.
 
 ## Notes
 

@@ -7,6 +7,8 @@ reversed.
 | # | Decision | Status |
 |---|---|---|
 | [0001](0001-idempotency-is-not-hyperwycs-remit.md) | Idempotency is not Hyperwyc's remit | Accepted |
+| [0002](0002-replays-traverse-the-pipeline.md) | Replays traverse the application's pipeline | Accepted |
+| [0003](0003-default-what-you-can-decide-correctly.md) | Default what you can decide correctly; require what you cannot | Accepted |
 
 ## What belongs here
 
@@ -104,3 +106,16 @@ belongs in Hyperwyc at all. Reproduced here because it is meant to be used, not 
    to not interfere.
 4. Does it depend on something only Hyperwyc knows — connectivity, that a request is queued, that
    a request is a replay, or the contents of the outbox? If no, it belongs elsewhere.
+
+## The standing defaults test
+
+[ADR 0003](0003-default-what-you-can-decide-correctly.md) covers the capabilities that pass the
+scope test: given that Hyperwyc should do this, should it have a default?
+
+1. Can Hyperwyc choose correctly from what it knows? Platform, API and domain knowledge belong
+   to the application.
+2. If the default is wrong, does the consumer find out? Wrong-and-loud is fine; wrong-and-silent
+   ships.
+3. Could a wrong default quietly produce the failure the library exists to prevent? Then never.
+4. If it must be required, is the fix short and obvious? Ship something to point at, and make
+   sure requiring a decision has not quietly required an *ordering* as well.

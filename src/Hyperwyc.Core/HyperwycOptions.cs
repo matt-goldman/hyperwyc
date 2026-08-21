@@ -39,12 +39,42 @@ public sealed class HyperwycOptions
     public ISyncPolicy DefaultPolicy { get; set; } = SyncPolicy.CacheFirst();
 
     /// <summary>
-    /// Provides network reachability information. Defaults to
-    /// <see cref="AlwaysOnlineConnectivityService"/>; replace with a
-    /// platform-specific implementation (e.g. <c>MauiConnectivityService</c>).
+    /// Reports whether the device can reach the network. <b>Required</b>, though most
+    /// applications satisfy it by registering an <see cref="IConnectivityService"/> in the
+    /// container rather than by setting this.
     /// </summary>
-    public IConnectivityService Connectivity { get; set; } =
-        new AlwaysOnlineConnectivityService();
+    /// <remarks>
+    /// <para>
+    /// The usual route is a plain container registration, in either order relative to
+    /// <c>AddHyperwyc</c>:
+    /// </para>
+    /// <code>
+    /// services.AddSingleton&lt;IConnectivityService, MyConnectivityService&gt;();
+    /// </code>
+    /// <para>
+    /// This property is the alternative for an instance you already hold, or when you would
+    /// rather keep the configuration in one place. A container registration wins if both are
+    /// present. If neither is, resolving <see cref="IConnectivityService"/> throws with a
+    /// message describing the options.
+    /// </para>
+    /// <para>
+    /// Deliberately has no default. Hyperwyc can choose a store for you because any durable
+    /// store will do, but it cannot choose a connectivity source: that depends on the
+    /// platform, which is something only your application knows. Silently defaulting to
+    /// "always online" would leave the library caching responses while never queueing or
+    /// replaying anything — working in appearance and not in substance, which is the exact
+    /// failure it exists to prevent.
+    /// </para>
+    /// <para>
+    /// If you have no implementation yet, there are three answers: one written against your
+    /// platform (about twenty lines on .NET MAUI, and the sample application has one to
+    /// copy); <see cref="NetworkAvailabilityConnectivityService"/>, which is BCL-only and
+    /// detects hard-offline but not a captive portal; or
+    /// <see cref="AlwaysOnlineConnectivityService"/>, under which nothing is ever queued or
+    /// replayed.
+    /// </para>
+    /// </remarks>
+    public IConnectivityService? Connectivity { get; set; }
 
     /// <summary>
     /// The transport used to replay queued writes from the outbox. Leave

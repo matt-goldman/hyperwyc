@@ -35,20 +35,46 @@ to its backlog item where one exists.
 - [x] Flush trigger model documented — no app lifecycle wiring required ([34](Backlog/Done/34-app-lifecycle-integration.md))
 - [x] Sample product/sales API ([18](Backlog/Done/18-poc-web-api.md))
 - [x] No headers added to outbound requests — idempotency left to the application and its API ([39](Backlog/Done/39-reconsider-idempotency.md), superseding [08](Backlog/Done/08-idempotency-key-injection.md))
-- [x] Package structure: `Hyperwyc` (batteries included) over `Hyperwyc.Core` ([31](Backlog/Done/31-package-structure.md)) — `AddHyperwyc()` with no configuration gives a durable, encrypted store
+- [x] Synthetic responses carry the `null` literal with no asserted media type, so `GetFromJsonAsync<T>` returns `null` rather than throwing ([26](Backlog/26-v2-typed-response-shaping.md), layer 0)
+- [x] Package structure: `Hyperwyc` (batteries included) over `Hyperwyc.Core` ([31](Backlog/Done/31-package-structure.md)) — `AddHyperwyc()` gives a durable, encrypted store with no decision to make
+- [x] Connectivity is required, and a BCL implementation ships ([47](Backlog/Done/47-connectivity-is-required.md)) — `NetworkAvailabilityConnectivityService` for non-MAUI consumers; register an `IConnectivityService` in the container (either side of `AddHyperwyc`) or set the option, rather than silently assuming always-online
 
 **Remaining**
 
 - [ ] Surface the outcome of a deferred request ([40](Backlog/40-surface-deferred-outcomes.md)) — a queued write's eventual success or rejection is currently invisible to the application
-- [ ] `StaticConnectivityService` in core, MAUI connectivity as documented reference code ([13](Backlog/13-connectivity-reference-implementation.md)) — the MAUI implementation now exists in the sample; core still ships only `AlwaysOnlineConnectivityService`
+- [ ] Connectivity documentation ([13](Backlog/13-connectivity-reference-implementation.md)) — the MAUI reference implementation exists in the sample; nothing further ships from core, including test doubles. The non-MAUI half is done ([47](Backlog/Done/47-connectivity-is-required.md))
 - [ ] `IHyperwyc.ResetStoreAsync()` — flush coordination and test coverage ([16](Backlog/16-reset-store-async.md)); the method itself exists
 - [ ] Sample .NET MAUI app ([19](Backlog/19-poc-maui-app.md)) — offline reads proven on device across an app restart; offline writes and sync UI remain. See [POC.md](POC.md)
 
 ---
 
-## 🥈 v1.0
+## 🥈 v1.0 — release candidate
 
-> **Goal:** Correctness, developer ergonomics, and operational visibility
+> **Goal:** the two gaps that genuinely prevent calling this a release candidate
+
+Everything else on the backlog can be worked around by a consumer. These two cannot.
+
+- [ ] Binary request and response bodies ([25](Backlog/25-binary-request-response-bodies.md)) — bodies round-trip through `ReadAsStringAsync`, so file uploads, image downloads and protobuf are silently corrupted. Also a breaking change to the persisted shape, so it must land before there are users
+- [ ] Fine-grained per-route policies ([22](Backlog/22-v1-per-route-policies.md)) — a single global policy cannot express "cache the catalogue for a day, never cache payments", which the README already promises
+
+---
+
+## 🥉 v1.2 — ergonomics and operational visibility
+
+- [ ] MAUI `SecureStorage` reference implementation for the store encryption key ([32](Backlog/32-default-encryption-key.md)) — the path-derived key stays as the free default, and is documented as such
+- [ ] `Date` header rewriting when serving responses from cache ([21](Backlog/21-v1-date-header-rewriting.md))
+- [ ] In-app diagnostics view — list unsynced and dead-lettered records ([23](Backlog/23-v1-diagnostics-view.md))
+- [ ] Dead-letter queue management — view, requeue, dismiss ([24](Backlog/24-v1-dead-letter-management.md))
+- [ ] `MaxCachedResponseBodyBytes` validation and public documentation ([20](Backlog/20-v1-configurable-body-cache-cap.md))
+- [ ] Document that caller-set headers are persisted ([30](Backlog/30-sensitive-header-exclusion.md)) — reversed from a deny-list, which would break replay for credentials that are still valid
+
+---
+
+## 🏅 v1.5 — HTTP caching semantics
+
+From an audit against Service Worker and Workbox — see
+[reference models](docs/decisions/README.md#reference-models). Valuable, and none of it blocks a
+release candidate.
 
 - [ ] Honour the server's cacheability directives ([41](Backlog/41-honour-cacheability-directives.md)) — `no-store` is currently ignored and the response written to disk
 - [ ] Bound the cache and evict ([42](Backlog/42-cache-eviction.md)) — nothing currently limits total entries or size
@@ -56,19 +82,10 @@ to its backlog item where one exists.
 - [ ] Cache generation, so an app upgrade discards incompatible cached bodies ([44](Backlog/44-cache-generation.md))
 - [ ] `StaleWhileRevalidate` strategy ([45](Backlog/45-stale-while-revalidate.md)) — instant from cache, refreshed in the background
 - [ ] Conditional revalidation with `ETag` / `Last-Modified` ([46](Backlog/46-conditional-requests.md)) — a `304` instead of a full re-download
-- [ ] Binary request and response bodies ([25](Backlog/25-binary-request-response-bodies.md)) — lifts the current text-only limitation; breaking change to the persisted shape, so it lands first
-- [ ] Sensitive-header exclusion from persisted envelopes ([30](Backlog/30-sensitive-header-exclusion.md)) — its credentials question was answered by [37](Backlog/Done/37-replay-through-pipeline.md)
-- [ ] MAUI `SecureStorage` reference implementation for the store encryption key ([32](Backlog/32-default-encryption-key.md)) — the path-derived key stays as the free default, and is now documented as such
-- [ ] Fine-grained per-route policies — TTL, cache strategy, offline response policy, empty-offline body ([22](Backlog/22-v1-per-route-policies.md))
-- [ ] `Date` header rewriting when serving responses from cache ([21](Backlog/21-v1-date-header-rewriting.md))
-- [ ] In-app diagnostics view — list unsynced and dead-lettered records ([23](Backlog/23-v1-diagnostics-view.md))
-- [ ] Dead-letter queue management — view, requeue, dismiss ([24](Backlog/24-v1-dead-letter-management.md))
-- [ ] `MaxCachedResponseBodyBytes` validation and public documentation ([20](Backlog/20-v1-configurable-body-cache-cap.md))
-
 
 ---
 
-## 🥉 v2.0+
+## 🎖 v2.0+
 
 > **Goal:** Broader platform support and advanced scenarios
 
@@ -82,7 +99,7 @@ No backlog items written yet — these are direction, not commitments.
 - [ ] Smart paging support — cache-aware handling of paginated responses
 - [ ] Request grouping and bulk sync — batch multiple queued writes into a single operation
 - [ ] GraphQL support — read-intent POST disambiguation
-- [ ] **Under consideration:** Typed-response shaping for offline reads ([26](Backlog/26-v2-typed-response-shaping.md)) — make `GetFromJsonAsync<T>` return a deserialisable default body offline without requiring an application-level response envelope
+- [ ] **Under consideration:** Typed-response shaping for offline reads ([26](Backlog/26-v2-typed-response-shaping.md)) — revised down to three layers, the first of which is simply returning `null` rather than an empty body, since an empty body throws for objects as well as collections
 
 ---
 

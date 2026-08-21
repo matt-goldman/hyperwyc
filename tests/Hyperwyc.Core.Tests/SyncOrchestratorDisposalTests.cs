@@ -95,7 +95,8 @@ public class SyncOrchestratorDisposalTests
     public void ServiceProvider_DisposedSynchronously_AfterResolvingOrchestrator_DoesNotThrow()
     {
         var services = new ServiceCollection();
-        services.AddHyperwycCore<InMemorySyncStore>();
+        services.AddHyperwycCore<InMemorySyncStore>(
+            o => o.Connectivity = new AlwaysOnlineConnectivityService());
         var sp = services.BuildServiceProvider();
 
         sp.GetRequiredService<SyncOrchestrator>();

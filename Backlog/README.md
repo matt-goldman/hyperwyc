@@ -16,82 +16,94 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | 💭 Under consideration | Captured as a problem statement; not committed to a milestone |
 | ⛔ Superseded | Was implemented, then deliberately removed or replaced; kept for the reasoning |
 
-| Priority | Meaning |
+| Milestone | Meaning |
 |---|---|
-| P0 | Blocks the v0.1 MVP |
-| P1 | v1.0 — correctness, ergonomics, operational visibility |
-| P2 | v2.0+ or speculative |
+| v0.1 | Blocks the MVP |
+| v1.0 | Blocks calling it a release candidate — deliberately only two items |
+| v1.2 | Ergonomics and operational visibility |
+| v1.5 | HTTP caching semantics, from the Service Worker audit |
+| v2.0+ | Direction, not commitments |
 
 ---
 
 ## v0.1 (MVP)
 
-| # | Item | Status | Priority | Notes |
-|---|---|---|---|---|
-| 01 | [Repository & solution setup](Done/01-repo-and-solution-setup.md) | ✅ Done | P0 | `hyperwyc.slnx`, two src projects, two test projects |
-| 02 | [Core interfaces](Done/02-core-interfaces.md) | ✅ Done | P0 | `ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`, `IHyperwyc` |
-| 03 | [Envelope model](Done/03-envelope-model.md) | ✅ Done | P0 | `Envelope` + `CachedResponse` |
-| 04 | [`InMemorySyncStore`](Done/04-in-memory-sync-store.md) | ✅ Done | P0 | |
-| 05 | [`SyncEventStream`](Done/05-sync-event-stream.md) | ✅ Done | P0 | Hand-rolled `IObservable<SyncEvent>`; no `System.Reactive` dependency |
-| 06 | [Handler — online path](Done/06-hyperwyc-handler-online-path.md) | ✅ Done | P0 | |
-| 07 | [Handler — offline path](Done/07-hyperwyc-handler-offline-path.md) | ✅ Done | P0 | |
-| 08 | [Idempotency-Key injection](Done/08-idempotency-key-injection.md) | ⛔ Superseded | P0 | Removed by [39](Done/39-reconsider-idempotency.md) |
-| 09 | [Response cache for reads](Done/09-response-cache-read-operations.md) | ✅ Done | P0 | GET/HEAD/OPTIONS, TTL staleness, body-size cap |
-| 10 | [Write-triggered cache invalidation](Done/10-write-triggered-cache-invalidation.md) | ✅ Done | P0 | URL-prefix derivation strips trailing id/GUID segments |
-| 11 | [Sync flush orchestrator](Done/11-sync-flush-orchestrator.md) | ✅ Done | P0 | Debounce + single-flush semaphore |
-| 12 | [Polly retry and dead-letter](Done/12-polly-retry-dead-letter.md) | ✅ Done | P0 | Retries are in-process within one flush — see item 28 |
-| 14 | [`CabinetSyncStore`](Done/14-cabinet-sync-store.md) | ✅ Done | P0 | Cabinet 1.0.7, AES-256-GCM at rest |
-| 15 | [`AddHyperwyc()` DI extension](Done/15-di-extension-and-options.md) | ✅ Done | P0 | |
-| 17 | [Max cached body size](Done/17-max-cached-body-size.md) | ✅ Done | P0 | Enforced in `HandleOnlineReadAsync`; covered by `ResponseCacheReadTests` |
-| 38 | [Retry model: connectivity-driven](Done/38-retry-classification.md) | ✅ Done | P0 | One attempt per flush; `4xx` dead-letters at once, `5xx` defers with persisted `RetryCount`/`NextRetryUtc`, a transport failure ends the flush. Made the three orphaned store members live and dropped the `Polly` dependency |
-| 34 | [Flush trigger model](Done/34-app-lifecycle-integration.md) | ✅ Done | P0 | Documented as a deliberate absence: no lifecycle wiring, and an explicit warning against adding any |
-| 35 | [Injectable replay transport](Done/35-orchestrator-transport-not-injectable.md) | ✅ Done | P0 | `HyperwycOptions.ReplayTransport`. Never disposed by Hyperwyc; also unblocks 30's auth question |
-| 37 | [Replays go through the pipeline](Done/37-replay-through-pipeline.md) | ✅ Done | P0 | `HyperwycHandler` steps aside for replays instead of them bypassing the pipeline. Fixes offline writes against authenticated APIs; registration is now `AddHyperwycHandler()` |
-| 36 | [Public surface and organisation](Done/36-public-surface.md) | ✅ Done | P0 | `IHyperwyc.FlushAsync()` added, `SyncOrchestrator` internal, config enums moved to the root namespace. No `Services/` folder — folders are namespaces here |
-| 33 | [Orchestrator disposal](Done/33-orchestrator-sync-disposal.md) | ✅ Done | P0 | Both paths now cancel a lifetime token every flush links to. Neither waits for queued work to send; `DisposeAsync` waits only for the in-flight flush to unwind |
-| 27 | [`CacheStrategy` never applied](Done/27-cache-strategy-not-applied.md) | ✅ Done | P0 | All four presets now honoured on both read paths. Added `X-Hyperwyc-Status: CacheMiss` for a `CacheOnly` read with an empty cache |
-| 29 | [Policy TTL not reaching the evaluator](Done/29-default-ttl-propagation.md) | ✅ Done | P0 | Also fixed a second defect found alongside it: the default policy's TTL silently overwrote an explicitly set `DefaultCacheTtl` |
-| 31 | [Package structure](Done/31-package-structure.md) | ✅ Done | P0 | `Hyperwyc` (batteries, Cabinet default) over `Hyperwyc.Core`. Store is a type parameter on `AddHyperwycCore<TStore>()`; `HyperwycOptions.Store` removed |
-| 39 | [Idempotency is not Hyperwyc's remit](Done/39-reconsider-idempotency.md) | ✅ Done | P0 | Header injection removed; Hyperwyc sends the request the app made and adds nothing. Supersedes 08. Duplicate delivery is a property of retrying in general, resolved between an application and its API |
-| 18 | [Sample — product/sales API](Done/18-poc-web-api.md) | ✅ Done | P0 | Random catalogue, stock-decrementing sales, `Idempotency-Key` dedup and 400/404/409 failure paths, all verified against a running server |
-| **40** | [Surface the outcome of a deferred request](40-surface-deferred-outcomes.md) | ⬜ Open | **P0** | `OnFailed` carries only type/URL/method/timestamp — not the status, the response body, or *which* queued write it was. A consumer cannot act on a rejection it cannot see. Blocks 19's per-sale status |
-| **13** | [Connectivity reference implementation](13-connectivity-reference-implementation.md) | 🟡 Partial | **P0** | `MauiConnectivityService` exists in the sample and is proven on device — no Rx dependency, change-stream semantics, disposes its platform hook. Remaining: `StaticConnectivityService` in core, and the README write-up |
-| **16** | [`ResetStoreAsync()`](16-reset-store-async.md) | 🟡 Partial | P0 | Method exists and delegates to `ISyncStore.ResetAsync`. Missing: flush-semaphore coordination (a reset during an in-flight flush is unguarded) and any unit tests |
-| **19** | [Sample — .NET MAUI app](19-poc-maui-app.md) | 🟡 Partial | P0 | **Core scenario proven on device:** catalogue served from cache with the network off, across an app restart. Remaining: offline writes, sync-now, event log, and per-sale state — the last blocked on [40](40-surface-deferred-outcomes.md) |
+| # | Item | Status | Notes |
+|---|---|---|---|
+| 01 | [Repository & solution setup](Done/01-repo-and-solution-setup.md) | ✅ Done | `hyperwyc.slnx`, two src projects, two test projects |
+| 02 | [Core interfaces](Done/02-core-interfaces.md) | ✅ Done | `ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`, `IHyperwyc` |
+| 03 | [Envelope model](Done/03-envelope-model.md) | ✅ Done | `Envelope` + `CachedResponse` |
+| 04 | [`InMemorySyncStore`](Done/04-in-memory-sync-store.md) | ✅ Done | |
+| 05 | [`SyncEventStream`](Done/05-sync-event-stream.md) | ✅ Done | Hand-rolled `IObservable<SyncEvent>`; no `System.Reactive` dependency |
+| 06 | [Handler — online path](Done/06-hyperwyc-handler-online-path.md) | ✅ Done | |
+| 07 | [Handler — offline path](Done/07-hyperwyc-handler-offline-path.md) | ✅ Done | |
+| 08 | [Idempotency-Key injection](Done/08-idempotency-key-injection.md) | ⛔ Superseded | Removed by [39](Done/39-reconsider-idempotency.md) |
+| 09 | [Response cache for reads](Done/09-response-cache-read-operations.md) | ✅ Done | GET/HEAD/OPTIONS, TTL staleness, body-size cap |
+| 10 | [Write-triggered cache invalidation](Done/10-write-triggered-cache-invalidation.md) | ✅ Done | URL-prefix derivation strips trailing id/GUID segments |
+| 11 | [Sync flush orchestrator](Done/11-sync-flush-orchestrator.md) | ✅ Done | Debounce + single-flush semaphore |
+| 12 | [Polly retry and dead-letter](Done/12-polly-retry-dead-letter.md) | ✅ Done | Retries are in-process within one flush — see item 28 |
+| 14 | [`CabinetSyncStore`](Done/14-cabinet-sync-store.md) | ✅ Done | Cabinet 1.0.7, AES-256-GCM at rest |
+| 15 | [`AddHyperwyc()` DI extension](Done/15-di-extension-and-options.md) | ✅ Done | |
+| 17 | [Max cached body size](Done/17-max-cached-body-size.md) | ✅ Done | Enforced in `HandleOnlineReadAsync`; covered by `ResponseCacheReadTests` |
+| 38 | [Retry model: connectivity-driven](Done/38-retry-classification.md) | ✅ Done | One attempt per flush; `4xx` dead-letters at once, `5xx` defers with persisted `RetryCount`/`NextRetryUtc`, a transport failure ends the flush. Made the three orphaned store members live and dropped the `Polly` dependency |
+| 34 | [Flush trigger model](Done/34-app-lifecycle-integration.md) | ✅ Done | Documented as a deliberate absence: no lifecycle wiring, and an explicit warning against adding any |
+| 35 | [Injectable replay transport](Done/35-orchestrator-transport-not-injectable.md) | ✅ Done | `HyperwycOptions.ReplayTransport`. Never disposed by Hyperwyc; also unblocks 30's auth question |
+| 37 | [Replays go through the pipeline](Done/37-replay-through-pipeline.md) | ✅ Done | `HyperwycHandler` steps aside for replays instead of them bypassing the pipeline. Fixes offline writes against authenticated APIs; registration is now `AddHyperwycHandler()` |
+| 36 | [Public surface and organisation](Done/36-public-surface.md) | ✅ Done | `IHyperwyc.FlushAsync()` added, `SyncOrchestrator` internal, config enums moved to the root namespace. No `Services/` folder — folders are namespaces here |
+| 33 | [Orchestrator disposal](Done/33-orchestrator-sync-disposal.md) | ✅ Done | Both paths now cancel a lifetime token every flush links to. Neither waits for queued work to send; `DisposeAsync` waits only for the in-flight flush to unwind |
+| 27 | [`CacheStrategy` never applied](Done/27-cache-strategy-not-applied.md) | ✅ Done | All four presets now honoured on both read paths. Added `X-Hyperwyc-Status: CacheMiss` for a `CacheOnly` read with an empty cache |
+| 29 | [Policy TTL not reaching the evaluator](Done/29-default-ttl-propagation.md) | ✅ Done | Also fixed a second defect found alongside it: the default policy's TTL silently overwrote an explicitly set `DefaultCacheTtl` |
+| 31 | [Package structure](Done/31-package-structure.md) | ✅ Done | `Hyperwyc` (batteries, Cabinet default) over `Hyperwyc.Core`. Store is a type parameter on `AddHyperwycCore<TStore>()`; `HyperwycOptions.Store` removed |
+| 39 | [Idempotency is not Hyperwyc's remit](Done/39-reconsider-idempotency.md) | ✅ Done | Header injection removed; Hyperwyc sends the request the app made and adds nothing. Supersedes 08. Duplicate delivery is a property of retrying in general, resolved between an application and its API |
+| 18 | [Sample — product/sales API](Done/18-poc-web-api.md) | ✅ Done | Random catalogue, stock-decrementing sales, `Idempotency-Key` dedup and 400/404/409 failure paths, all verified against a running server |
+| **40** | [Surface the outcome of a deferred request](40-surface-deferred-outcomes.md) | ⬜ Open | `OnFailed` carries only type/URL/method/timestamp — not the status, the response body, or *which* queued write it was. A consumer cannot act on a rejection it cannot see. Blocks 19's per-sale status |
+| 47 | [Connectivity is required](Done/47-connectivity-is-required.md) | ✅ Done | Ships `NetworkAvailabilityConnectivityService` (BCL-only) **and** removes the `AlwaysOnline` default: a consumer registers an `IConnectivityService` (either side of `AddHyperwyc`) or sets the option, and resolving throws if they do neither. The default failed silently — always-connected means nothing is ever queued or replayed, and the library looks like it works. Narrows 31's zero-config headline, deliberately |
+| **13** | [Connectivity documentation](13-connectivity-reference-implementation.md) | 🟡 Partial | `MauiConnectivityService` exists in the sample and is proven on device. **Scope revised twice: nothing ships from core, not even a test double** — it fails the scope test, and test doubles belong in a separate testing package if anywhere. [47](Done/47-connectivity-is-required.md) covered the non-MAUI half of the docs; remaining is the MAUI copy-and-paste walkthrough and the testing guidance |
+| **16** | [`ResetStoreAsync()`](16-reset-store-async.md) | 🟡 Partial | Method exists and delegates to `ISyncStore.ResetAsync`. Missing: flush-semaphore coordination (a reset during an in-flight flush is unguarded) and any unit tests |
+| **19** | [Sample — .NET MAUI app](19-poc-maui-app.md) | 🟡 Partial | **Core scenario proven on device:** catalogue served from cache with the network off, across an app restart. Remaining: offline writes, sync-now, event log, and per-sale state — the last blocked on [40](40-surface-deferred-outcomes.md) |
 
-## v1.0
+## v1.0 — release candidate
 
-Suggested order: **41** first — it is on-by-default behaviour contradicting an explicit server
-instruction. Then **25 with 43 and 44**, which all change how a cached entry is keyed or stored
-and share one migration conversation. Then **46 before 45**, since cheap revalidation is what
-makes stale-while-revalidate affordable. Then 30 and the ergonomics items.
+Deliberately only two items. Everything else on this list can be worked around by a consumer;
+these cannot. Do 25 first — it changes the persisted shape, so it wants to land before there are
+users to migrate.
 
-Items 41–46 came out of an audit against Service Worker and Workbox — see
-[reference models](../docs/decisions/README.md#reference-models).
+| # | Item | Status | Notes |
+|---|---|---|---|
+| 25 | [Binary request/response bodies](25-binary-request-response-bodies.md) | ⬜ Open | Bodies round-trip through `ReadAsStringAsync`, corrupting anything not text. Breaking change to the persisted shape; batch [43](43-honour-vary-header.md) and [44](44-cache-generation.md) with it if they are being done at all, since all three change how an entry is keyed or stored |
+| 22 | [Per-route policies](22-v1-per-route-policies.md) | ⬜ Open | A single global policy cannot express "cache the catalogue for a day, never cache payments" — which the README already promises. Also where a `ReturnsCollection` flag would live (see [26](26-v2-typed-response-shaping.md)), and where `ApiFirst` should be renamed `NetworkFirst` |
 
-| # | Item | Status | Priority | Notes |
-|---|---|---|---|---|
-| 41 | [Honour cacheability directives](41-honour-cacheability-directives.md) | ⬜ Open | **P1 (first)** | `Cache-Control: no-store` is ignored and the response written to disk. Service Workers ignore these headers too, but only because you opt in route by route — Hyperwyc caches every GET, so it inherited the stance without the precondition |
-| 42 | [Cache grows without bound](42-cache-eviction.md) | ⬜ Open | P1 | Individual bodies are capped; the cache as a whole is not. No entry limit, size limit or eviction. Browsers give you a quota and evict for you — nothing does that here |
-| 43 | [`Vary` not honoured](43-honour-vary-header.md) | ⬜ Open | P1 | Cache keyed on URL alone, so a content-negotiated endpoint serves the wrong variant. Silent, and looks like a server bug. Sequence with 25 — both change how entries are keyed |
-| 44 | [No cache generation](44-cache-generation.md) | ⬜ Open | P1 | Cached bodies outlive app upgrades, so changed DTO shapes deserialise wrongly. Land with 25, which already carries a one-time reset |
-| 45 | [`StaleWhileRevalidate` strategy](45-stale-while-revalidate.md) | ⬜ Open | P1 | The one Workbox strategy missing. Instant render from cache plus a silent refresh — the right behaviour for a catalogue screen. Needs 40's richer `OnUpdated` |
-| 46 | [Conditional revalidation](46-conditional-requests.md) | ⬜ Open | P1 | `ETag` is already stored and never used, so every refresh re-downloads the whole body. A `304` instead would be a real saving on mobile. Composes with 41 and 45 |
-| 25 | [Binary request/response bodies](25-binary-request-response-bodies.md) | ⬜ Open | **P1 (with 37)** | Correctness gap, not ergonomics: bodies round-trip through `ReadAsStringAsync`. The item records the decision that no migration is required pre-1.0. Batch with 37 — both change the persisted envelope shape |
-| 30 | [Sensitive headers are persisted](30-sensitive-header-exclusion.md) | ⬜ Open | P1 | `Authorization` and `Cookie` are stored verbatim and replayed. Its hard half — how replays acquire credentials — was answered by 37, so this is now just the deny-list |
-| 32 | [Default encryption key](32-default-encryption-key.md) | 🟡 Partial | P1 (small) | **Decided:** keep the path-derived key as the free default. README and TECHNICAL_PLAN §9 now state plainly what it does and does not protect. Remaining: the MAUI `SecureStorage` reference implementation, which needs the POC |
-| 28 | [Retry state is never persisted](Done/28-persisted-retry-state.md) | ✅ Done | P1 | Closed by 38, which persists `RetryCount` and `NextRetryUtc` as the core of its model |
-| 22 | [Per-route policies](22-v1-per-route-policies.md) | ⬜ Open | P1 | Largest v1.0 item. Delivers the per-route escape hatches the README already promises. Reuses the strategy resolution added by 27 |
-| 21 | [`Date` header rewriting](21-v1-date-header-rewriting.md) | ⬜ Open | P1 | Plus the `X-Hyperwyc-Cached-At` header |
-| 23 | [Diagnostics view](23-v1-diagnostics-view.md) | ⬜ Open | P1 | Read-only outbox/dead-letter queries on `IHyperwyc` + a sample page. Reports `RetryCount`, so reads better after 28 |
-| 24 | [Dead-letter management](24-v1-dead-letter-management.md) | ⬜ Open | P1 | Requeue/dismiss. Depends on 23 for the UI surface |
-| 20 | [Configurable body cache cap](20-v1-configurable-body-cache-cap.md) | 🟡 Partial | P1 (small) | The option is already public and honoured. Remaining: argument validation (negative/zero) and README documentation |
+## v1.2 — ergonomics and operational visibility
+
+| # | Item | Status | Notes |
+|---|---|---|---|
+| 32 | [Default encryption key](32-default-encryption-key.md) | 🟡 Partial | Decided: keep the path-derived key as the free default, documented as such. Remaining is the MAUI `SecureStorage` reference implementation |
+| 21 | [`Date` header rewriting](21-v1-date-header-rewriting.md) | ⬜ Open | Plus the `X-Hyperwyc-Cached-At` header |
+| 23 | [Diagnostics view](23-v1-diagnostics-view.md) | ⬜ Open | Read-only outbox and dead-letter queries on `IHyperwyc`. Depends on [40](40-surface-deferred-outcomes.md) to be able to explain *why* something failed |
+| 24 | [Dead-letter management](24-v1-dead-letter-management.md) | ⬜ Open | Requeue and dismiss. Depends on 23 for the UI surface |
+| 20 | [Configurable body cache cap](20-v1-configurable-body-cache-cap.md) | 🟡 Partial | The option is already public and honoured. Remaining: argument validation and README documentation |
+| 30 | [Caller-set headers are persisted](30-sensitive-header-exclusion.md) | ⬜ Open | **Reversed to a documentation item.** Stripping them would violate ADR 0001's fidelity obligation and break replay for API keys, basic auth and HMAC — credentials that are still valid at replay time. Document the exposure and point at the encryption key instead |
+
+## v1.5 — HTTP caching semantics
+
+From an audit against Service Worker and Workbox — see
+[reference models](../docs/decisions/README.md#reference-models). Suggested order: **41** first,
+then **46 before 45**, since cheap revalidation is what makes stale-while-revalidate affordable.
+
+| # | Item | Status | Notes |
+|---|---|---|---|
+| 41 | [Honour cacheability directives](41-honour-cacheability-directives.md) | ⬜ Open | `Cache-Control: no-store` is ignored and the response written to disk. Service Workers ignore these headers too, but only because you opt in route by route — Hyperwyc caches every GET, so it inherited the stance without the precondition. **The `no-store` sliver alone is small and could be pulled forward** |
+| 42 | [Cache grows without bound](42-cache-eviction.md) | ⬜ Open | Individual bodies are capped; the cache as a whole is not. Browsers give you a quota and evict for you — nothing does that here |
+| 43 | [`Vary` not honoured](43-honour-vary-header.md) | ⬜ Open | Cache keyed on URL alone, so a content-negotiated endpoint serves the wrong variant. Silent, and looks like a server bug. Sequence with 25 |
+| 44 | [No cache generation](44-cache-generation.md) | ⬜ Open | Cached bodies outlive app upgrades, so changed DTO shapes deserialise wrongly. Land with 25 |
+| 45 | [`StaleWhileRevalidate`](45-stale-while-revalidate.md) | ⬜ Open | The one Workbox strategy missing. Needs [40](40-surface-deferred-outcomes.md)'s richer `OnUpdated` |
+| 46 | [Conditional revalidation](46-conditional-requests.md) | ⬜ Open | `ETag` is already stored and never used, so every refresh re-downloads the whole body |
 
 ## v2.0+
 
-| # | Item | Status | Priority | Notes |
-|---|---|---|---|---|
-| 26 | [Typed response shaping for offline reads](26-v2-typed-response-shaping.md) | 💭 Under consideration | P2 | Option A (per-route `EmptyOfflineBody`) may land inside item 22, in which case this closes as a duplicate leaving only the source-generator question |
+| # | Item | Status | Notes |
+|---|---|---|---|
+| 26 | [Typed response shaping for offline reads](26-v2-typed-response-shaping.md) | 💭 Under consideration | Revised down to three layers. Layer 0 — return `null` rather than an empty body — is nearly free and fixes objects, since an empty body throws for those too. Layer 1 is a `ReturnsCollection` flag on [22](22-v1-per-route-policies.md). Layer 2 (source generator) stays speculative |
 
 ## Unfiled roadmap items
 
@@ -135,3 +147,9 @@ request grouping / bulk sync, and GraphQL support.
 - **Item 34 came out of reasoning through 33** on 2026-08-06 and ended in a decision not to
   build anything: shutdown is not a flush trigger. It is kept as an item because the reasoning
   is unintuitive and worth documenting rather than rediscovering.
+- **Item 47 is the counterweight to 31.** Batteries-included picks a store for you because any
+  durable store will do; it cannot pick a connectivity source, because that depends on the
+  platform and a wrong choice fails invisibly. The rule the two items settle between them:
+  *default what you can decide correctly, require what you cannot.* Its second half, found on
+  the revision: requiring a decision must not require an ordering, so the check is deferred to
+  resolution rather than made at registration.

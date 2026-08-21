@@ -156,6 +156,19 @@ makes correlation possible.
 - [ ] [Issue 23](23-v1-diagnostics-view.md) updated: `DeadLetteredItem` should carry the failure
       detail this issue persists.
 
+## A framing note for the documentation
+
+Worth a passing mention when this is written up, not a section of its own.
+
+Surfacing deferred outcomes nudges consumers toward thinking about their application the way
+distributed systems are already thought about: the affordance is "order **submitted**", not
+"order **successful**", with the outcome arriving separately and later. Most applications
+building on Hyperwyc will already be doing this in their backend without necessarily having
+carried the idea into the client.
+
+It is useful framing for some readers and unnecessary for others, so it belongs as a footnote
+rather than an argument — Hyperwyc does not require anyone to model their UI a particular way.
+
 ## Notes
 
 - Raised while building the sample MAUI app ([issue 19](19-poc-maui-app.md)), whose specification

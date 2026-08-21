@@ -1,4 +1,5 @@
-﻿using Hyperwyc.Sample.Maui.Pages;
+﻿using Hyperwyc.Interfaces;
+using Hyperwyc.Sample.Maui.Pages;
 using Hyperwyc.Sample.Maui.Services;
 using Hyperwyc.Sample.Maui.ViewModels;
 using Microsoft.Extensions.Logging;
@@ -23,10 +24,10 @@ public static class MauiProgram
 
         builder.AddServiceDefaults();
 
-        builder.Services.AddHyperwyc(configure: config =>
-        {
-            config.Connectivity = new MauiConnectivityService();
-        });
+        // Connectivity is the one thing Hyperwyc cannot decide for you. Registering it is
+        // all that is needed — order relative to AddHyperwyc does not matter.
+        builder.Services.AddSingleton<IConnectivityService, MauiConnectivityService>();
+        builder.Services.AddHyperwyc();
 
         // MAUI integration with Aspire doesn't currently work.
         // Specific issue currently blocking this:

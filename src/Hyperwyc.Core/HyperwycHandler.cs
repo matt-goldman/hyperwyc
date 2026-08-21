@@ -8,10 +8,12 @@ namespace Hyperwyc;
 /// caching and offline-sync pipeline.
 /// </summary>
 /// <remarks>
-/// This handler must be placed inside the <see cref="HttpClient"/> pipeline
-/// (i.e. closer to the transport than auth handlers). Assign an
-/// <see cref="DelegatingHandler.InnerHandler"/> or register it with
-/// <c>AddHyperwyc()</c>, which wires this up automatically.
+/// Register this handler <b>first</b> on the client, with
+/// <c>AddHyperwycHandler()</c> — closest to your calling code, furthest from the
+/// network. Handlers added after it then run on ordinary requests <i>and</i> on
+/// replays, which is what allows a queued write to be authenticated with a token
+/// minted at replay time rather than at queue time. See
+/// <c>docs/decisions/0002-replays-traverse-the-pipeline.md</c>.
 /// </remarks>
 public sealed class HyperwycHandler : DelegatingHandler
 {

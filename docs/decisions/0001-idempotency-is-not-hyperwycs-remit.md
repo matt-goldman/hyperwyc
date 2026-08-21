@@ -38,9 +38,9 @@ carries exactly this risk and no more — the same problem, with the same owners
 Hyperwyc is present. Solving it here meant solving a general HTTP concern inside a library whose
 remit is much narrower.
 
-**It duplicated a mechanism at the wrong layer.** Hyperwyc's handler is registered outermost, and
-handler pipelines are first-in, last-out, so it observes each response *after* every handler the
-application added. Anything the application already resolves — a refresh-on-401, a circuit
+**It duplicated a mechanism at the wrong layer.** Hyperwyc's handler is registered first, and the
+first handler added is the last to see the response, so it observes each response *after* every
+handler the application added. Anything the application already resolves — a refresh-on-401, a circuit
 breaker, its own retry — is resolved before Hyperwyc sees anything. Building a second mechanism
 above that is redundant at best and interfering at worst.
 

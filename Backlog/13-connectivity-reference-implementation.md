@@ -55,12 +55,53 @@ Documented in the README and used by the POC app (issue #19):
 
 ## Acceptance Criteria
 
-- [ ] `StaticConnectivityService` implemented in the core package with XML doc comments.
-- [ ] Unit tests cover: initial state, state transition, observer notification, multiple observers.
+- [x] Decision recorded not to ship a test double from the core package — see below.
 - [x] MAUI reference implementation included in the sample app (issue #19).
-- [ ] README documents the MAUI implementation as copy-and-paste reference code.
-- [ ] README states that non-MAUI consumers implement the two-member interface directly, and
-      that `AlwaysOnlineConnectivityService` is the default when none is supplied.
+- [ ] README documents the MAUI implementation as copy-and-paste reference code, carrying the
+      four decisions recorded under Progress.
+- [x] README states what non-MAUI consumers should do — done by
+      [issue 47](Done/47-connectivity-is-required.md), which ships
+      `NetworkAvailabilityConnectivityService` and documents all three choices. Supersedes the
+      original wording, which described `AlwaysOnlineConnectivityService` as the default.
+- [ ] README shows how to control connectivity in a consumer's own tests — a mock, or a handful
+      of lines — rather than pointing at anything Hyperwyc ships.
+
+## Second scope revision: no test double ships either
+
+The remaining plan was to ship `StaticConnectivityService` from the core package for testing.
+That is also rejected.
+
+Run it through [the scope test](../docs/decisions/README.md#the-standing-scope-test):
+
+- Would the problem exist without Hyperwyc? Testing against an interface is a general problem.
+- Does it require anything of the consumer's API? No.
+- **Can the application already do it?** Yes, trivially — mock a two-member interface with any
+  mocking library, or write five lines by hand.
+- **Does it depend on something only Hyperwyc knows?** No.
+
+Failing the last two is decisive. Beyond that, a test double shipped in the main package is
+something a consumer can accidentally ship to production, and no name prevents it — `Static`
+understates what it is, `Fake` and `Test` are clearer but equally referenceable. Where the
+ecosystem does ship test doubles it puts them in a **separate testing package**:
+`FakeTimeProvider` lives in `Microsoft.Extensions.TimeProvider.Testing`,
+`System.IO.Abstractions.TestingHelpers` is its own package, and so on. That convention exists
+precisely because the boundary needs to be visible in the dependency graph, not just the name.
+
+A `Hyperwyc.Testing` package is therefore the only shape that would be defensible, and it is not
+worth publishing and versioning a package for one twenty-line class that a consumer can mock.
+Should there ever be enough testing surface to justify one — a fake store, a controllable clock,
+a scriptable transport — that is when to revisit it.
+
+**`AlwaysOnlineConnectivityService` is not a counter-example.** It is a functional
+implementation, not a testing aid, and it is not there to be substituted in a test.
+
+*Revised by [issue 47](Done/47-connectivity-is-required.md):* it is no longer the default
+either. Defaulting to it meant a consumer who supplied nothing got a library that cached but
+never queued or replayed — silently. Connectivity is now required, and #47 also ships
+`NetworkAvailabilityConnectivityService` so that a non-MAUI consumer has something to reach
+for that is not "always connected".
+
+The remaining work here is documentation, which was going to be needed regardless.
 
 ## Progress
 
@@ -103,5 +144,5 @@ this item called for, and is documented in the code as a deliberate choice.
   would mean versioning and supporting twenty lines that have not yet run in a real app.
 - `Hyperwyc.Maui` is preferred over `Plugin.Maui.Hyperwyc` if that package is ever created, to
   match the provider-package naming already established by the storage providers.
-- The existing `Fakes/FakeConnectivityService` in `Hyperwyc.Tests` can likely be replaced by
-  `StaticConnectivityService` once it ships.
+- The existing `Fakes/FakeConnectivityService` in `Hyperwyc.Tests` stays. Nothing ships from
+  core to replace it — see the second scope revision above.
