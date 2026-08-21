@@ -201,6 +201,11 @@ while offline queue locally and replay when connectivity returns.
 | Retry and dead-letter | Stop the API mid-sync — writes are retried across attempts, then dead-letter |
 | Idempotent replay | Record a sale offline, come back online, confirm stock drops only once |
 
+**Verified on an Android device:** load the catalogue, disable Wi-Fi and mobile data, restart the
+app, and the catalogue still loads — served from the Cabinet store by the offline read path. This
+is the sample's load-bearing scenario, and the restart is the part that matters: it proves the
+cache is durable and correctly located in the app sandbox, not merely held in memory.
+
 ---
 
 ## Known rough edges

@@ -57,10 +57,43 @@ Documented in the README and used by the POC app (issue #19):
 
 - [ ] `StaticConnectivityService` implemented in the core package with XML doc comments.
 - [ ] Unit tests cover: initial state, state transition, observer notification, multiple observers.
-- [ ] MAUI reference implementation included in the POC app (issue #19).
+- [x] MAUI reference implementation included in the sample app (issue #19).
 - [ ] README documents the MAUI implementation as copy-and-paste reference code.
 - [ ] README states that non-MAUI consumers implement the two-member interface directly, and
       that `AlwaysOnlineConnectivityService` is the default when none is supplied.
+
+## Progress
+
+`MauiConnectivityService` exists in the sample and is proven on an Android device: with Wi-Fi
+and mobile data disabled it reports disconnected, which is what routes a read down
+`HandleOfflineReadAsync` and serves the cached catalogue. Without it the same test would have
+passed through the *online* path finding a fresh entry, which proves considerably less.
+
+Four decisions taken while refining it, all of which should carry into the README write-up
+because that is what people will copy:
+
+- **No `System.Reactive`.** The first version used a `BehaviorSubject<bool>`, which meant the
+  package reference existed solely for one field. Hand-rolling the observable mirrors how the
+  core implements `IObservable<T>` and keeps the reference implementation from imposing a
+  dependency Hyperwyc deliberately avoids. The sample no longer references `System.Reactive` at
+  all.
+- **A change stream, not a state view.** Nothing is replayed on subscribe;
+  `IConnectivityService.IsConnected` answers "right now". This matches
+  `AlwaysOnlineConnectivityService`, whose observable emits nothing at all, and it dissolves an
+  inconsistency the first version had, where the subject said `false` at startup regardless of
+  actual connectivity while `IsConnected` read live state.
+- **Only publish on an actual change.** The platform raises `ConnectivityChanged` for any change
+  in network access, including moving between Wi-Fi and cellular while remaining online.
+  Forwarding that as a connectivity restoration triggers a flush for nothing, so the service
+  compares against the last published value — seeded from live state — and stays quiet otherwise.
+- **`IDisposable`, to unhook the platform event.** `Connectivity.Current` is a long-lived static,
+  so a handler left attached keeps the service and everything it captures alive for the process
+  lifetime. Irrelevant for an app-lifetime singleton, but reference code gets copied into places
+  where it is not. Note `IConnectivityService` itself is not `IDisposable`; the consumer supplies
+  the instance and therefore owns it, consistent with `ReplayTransport` ownership.
+
+`NetworkAccess.ConstrainedInternet` counts as disconnected, which is the conservative reading
+this item called for, and is documented in the code as a deliberate choice.
 
 ## Notes
 

@@ -133,8 +133,12 @@ and is pure managed code, a smaller footprint than the Polly reference the core 
 
 ## Decided
 
-- **Default store location:** `Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)`,
-  confirmed to resolve inside the application sandbox on both Android and iOS.
+- **Default store location:** `Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)`.
+  **Since confirmed on a real Android device** by the sample ([issue 19](../19-poc-maui-app.md)):
+  a catalogue cached before the app was killed was still readable after a restart with the
+  network disabled, which requires the path to be both writable and stable across process
+  lifetimes — and incidentally proves the path-derived encryption key round-trips too. iOS
+  remains reasoned rather than observed.
   `FileSystem.AppDataDirectory` is rejected — it is MAUI Essentials, for the reasons in issue #13.
 - **No `InMemorySyncStore` fallback in Core.** `AddHyperwycCore` requires a store. `InMemorySyncStore`
   stays public and supported, for tests and for consumers who explicitly want non-durable behaviour.
