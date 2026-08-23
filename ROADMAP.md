@@ -61,6 +61,8 @@ Everything else on the backlog can be worked around by a consumer. These two can
 
 ## 🥉 v1.2 — ergonomics and operational visibility
 
+- [ ] Decide and implement what happens when the store cannot be decrypted ([49](Backlog/49-unreadable-store-recovery.md)) — today a key mismatch throws a raw `CryptographicException`, sometimes out of the consumer's own HTTP call
+- [ ] Document excluding the store from iCloud and Google Drive backups ([48](Backlog/48-exclude-store-from-os-backup.md)) — a restored outbox replays writes that already happened, and Hyperwyc has no duplicate suppression by design
 - [ ] MAUI `SecureStorage` reference implementation for the store encryption key ([32](Backlog/32-default-encryption-key.md)) — the path-derived key stays as the free default, and is documented as such
 - [ ] `Date` header rewriting when serving responses from cache ([21](Backlog/21-v1-date-header-rewriting.md))
 - [ ] In-app diagnostics view — list unsynced and dead-lettered records ([23](Backlog/23-v1-diagnostics-view.md))

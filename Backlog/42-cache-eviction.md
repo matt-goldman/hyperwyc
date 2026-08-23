@@ -94,3 +94,14 @@ read again.
 - Interacts with [issue 32](32-default-encryption-key.md) only indirectly, but the two together
   are the answer to "how much of my users' data is sitting on this device, and how well is it
   protected" — a question a developer adopting an offline library should be able to answer.
+
+## Additional pressure: Android's backup quota
+
+[Issue 48](48-exclude-store-from-os-backup.md) notes that Android Auto Backup caps an app at
+25 MB and, on exceeding it, silently stops backing up **the entire app** rather than just the
+offending files. An unbounded response cache can therefore take an app's settings and databases
+down with it.
+
+Excluding the store from backup fixes that, and is what 48 recommends. But it is another argument
+for bounding the cache regardless: a consumer who has not read that advice should not be able to
+break something unrelated by caching too much.

@@ -87,3 +87,33 @@ consumers a first-class extension point, and keeps platform APIs out of the core
 - Related to issue #30 (sensitive headers persisted): #30 governs what goes into the store,
   this item governs how well what is in there is protected. Both should be resolved before a
   1.0 that claims encryption at rest as a feature.
+
+## Related: the derived key is not stable across an iOS restore
+
+Found while writing [issue 48](48-exclude-store-from-os-backup.md), and unverified on device.
+
+`DeriveKey` is `SHA256(UTF8(DirectoryPath))` over the absolute path. On iOS that path contains
+the app container UUID, which changes when the app is reinstalled or restored onto a new device.
+The restored files are therefore at a different path, deriving a different key, and cannot be
+decrypted.
+
+Two consequences for this issue:
+
+- It is a defect in the default independent of anything else: a restore-with-reinstall silently
+  loses the store. Needs confirming on device before it is treated as fact.
+- It strengthens the case for the `SecureStorage`-backed key this issue is about, since a key
+  held in the keychain survives the move. But note the inversion recorded in 48: a stable key
+  also removes the accidental protection against a restored outbox replaying delivered writes.
+  The two issues want reading together.
+
+## Decide the derivation before [issue 49](49-unreadable-store-recovery.md)
+
+49 covers what Hyperwyc does with a store it cannot decrypt. How much of that machinery is worth
+building depends on how often the path is reached, which this issue controls.
+
+Deriving the default key from a **stable** input — a fixed salt plus an application identity —
+rather than from the volatile absolute path would make the store survive the iOS reinstall and
+restore cases that currently break it. The derived-key failure mode then reduces to genuine
+corruption, which is rare and affects single documents rather than the whole store.
+
+Nothing is released, so changing the derivation costs no compatibility.

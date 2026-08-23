@@ -71,6 +71,7 @@ users to migrate.
 | # | Item | Status | Notes |
 |---|---|---|---|
 | 25 | [Binary request/response bodies](25-binary-request-response-bodies.md) | ⬜ Open | Bodies round-trip through `ReadAsStringAsync`, corrupting anything not text. Breaking change to the persisted shape; batch [43](43-honour-vary-header.md) and [44](44-cache-generation.md) with it if they are being done at all, since all three change how an entry is keyed or stored |
+| 49 | [Unreadable store recovery](49-unreadable-store-recovery.md) | ⬜ Open | **Proposed for v1.0, not yet agreed.** A key mismatch throws a raw `CryptographicException` from wherever the store is first touched, including out of the consumer's `HttpClient.SendAsync`. Rule: recreate what is unrecoverable (derived key) and report it; throw and destroy nothing where the data could still be read (supplied key). Sequence after [32](32-default-encryption-key.md) |
 | 22 | [Per-route policies](22-v1-per-route-policies.md) | ⬜ Open | A single global policy cannot express "cache the catalogue for a day, never cache payments" — which the README already promises. Also where a `ReturnsCollection` flag would live (see [26](26-v2-typed-response-shaping.md)), and where `ApiFirst` should be renamed `NetworkFirst` |
 
 ## v1.2 — ergonomics and operational visibility
@@ -78,6 +79,7 @@ users to migrate.
 | # | Item | Status | Notes |
 |---|---|---|---|
 | 32 | [Default encryption key](32-default-encryption-key.md) | 🟡 Partial | Decided: keep the path-derived key as the free default, documented as such. Remaining is the MAUI `SecureStorage` reference implementation |
+| 48 | [Exclude the store from OS backup](48-exclude-store-from-os-backup.md) | ⬜ Open | Documentation. The store sits where iOS and Android back it up by default; a **restored outbox replays writes that already happened**, and Hyperwyc has no duplicate suppression by design. Android's 25 MB backup quota is the secondary argument. Path-level exclusion works on both platforms |
 | 21 | [`Date` header rewriting](21-v1-date-header-rewriting.md) | ⬜ Open | Plus the `X-Hyperwyc-Cached-At` header |
 | 23 | [Diagnostics view](23-v1-diagnostics-view.md) | ⬜ Open | Read-only outbox and dead-letter queries on `IHyperwyc`. [40](Done/40-surface-deferred-outcomes.md) persisted the failure detail; this is the read path that makes it observable — and the only place a transport failure, which publishes no event, can be seen |
 | 24 | [Dead-letter management](24-v1-dead-letter-management.md) | ⬜ Open | Requeue and dismiss. Depends on 23 for the UI surface |
@@ -147,6 +149,17 @@ request grouping / bulk sync, and GraphQL support.
 - **Item 34 came out of reasoning through 33** on 2026-08-06 and ended in a decision not to
   build anything: shutdown is not a flush trigger. It is kept as an item because the reasoning
   is unintuitive and worth documenting rather than rediscovering.
+- **Item 49 is the question item 48 exposed rather than created.** What should happen when the
+  store cannot be decrypted was unanswered from the start; the backup finding only supplied a
+  likely trigger. The rule it settles on — recreate what is unrecoverable, throw where the data
+  could still be read — splits on recoverability rather than on where the key came from, which is
+  what makes it still correct for key sources not yet built.
+- **Item 48 was filed from a question, and grew a second finding.** The question was about
+  backup quota; the answer is that a restored outbox re-sends delivered writes. Writing it up
+  also turned up that the path-derived encryption key is not stable across an iOS restore, which
+  accidentally mitigates the replay hazard — and stops doing so for exactly the consumers who
+  follow item 32's advice and supply their own key. Recorded because inverted risk like that is
+  easy to miss.
 - **Item 13 never shipped a line of library code, across three scope revisions.** Ship
   `MauiConnectivityService` from core → ship a `StaticConnectivityService` test double →
   documentation only → documentation with connectivity required and no default. Each pass
