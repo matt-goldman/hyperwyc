@@ -35,6 +35,9 @@ internal sealed class HyperwycService : IHyperwyc
         _orchestrator.FlushAsync(ct);
 
     /// <inheritdoc/>
-    public Task ResetStoreAsync(CancellationToken ct = default) =>
-        _store.ResetAsync(ct);
+    public async Task ResetStoreAsync(CancellationToken ct = default)
+    {
+        await _orchestrator.FlushAsync(ct);
+        await _store.ResetAsync(ct);
+    }
 }
