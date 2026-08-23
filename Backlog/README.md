@@ -59,7 +59,7 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | 40 | [Surface the outcome of a deferred request](Done/40-surface-deferred-outcomes.md) | ✅ Done | `SyncEvent` gains `CorrelationId`/`RequestId`/`RequestBody`/`Outcome`; `SyncOutcome` is persisted on the envelope so a dead-lettered write explains itself after a restart. Correlation id is the caller's if they set one via `HyperwycRequestOptions.CorrelationId`, otherwise generated and returned on the `202`. Unblocks 19's per-sale status |
 | 47 | [Connectivity is required](Done/47-connectivity-is-required.md) | ✅ Done | Ships `NetworkAvailabilityConnectivityService` (BCL-only) **and** removes the `AlwaysOnline` default: a consumer registers an `IConnectivityService` (either side of `AddHyperwyc`) or sets the option, and resolving throws if they do neither. The default failed silently — always-connected means nothing is ever queued or replayed, and the library looks like it works. Narrows 31's zero-config headline, deliberately |
 | 13 | [Connectivity documentation](Done/13-connectivity-reference-implementation.md) | ✅ Done | **Scope revised three times, each removing something from the package**: ship a MAUI type → ship a test double → documentation only → documentation with no default ([47](Done/47-connectivity-is-required.md)). README now carries the full `MauiConnectivityService`, the five decisions in it, and how to fake connectivity in your own tests. The sample source carries the same reasoning as comments, since that is what gets copied |
-| **16** | [`ResetStoreAsync()`](16-reset-store-async.md) | 🟡 Partial | Method exists and delegates to `ISyncStore.ResetAsync`. Missing: flush-semaphore coordination (a reset during an in-flight flush is unguarded) and any unit tests |
+| 16 | [`ResetStoreAsync()`](Done/16-reset-store-async.md) | ✅ Done | Moved onto `SyncOrchestrator`, which owns the flush gate. Acquires it **blocking** — `FlushAsync`'s try-acquire returns immediately when a flush is running, so the first cut wiped the store underneath one and a deferred envelope was upserted back in afterwards. Reset discards and does not flush: on logout a flush replays through the auth handler the app is revoking, so every write 401s and dead-letters before being wiped anyway |
 | **19** | [Sample — .NET MAUI app](19-poc-maui-app.md) | 🟡 Partial | **Core scenario proven on device:** catalogue served from cache with the network off, across an app restart. Remaining: offline writes, sync-now, event log, and per-sale state — the last blocked on [40](Done/40-surface-deferred-outcomes.md) |
 
 ## v1.0 — release candidate
@@ -157,6 +157,12 @@ request grouping / bulk sync, and GraphQL support.
   transport-level and does not promise delivery, so an unreadable store is a fact to report, not
   a problem to solve — log it, raise an event, carry on. The scope correction shrank the item and
   dissolved a dependency on an upstream Cabinet change.
+- **Item 16's bug was hidden by a method name.** Delegating to `FlushAsync` before wiping reads
+  as "let the in-flight flush finish", and does not do that — it is a try-acquire that returns
+  immediately when a flush is running. The visible symptom would have been rare and awful: a
+  deferred envelope written back after the wipe, resurrecting the previous user's queued write
+  on logout. Worth remembering that "await the thing" and "await the thing *finishing*" are
+  different, and that a semaphore's acquisition mode is part of its contract.
 - **Item 48 was filed from a question, and grew a second finding.** The question was about
   backup quota; the answer is that a restored outbox re-sends delivered writes. Writing it up
   also turned up that the path-derived encryption key is not stable across an iOS restore, which

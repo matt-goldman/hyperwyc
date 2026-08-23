@@ -149,6 +149,54 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     }
 
     /// <summary>
+    /// Clears the store, waiting for any flush already running to finish first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Lives here rather than on <c>HyperwycService</c> because it needs two things only the
+    /// orchestrator has: the flush gate, and the scheduled follow-up.
+    /// </para>
+    /// <para>
+    /// The gate is acquired <em>blocking</em>, unlike <see cref="FlushAsync"/>'s
+    /// try-acquire. A flush that is mid-loop holds a list of envelopes read before the wipe
+    /// and keeps acting on them: it would go on sending writes the caller just asked to
+    /// discard, and — worse — <c>DeferAsync</c> and <c>MarkSyncedAsync</c> write back, so a
+    /// transiently-failing envelope would be <em>re-inserted</em> into a store that had just
+    /// been emptied. On the logout this method exists for, that resurrects the previous
+    /// user's data.
+    /// </para>
+    /// <para>
+    /// It deliberately does not flush first. Reset means discard; an application that wants
+    /// its queued writes delivered calls <see cref="FlushAsync"/> itself, beforehand, while
+    /// it still has whatever credentials the replays need.
+    /// </para>
+    /// </remarks>
+    internal async Task ResetStoreAsync(CancellationToken ct = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _lifetimeCts.Token);
+        var token = linked.Token;
+
+        await _flushGate.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            await _store.ResetAsync(token).ConfigureAwait(false);
+
+            // Any scheduled pass was scheduled for envelopes that no longer exist. Cancelled
+            // after the wipe rather than before, so a follow-up scheduled by the flush this
+            // call just waited out is also cleared.
+            var followUp = Interlocked.Exchange(ref _followUpCts, null);
+            followUp?.Cancel();
+            followUp?.Dispose();
+        }
+        finally
+        {
+            _flushGate.Release();
+        }
+    }
+
+    /// <summary>
     /// Schedules one further flush for when the earliest waiting envelope becomes
     /// eligible, if anything is waiting.
     /// </summary>

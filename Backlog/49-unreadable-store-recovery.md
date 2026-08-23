@@ -75,7 +75,7 @@ smaller thing to get right, and it cannot do any damage if it is wrong.
 
 ### The remedy already exists, and belongs to the application
 
-`IHyperwyc.ResetStoreAsync()` ([issue 16](16-reset-store-async.md)) already clears the store. That
+`IHyperwyc.ResetStoreAsync()` ([issue 16](Done/16-reset-store-async.md)) already clears the store. That
 is the recovery action, it is already in the public surface, and it is the application's to call.
 
 Hyperwyc reports that the store is unreadable. An application that wants a clean slate calls
@@ -155,11 +155,16 @@ until the process restarts or the store is reset.
    events; or logging only, with no event at all. Leaning toward a new `SyncEventType`, accepting
    that the stream becomes "things that happened" rather than "things that happened to a request",
    because a second observable is a worse thing to ask a consumer to remember to subscribe to.
-2. **Should `ResetStoreAsync` be able to clear a store it cannot read?** It presumably deletes
-   files rather than records, in which case yes and this is free. Worth confirming, since the
-   recommended remedy is useless if it needs to decrypt first. **This is
-   [issue 16](16-reset-store-async.md)'s to answer** — it is already doing the work on that
-   method.
+2. ~~**Should `ResetStoreAsync` be able to clear a store it cannot read?**~~ **Answered while
+   doing [issue 16](Done/16-reset-store-async.md), and the answer is no.**
+   `CabinetSyncStore.ResetAsync` enumerates through `GetAllAsync` and removes records one at a
+   time, so it decrypts before it deletes. An unreadable store cannot be reset.
+
+   That is a hole in this issue's own recommendation: reporting the failure and pointing the
+   application at `ResetStoreAsync` is useless when `ResetStoreAsync` is the one thing that
+   cannot run. Deleting the directory contents rather than enumerating records would fix it, and
+   should be part of this item rather than 16 — the remedy has to work before the policy that
+   relies on it is worth shipping.
 
 ## The better fix, upstream of all of this
 
@@ -190,6 +195,8 @@ compatibility cost; nothing is released.
 - [ ] Tests: a store opened with the wrong key reads as empty rather than throwing; the event
       fires; the log is written; it is reported once across several reads; nothing on disk is
       removed; an offline write against an unusable store does **not** receive a `202`.
+- [ ] `ISyncStore.ResetAsync` can clear a store it cannot decrypt — `CabinetSyncStore` currently
+      cannot, which makes the recommended remedy unavailable in precisely the case it is for.
 - [ ] README documents the behaviour and names `ResetStoreAsync` as the application's remedy.
 
 ## Notes
@@ -208,7 +215,7 @@ compatibility cost; nothing is released.
 - **This item is captured, not scheduled.** The remaining open questions are deliberately open:
   the shape of a store-level event is a design decision worth taking with the diagnostics work
   ([23](23-v1-diagnostics-view.md)) in view rather than in isolation, and the `ResetStoreAsync`
-  question belongs to [16](16-reset-store-async.md). Nothing here needs solving before v1.0
+  question belongs to [16](Done/16-reset-store-async.md). Nothing here needs solving before v1.0
   except the boundary fix.
 - Guidance for applications that need genuine delivery guarantees — which generally means an
   application-owned store alongside Hyperwyc's — belongs in

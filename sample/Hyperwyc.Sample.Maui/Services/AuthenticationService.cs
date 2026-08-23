@@ -7,7 +7,7 @@ namespace Hyperwyc.Sample.Maui.Services;
 
 public class AuthenticationService(
     HttpClient client,
-    IHyperwyc cache)
+    IHyperwyc hyperwyc)
 {
     private class LoginResponse
     {
@@ -82,8 +82,12 @@ public class AuthenticationService(
 
     public async Task Logout()
     {
+        // Discard this user's cached responses and anything still queued, before the token
+        // goes. ResetStoreAsync waits out any flush already running, so nothing gets written
+        // back into the store after it is emptied.
+        await hyperwyc.ResetStoreAsync();
+
         SecureStorage.Default.Remove("token");
-        await cache.ResetStoreAsync(CancellationToken.None);
     }
 
     private async Task RefreshTokenAsync()

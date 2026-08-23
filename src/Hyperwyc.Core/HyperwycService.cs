@@ -4,26 +4,20 @@ using Hyperwyc.Models;
 namespace Hyperwyc;
 
 /// <summary>
-/// Default implementation of <see cref="IHyperwyc"/>. Exposes the sync event
-/// stream and delegates store reset to the configured <see cref="ISyncStore"/>.
+/// Default implementation of <see cref="IHyperwyc"/>. Exposes the sync event stream and
+/// delegates flushing and store reset to the <see cref="SyncOrchestrator"/>.
 /// </summary>
 internal sealed class HyperwycService : IHyperwyc
 {
     private readonly SyncEventStream _events;
-    private readonly ISyncStore _store;
     private readonly SyncOrchestrator _orchestrator;
 
-    internal HyperwycService(
-        SyncEventStream events,
-        ISyncStore store,
-        SyncOrchestrator orchestrator)
+    internal HyperwycService(SyncEventStream events, SyncOrchestrator orchestrator)
     {
         ArgumentNullException.ThrowIfNull(events);
-        ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(orchestrator);
 
         _events = events;
-        _store = store;
         _orchestrator = orchestrator;
     }
 
@@ -35,9 +29,6 @@ internal sealed class HyperwycService : IHyperwyc
         _orchestrator.FlushAsync(ct);
 
     /// <inheritdoc/>
-    public async Task ResetStoreAsync(CancellationToken ct = default)
-    {
-        await _orchestrator.FlushAsync(ct);
-        await _store.ResetAsync(ct);
-    }
+    public Task ResetStoreAsync(CancellationToken ct = default) =>
+        _orchestrator.ResetStoreAsync(ct);
 }

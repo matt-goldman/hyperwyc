@@ -184,7 +184,7 @@ Nothing needs to be built for the documentation to be actionable.
 
 ## Notes
 
-- Raised by the author while reviewing [issue 16](16-reset-store-async.md), on the observation
+- Raised by the author while reviewing [issue 16](Done/16-reset-store-async.md), on the observation
   that mobile consumers may want the store kept out of iCloud and Google Drive backups.
 - Suggested milestone **v1.2**. It is documentation and cheap, but the hazard is real enough that
   it should not wait for a milestone where it might be deprioritised. It could reasonably land

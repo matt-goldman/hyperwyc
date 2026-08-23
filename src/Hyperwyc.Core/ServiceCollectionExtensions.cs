@@ -134,7 +134,6 @@ public static class ServiceCollectionExtensions
 
         services.TryAddSingleton<IHyperwyc>(sp => new HyperwycService(
             sp.GetRequiredService<SyncEventStream>(),
-            sp.GetRequiredService<ISyncStore>(),
             sp.GetRequiredService<SyncOrchestrator>()));
 
         // Replays go back through the named client they were queued on, so downstream

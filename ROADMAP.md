@@ -43,7 +43,7 @@ to its backlog item where one exists.
 
 - [x] Surface the outcome of a deferred request ([40](Backlog/Done/40-surface-deferred-outcomes.md)) — events carry a correlation id and a persisted `SyncOutcome`, so a queued write's eventual rejection can be matched to the record that produced it and acted on
 - [x] Connectivity documentation ([13](Backlog/Done/13-connectivity-reference-implementation.md)) — README carries the MAUI implementation, the decisions inside it, and how to fake connectivity in your own tests. Nothing ships from core, including test doubles
-- [ ] `IHyperwyc.ResetStoreAsync()` — flush coordination and test coverage ([16](Backlog/16-reset-store-async.md)); the method itself exists
+- [x] `IHyperwyc.ResetStoreAsync()` ([16](Backlog/Done/16-reset-store-async.md)) — moved onto the orchestrator so it can hold the flush gate; reset discards rather than delivering, and cannot be undone by a flush writing back after the wipe
 - [ ] Sample .NET MAUI app ([19](Backlog/19-poc-maui-app.md)) — offline reads proven on device across an app restart; offline writes and sync UI remain. See [POC.md](POC.md)
 
 ---
