@@ -1,16 +1,24 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using Hyperwyc.Interfaces;
 
 namespace Hyperwyc.Sample.Maui.Services;
 
-public class AuthenticationService(HttpClient client)
+public class AuthenticationService(
+    HttpClient client,
+    IHyperwyc cache)
 {
     private class LoginResponse
     {
-        public required string tokenType { get; set; }
-        public required string accessToken { get; set; }
-        public required int expiresIn { get; set; }
-        public required string refreshToken { get; set; }
+        [JsonPropertyName("tokenType")]
+        public required string TokenType { get; set; }
+        [JsonPropertyName("accessToken")]
+        public required string AccessToken { get; set; }
+        [JsonPropertyName("expiresIn")]
+        public required int ExpiresIn { get; set; }
+        [JsonPropertyName("refreshToken")]
+        public required string RefreshToken { get; set; }
     }
 
     private class StoredToken
@@ -36,9 +44,9 @@ public class AuthenticationService(HttpClient client)
 
         var storedToken = new StoredToken()
         {
-            AccessToken     = loginResponse.accessToken,
-            ExpiresUtc      = DateTime.UtcNow.AddSeconds(loginResponse.expiresIn),
-            RefreshToken    = loginResponse.refreshToken
+            AccessToken     = loginResponse.AccessToken,
+            ExpiresUtc      = DateTime.UtcNow.AddSeconds(loginResponse.ExpiresIn),
+            RefreshToken    = loginResponse.RefreshToken
         };
 
         var storedTokenJson = JsonSerializer.Serialize(storedToken);
@@ -72,7 +80,11 @@ public class AuthenticationService(HttpClient client)
         return storedToken is not null;
     }
 
-    public static void Logout() => SecureStorage.Default.Remove("token");
+    public async Task Logout()
+    {
+        SecureStorage.Default.Remove("token");
+        await cache.ResetStoreAsync(CancellationToken.None);
+    }
 
     private async Task RefreshTokenAsync()
     {
