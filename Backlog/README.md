@@ -56,11 +56,11 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | 31 | [Package structure](Done/31-package-structure.md) | ✅ Done | `Hyperwyc` (batteries, Cabinet default) over `Hyperwyc.Core`. Store is a type parameter on `AddHyperwycCore<TStore>()`; `HyperwycOptions.Store` removed |
 | 39 | [Idempotency is not Hyperwyc's remit](Done/39-reconsider-idempotency.md) | ✅ Done | Header injection removed; Hyperwyc sends the request the app made and adds nothing. Supersedes 08. Duplicate delivery is a property of retrying in general, resolved between an application and its API |
 | 18 | [Sample — product/sales API](Done/18-poc-web-api.md) | ✅ Done | Random catalogue, stock-decrementing sales, `Idempotency-Key` dedup and 400/404/409 failure paths, all verified against a running server |
-| **40** | [Surface the outcome of a deferred request](40-surface-deferred-outcomes.md) | ⬜ Open | `OnFailed` carries only type/URL/method/timestamp — not the status, the response body, or *which* queued write it was. A consumer cannot act on a rejection it cannot see. Blocks 19's per-sale status |
+| 40 | [Surface the outcome of a deferred request](Done/40-surface-deferred-outcomes.md) | ✅ Done | `SyncEvent` gains `CorrelationId`/`RequestId`/`RequestBody`/`Outcome`; `SyncOutcome` is persisted on the envelope so a dead-lettered write explains itself after a restart. Correlation id is the caller's if they set one via `HyperwycRequestOptions.CorrelationId`, otherwise generated and returned on the `202`. Unblocks 19's per-sale status |
 | 47 | [Connectivity is required](Done/47-connectivity-is-required.md) | ✅ Done | Ships `NetworkAvailabilityConnectivityService` (BCL-only) **and** removes the `AlwaysOnline` default: a consumer registers an `IConnectivityService` (either side of `AddHyperwyc`) or sets the option, and resolving throws if they do neither. The default failed silently — always-connected means nothing is ever queued or replayed, and the library looks like it works. Narrows 31's zero-config headline, deliberately |
-| **13** | [Connectivity documentation](13-connectivity-reference-implementation.md) | 🟡 Partial | `MauiConnectivityService` exists in the sample and is proven on device. **Scope revised twice: nothing ships from core, not even a test double** — it fails the scope test, and test doubles belong in a separate testing package if anywhere. [47](Done/47-connectivity-is-required.md) covered the non-MAUI half of the docs; remaining is the MAUI copy-and-paste walkthrough and the testing guidance |
+| 13 | [Connectivity documentation](Done/13-connectivity-reference-implementation.md) | ✅ Done | **Scope revised three times, each removing something from the package**: ship a MAUI type → ship a test double → documentation only → documentation with no default ([47](Done/47-connectivity-is-required.md)). README now carries the full `MauiConnectivityService`, the five decisions in it, and how to fake connectivity in your own tests. The sample source carries the same reasoning as comments, since that is what gets copied |
 | **16** | [`ResetStoreAsync()`](16-reset-store-async.md) | 🟡 Partial | Method exists and delegates to `ISyncStore.ResetAsync`. Missing: flush-semaphore coordination (a reset during an in-flight flush is unguarded) and any unit tests |
-| **19** | [Sample — .NET MAUI app](19-poc-maui-app.md) | 🟡 Partial | **Core scenario proven on device:** catalogue served from cache with the network off, across an app restart. Remaining: offline writes, sync-now, event log, and per-sale state — the last blocked on [40](40-surface-deferred-outcomes.md) |
+| **19** | [Sample — .NET MAUI app](19-poc-maui-app.md) | 🟡 Partial | **Core scenario proven on device:** catalogue served from cache with the network off, across an app restart. Remaining: offline writes, sync-now, event log, and per-sale state — the last blocked on [40](Done/40-surface-deferred-outcomes.md) |
 
 ## v1.0 — release candidate
 
@@ -79,7 +79,7 @@ users to migrate.
 |---|---|---|---|
 | 32 | [Default encryption key](32-default-encryption-key.md) | 🟡 Partial | Decided: keep the path-derived key as the free default, documented as such. Remaining is the MAUI `SecureStorage` reference implementation |
 | 21 | [`Date` header rewriting](21-v1-date-header-rewriting.md) | ⬜ Open | Plus the `X-Hyperwyc-Cached-At` header |
-| 23 | [Diagnostics view](23-v1-diagnostics-view.md) | ⬜ Open | Read-only outbox and dead-letter queries on `IHyperwyc`. Depends on [40](40-surface-deferred-outcomes.md) to be able to explain *why* something failed |
+| 23 | [Diagnostics view](23-v1-diagnostics-view.md) | ⬜ Open | Read-only outbox and dead-letter queries on `IHyperwyc`. [40](Done/40-surface-deferred-outcomes.md) persisted the failure detail; this is the read path that makes it observable — and the only place a transport failure, which publishes no event, can be seen |
 | 24 | [Dead-letter management](24-v1-dead-letter-management.md) | ⬜ Open | Requeue and dismiss. Depends on 23 for the UI surface |
 | 20 | [Configurable body cache cap](20-v1-configurable-body-cache-cap.md) | 🟡 Partial | The option is already public and honoured. Remaining: argument validation and README documentation |
 | 30 | [Caller-set headers are persisted](30-sensitive-header-exclusion.md) | ⬜ Open | **Reversed to a documentation item.** Stripping them would violate ADR 0001's fidelity obligation and break replay for API keys, basic auth and HMAC — credentials that are still valid at replay time. Document the exposure and point at the encryption key instead |
@@ -96,7 +96,7 @@ then **46 before 45**, since cheap revalidation is what makes stale-while-revali
 | 42 | [Cache grows without bound](42-cache-eviction.md) | ⬜ Open | Individual bodies are capped; the cache as a whole is not. Browsers give you a quota and evict for you — nothing does that here |
 | 43 | [`Vary` not honoured](43-honour-vary-header.md) | ⬜ Open | Cache keyed on URL alone, so a content-negotiated endpoint serves the wrong variant. Silent, and looks like a server bug. Sequence with 25 |
 | 44 | [No cache generation](44-cache-generation.md) | ⬜ Open | Cached bodies outlive app upgrades, so changed DTO shapes deserialise wrongly. Land with 25 |
-| 45 | [`StaleWhileRevalidate`](45-stale-while-revalidate.md) | ⬜ Open | The one Workbox strategy missing. Needs [40](40-surface-deferred-outcomes.md)'s richer `OnUpdated` |
+| 45 | [`StaleWhileRevalidate`](45-stale-while-revalidate.md) | ⬜ Open | The one Workbox strategy missing. Needs [40](Done/40-surface-deferred-outcomes.md)'s richer `OnUpdated` |
 | 46 | [Conditional revalidation](46-conditional-requests.md) | ⬜ Open | `ETag` is already stored and never used, so every refresh re-downloads the whole body |
 
 ## v2.0+
@@ -147,6 +147,17 @@ request grouping / bulk sync, and GraphQL support.
 - **Item 34 came out of reasoning through 33** on 2026-08-06 and ended in a decision not to
   build anything: shutdown is not a flush trigger. It is kept as an item because the reasoning
   is unintuitive and worth documenting rather than rediscovering.
+- **Item 13 never shipped a line of library code, across three scope revisions.** Ship
+  `MauiConnectivityService` from core → ship a `StaticConnectivityService` test double →
+  documentation only → documentation with connectivity required and no default. Each pass
+  removed something from the package. Worth remembering when the next "we should ship a helper
+  for this" arrives.
+- **Item 40 is where checking the prior art paid and where it didn't.** Service Worker's
+  client-messaging pattern — persist the outcome, let the next launch read it — set the design
+  order (persisted record first, event derived from it), and Workbox's caller-supplied queue
+  `metadata` overturned the planned Hyperwyc-minted id. But Workbox's own `Queue` silently drops
+  any request that gets an HTTP error response, which item 38 already handles better. Borrow the
+  reasoning, check the behaviour.
 - **Item 47 is the counterweight to 31.** Batteries-included picks a store for you because any
   durable store will do; it cannot pick a connectivity source, because that depends on the
   platform and a wrong choice fails invisibly. The rule the two items settle between them:

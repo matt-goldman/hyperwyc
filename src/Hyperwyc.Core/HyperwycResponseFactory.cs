@@ -26,6 +26,18 @@ internal static class HyperwycResponseFactory
     internal const string StatusHeader = "X-Hyperwyc-Status";
 
     /// <summary>
+    /// Header carrying the correlation id of a queued write, so a caller who did not supply
+    /// one through <see cref="HyperwycRequestOptions.CorrelationId"/> still learns the value
+    /// Hyperwyc will report the outcome under.
+    /// </summary>
+    /// <remarks>
+    /// Always present on the queued response, whether the value came from the caller or was
+    /// generated — one rule rather than "only when we minted it". It appears on a response
+    /// Hyperwyc synthesises, so it imposes nothing on anybody's API.
+    /// </remarks>
+    internal const string CorrelationHeader = "X-Hyperwyc-Correlation-Id";
+
+    /// <summary>
     /// Body given to every synthetic response: the JSON <c>null</c> literal.
     /// </summary>
     /// <remarks>
@@ -84,13 +96,19 @@ internal static class HyperwycResponseFactory
     /// There is no created resource yet, which <c>null</c> states accurately.
     /// </para>
     /// </remarks>
-    internal static HttpResponseMessage Queued(OfflineResponsePolicy policy)
+    /// <param name="policy">Determines whether the response is a 202 or a 503.</param>
+    /// <param name="correlationId">
+    /// The value the outcome of this write will be reported under, returned as
+    /// <c>X-Hyperwyc-Correlation-Id</c>.
+    /// </param>
+    internal static HttpResponseMessage Queued(OfflineResponsePolicy policy, string correlationId)
     {
         var statusCode = policy == OfflineResponsePolicy.Transparent
             ? HttpStatusCode.Accepted
             : HttpStatusCode.ServiceUnavailable;
         var response = new HttpResponseMessage(statusCode) { Content = JsonNull() };
         response.Headers.TryAddWithoutValidation(StatusHeader, "Queued");
+        response.Headers.TryAddWithoutValidation(CorrelationHeader, correlationId);
         return response;
     }
 

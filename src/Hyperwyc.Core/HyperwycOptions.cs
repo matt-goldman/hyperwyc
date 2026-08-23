@@ -147,6 +147,21 @@ public sealed class HyperwycOptions
     /// </summary>
     public int MaxCachedResponseBodyBytes { get; set; } = 512 * 1024;
 
+    /// <summary>
+    /// Maximum response body size (in bytes) captured onto a <see cref="Models.SyncOutcome"/>
+    /// when a queued write is delivered or rejected. Longer bodies are clipped and flagged
+    /// with <see cref="Models.SyncOutcome.BodyTruncated"/>. Defaults to 16 384 bytes (16 KB).
+    /// Set to zero to capture no bodies at all.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately separate from — and far smaller than — <see cref="MaxCachedResponseBodyBytes"/>.
+    /// That one sizes a payload being cached for later reads; this one sizes an explanation of
+    /// why a write failed, which is persisted per dead-lettered envelope and is usually a
+    /// sentence. Clipping rather than dropping because half an error message is still
+    /// actionable and a missing one is not.
+    /// </remarks>
+    public int MaxOutcomeBodyBytes { get; set; } = 16 * 1024;
+
     // -------------------------------------------------------------------------
     // Orchestrator settings
     // -------------------------------------------------------------------------

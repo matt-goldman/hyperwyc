@@ -1,4 +1,4 @@
-# Issue 13 — Connectivity: Test Double in Core, MAUI as a Reference Implementation
+# Issue 13 — Connectivity: Documentation, Not Code
 
 ## Summary
 
@@ -57,21 +57,21 @@ Documented in the README and used by the POC app (issue #19):
 
 - [x] Decision recorded not to ship a test double from the core package — see below.
 - [x] MAUI reference implementation included in the sample app (issue #19).
-- [ ] README documents the MAUI implementation as copy-and-paste reference code, carrying the
-      four decisions recorded under Progress.
+- [x] README documents the MAUI implementation as copy-and-paste reference code, carrying the
+      decisions recorded under Progress.
 - [x] README states what non-MAUI consumers should do — done by
-      [issue 47](Done/47-connectivity-is-required.md), which ships
+      [issue 47](47-connectivity-is-required.md), which ships
       `NetworkAvailabilityConnectivityService` and documents all three choices. Supersedes the
       original wording, which described `AlwaysOnlineConnectivityService` as the default.
-- [ ] README shows how to control connectivity in a consumer's own tests — a mock, or a handful
-      of lines — rather than pointing at anything Hyperwyc ships.
+- [x] README shows how to control connectivity in a consumer's own tests — a hand-written fake
+      of a few lines, rather than pointing at anything Hyperwyc ships.
 
 ## Second scope revision: no test double ships either
 
 The remaining plan was to ship `StaticConnectivityService` from the core package for testing.
 That is also rejected.
 
-Run it through [the scope test](../docs/decisions/README.md#the-standing-scope-test):
+Run it through [the scope test](../../docs/decisions/README.md#the-standing-scope-test):
 
 - Would the problem exist without Hyperwyc? Testing against an interface is a general problem.
 - Does it require anything of the consumer's API? No.
@@ -95,7 +95,7 @@ a scriptable transport — that is when to revisit it.
 **`AlwaysOnlineConnectivityService` is not a counter-example.** It is a functional
 implementation, not a testing aid, and it is not there to be substituted in a test.
 
-*Revised by [issue 47](Done/47-connectivity-is-required.md):* it is no longer the default
+*Revised by [issue 47](47-connectivity-is-required.md):* it is no longer the default
 either. Defaulting to it meant a consumer who supplied nothing got a library that cached but
 never queued or replayed — silently. Connectivity is now required, and #47 also ships
 `NetworkAvailabilityConnectivityService` so that a non-MAUI consumer has something to reach
@@ -135,6 +135,45 @@ because that is what people will copy:
 
 `NetworkAccess.ConstrainedInternet` counts as disconnected, which is the conservative reading
 this item called for, and is documented in the code as a deliberate choice.
+
+## Closed
+
+Everything remaining was documentation, and it is done. Two places, because they serve different
+readers:
+
+- **README, under [Connectivity](../../README.md#connectivity).** The full implementation in a
+  collapsible block, followed by the five things in it that are deliberate — no
+  `System.Reactive`, change-stream rather than state-view, publish-only-on-change, `IDisposable`
+  to unhook the static, and no thread marshalling. Plus the `ConstrainedInternet` reading and how
+  to change it. Then a section on faking connectivity in a consumer's own tests, which is the
+  other half of not shipping a test double: declining to ship one is only reasonable if writing
+  one is obviously easy, so the README shows it rather than asserting it.
+- **The sample source itself**, which is what people actually copy. The same reasoning as
+  comments and XML docs, so it travels with the code rather than being left behind in a README
+  nobody re-reads. The two are kept identical: the README block and the sample file differ only
+  in comments.
+
+The testing guidance leads with the observation that most tests never need the change stream at
+all, because they drive sync with `FlushAsync()` rather than waiting for an event. That reduces
+the fake to a settable `bool` and a never-emitting observable, which is the strongest form of the
+argument for not shipping one.
+
+## What changed about this item along the way
+
+Worth keeping, because the item ended up somewhere quite different from where it started.
+
+1. **Originally:** ship `MauiConnectivityService` from the core package behind a conditional
+   compilation target. Rejected — five TFMs, a MAUI workload to build from source, and no
+   `ubuntu-latest` CI for a platform-independent library.
+2. **Then:** ship `StaticConnectivityService` as a test double. Rejected — fails the scope test
+   on questions 3 and 4, and test doubles belong in a separate testing package if anywhere.
+3. **Then:** documentation only, with `AlwaysOnlineConnectivityService` as the default when
+   nothing is supplied. Revised by [issue 47](47-connectivity-is-required.md): that default
+   failed silently, so connectivity became required and a BCL implementation shipped instead.
+4. **Now:** documentation only, with three named implementations and no default.
+
+Each step removed something from the package. That is the direction this codebase should
+generally travel, and this item is the clearest example of it.
 
 ## Notes
 

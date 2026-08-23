@@ -41,8 +41,8 @@ to its backlog item where one exists.
 
 **Remaining**
 
-- [ ] Surface the outcome of a deferred request ([40](Backlog/40-surface-deferred-outcomes.md)) — a queued write's eventual success or rejection is currently invisible to the application
-- [ ] Connectivity documentation ([13](Backlog/13-connectivity-reference-implementation.md)) — the MAUI reference implementation exists in the sample; nothing further ships from core, including test doubles. The non-MAUI half is done ([47](Backlog/Done/47-connectivity-is-required.md))
+- [x] Surface the outcome of a deferred request ([40](Backlog/Done/40-surface-deferred-outcomes.md)) — events carry a correlation id and a persisted `SyncOutcome`, so a queued write's eventual rejection can be matched to the record that produced it and acted on
+- [x] Connectivity documentation ([13](Backlog/Done/13-connectivity-reference-implementation.md)) — README carries the MAUI implementation, the decisions inside it, and how to fake connectivity in your own tests. Nothing ships from core, including test doubles
 - [ ] `IHyperwyc.ResetStoreAsync()` — flush coordination and test coverage ([16](Backlog/16-reset-store-async.md)); the method itself exists
 - [ ] Sample .NET MAUI app ([19](Backlog/19-poc-maui-app.md)) — offline reads proven on device across an app restart; offline writes and sync UI remain. See [POC.md](POC.md)
 

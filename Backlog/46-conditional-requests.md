@@ -46,7 +46,7 @@ touching its body.
    and rarely wrong. Worth an explicit decision.
 3. **Does this apply to the replay path too?** Replayed writes are not conditional requests, so
    no. But a `412 Precondition Failed` from an application's own `If-Match` on a queued write is a
-   real scenario, and belongs with [issue 40](40-surface-deferred-outcomes.md)'s outcome
+   real scenario, and belongs with [issue 40](Done/40-surface-deferred-outcomes.md)'s outcome
    reporting rather than here.
 4. **Interaction with `Vary`** ([issue 43](43-honour-vary-header.md)): the conditional headers must
    come from the entry matching the *current* request's variant, not merely the same URL.

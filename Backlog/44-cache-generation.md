@@ -64,7 +64,7 @@ and is called out below rather than solved here.
 2. **What happens to a queued write serialised by an older version?** It cannot simply be dropped
    — it is undelivered user work — but replaying a body the current server may no longer accept is
    its own hazard. Options: replay it regardless and let the server reject it, which
-   [issue 40](40-surface-deferred-outcomes.md) now makes visible to the application; or surface
+   [issue 40](Done/40-surface-deferred-outcomes.md) now makes visible to the application; or surface
    it for the application to migrate or discard. Leaning toward the former, since it keeps
    Hyperwyc out of the business of understanding payloads.
 3. **Is a generation mismatch worth an event?** "Your cache was cleared because the app updated"

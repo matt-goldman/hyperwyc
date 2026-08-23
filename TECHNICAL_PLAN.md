@@ -367,13 +367,50 @@ keeps the core dependency graph clean.
 Plain .NET events are not exposed. `IObservable<T>` is strictly more capable; consumers who
 prefer event-style consumption get it with a one-line `.Subscribe(...)`.
 
-| Event | Trigger |
-|-------|---------|
-| `OnQueued` | Request cached to outbox (offline) |
-| `OnRetrying` | Retry attempt initiated |
-| `OnSynced` | Outbound request successfully delivered |
-| `OnFailed` | Request moved to dead-letter after threshold |
-| `OnUpdated` | Cached response refreshed from API |
+| Event | Trigger | Payload beyond type/url/method/timestamp |
+|-------|---------|---|
+| `OnQueued` | Request cached to outbox (offline) | `CorrelationId`, `RequestId`, `RequestBody` |
+| `OnRetrying` | Retry attempt initiated | The above, plus the **previous** attempt's `Outcome` |
+| `OnSynced` | Outbound request successfully delivered | The above, plus this attempt's `Outcome` |
+| `OnFailed` | Request moved to dead-letter after threshold | The above, plus the final `Outcome` |
+| `OnUpdated` | Cached response refreshed from API | None — not a queued write |
+
+#### Correlation
+
+Every outbox envelope carries a `CorrelationId`, taken from
+`HyperwycRequestOptions.CorrelationId` when the caller set one and otherwise defaulted to
+`Envelope.Id`. It is returned on the synthetic `202` as `X-Hyperwyc-Correlation-Id`, always,
+whichever source it came from.
+
+`HttpRequestOptions` is local to the message and never transmitted, so accepting per-request
+instruction this way does not breach ADR 0001. It is kept distinct from `Envelope.Id` because it
+is under the application's control and carries no uniqueness guarantee, whereas `Envelope.Id`
+keys the store.
+
+#### `SyncOutcome`
+
+`SyncOutcome` is persisted on `Envelope.LastOutcome` and the same instance is handed out on the
+event. The durable record is the primary artefact: a background flush can complete while the
+application is not running, so an outcome delivered only as an event is one nobody hears about.
+Consequently everything on it must serialise, which is why transport failures carry
+`string? Error` rather than an `Exception`.
+
+`Kind` describes what happened (`Succeeded`, `Rejected`, `TransientFailure`, `TransportFailure`);
+`IsFinal` describes what Hyperwyc will do next. Together they separate a server rejection from an
+exhausted retry budget. Response bodies are captured as `byte[]` up to
+`MaxOutcomeBodyBytes` (16 KB default), clipped with `BodyTruncated` rather than dropped, read
+from the stream so an oversized body is never fully buffered.
+
+Only failures are persisted. A delivered envelope leaves the outbox, so retaining its outcome
+would mean a "recently completed" table with its own growth and eviction problem; reconciliation
+after a process death is therefore best-effort, and the documented answer is to re-read the
+resource. A transport failure is recorded on the envelope but publishes no event, since the flush
+abandons and the envelope keeps its place.
+
+The outcome is written with a plain `UpsertAsync` before `MoveToDeadLetterAsync`, leaving
+`ISyncStore` unchanged. The pair is not atomic: a crash between them leaves the envelope carrying
+its outcome but still pending, so it is retried and — classification being deterministic on the
+status code — reaches the same verdict.
 
 ---
 

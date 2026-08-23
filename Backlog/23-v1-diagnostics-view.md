@@ -20,8 +20,13 @@ Task<IReadOnlyList<DeadLetteredItem>> GetDeadLetteredAsync(CancellationToken ct 
 Where:
 
 ```csharp
-public record PendingItem(string Id, string Method, string Url, DateTimeOffset CreatedUtc, int RetryCount);
-public record DeadLetteredItem(string Id, string Method, string Url, DateTimeOffset CreatedUtc, int RetryCount);
+public record PendingItem(
+    string Id, string CorrelationId, string Method, string Url,
+    DateTimeOffset CreatedUtc, int RetryCount, SyncOutcome? LastOutcome);
+
+public record DeadLetteredItem(
+    string Id, string CorrelationId, string Method, string Url,
+    DateTimeOffset CreatedUtc, int RetryCount, SyncOutcome? LastOutcome);
 ```
 
 ## MAUI Sample View
@@ -37,15 +42,23 @@ This page is for developer reference and POC validation; it does not need to be 
 
 - [ ] `GetPendingOutboxAsync()` and `GetDeadLetteredAsync()` added to `IHyperwyc` (or a diagnostics interface).
 - [ ] Implemented by the concrete Hyperwyc service, delegating to `ISyncStore`.
-- [ ] `PendingItem` and `DeadLetteredItem` record types defined.
+- [ ] `PendingItem` and `DeadLetteredItem` record types defined, carrying `CorrelationId` and
+      `LastOutcome` from [issue 40](Done/40-surface-deferred-outcomes.md).
+- [ ] A read path exists for dead-lettered envelopes, which is what turns 40's persisted failure
+      detail into something observable after a restart.
 - [ ] `DiagnosticsPage` added to the MAUI sample app.
 - [ ] Unit tests cover both query methods (empty, populated, mixed states).
 
 ## Notes
 
-- **Depends on [issue 40](40-surface-deferred-outcomes.md).** `DeadLetteredItem` as sketched above
-  says only that something failed, not why. Issue 40 persists the failure detail on the envelope,
-  which is what would let this view answer the question a developer actually opens it to ask.
+- **[Issue 40](Done/40-surface-deferred-outcomes.md) did its half.** The failure detail is now
+  persisted on `Envelope.LastOutcome` — status, reason, response body, transport error, attempt
+  count, and whether Hyperwyc has given up. Nothing can enumerate it yet, which is this issue.
+  Surface it as-is rather than reshaping it: it is the same record the events hand out, and one
+  shape is the point.
+- Also worth showing on pending items, not just dead-lettered ones. A `TransportFailure` recorded
+  against a pending envelope is precisely what explains an outbox that will not drain, and it
+  publishes no event, so this view is the only place it can be seen.
 
 - These methods are read-only; they do not modify the store.
 - Dead-letter requeue/dismiss is tracked separately in issue #24.

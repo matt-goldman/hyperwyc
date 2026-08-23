@@ -110,7 +110,7 @@ Losing that key means losing access to everything already stored.
 Hyperwyc sits in your `HttpClient` pipeline as a `DelegatingHandler` — the same interception point that a Service Worker occupies for browser `fetch()`. It transparently handles all outgoing requests:
 
 - **Online:** Requests are sent immediately. Responses are optionally cached according to your staleness policy.
-- **Offline writes:** Requests are serialised and queued locally. The caller receives a `202 Accepted` (by default) with an `X-Hyperwyc-Status: Queued` header. When connectivity is restored, the queue is replayed in order. `202` is used rather than `200` because the request has been accepted for later processing but not yet performed against the origin server — once sync-status inspection lands, callers will be able to confirm the eventual outcome.
+- **Offline writes:** Requests are serialised and queued locally. The caller receives a `202 Accepted` (by default) with an `X-Hyperwyc-Status: Queued` header. When connectivity is restored, the queue is replayed in order. `202` is used rather than `200` because the request has been accepted for later processing but not yet performed against the origin server. The eventual outcome arrives on [`SyncEvents`](#sync-events), correlated back to the write that produced it.
 - **Offline reads:** Served from cache if available (even if stale — any data is better than no data offline). If no cache exists, the caller receives a `200 OK` with `X-Hyperwyc-Status: Offline` and a body of `null`.
 - **Online reads (GET/HEAD/OPTIONS):** Served from cache if fresh; fetched from the API if stale or missing.
 
@@ -251,13 +251,106 @@ hyperwyc.SyncEvents.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
 
 | Event | Meaning |
 |-------|---------|
-| `OnQueued` | Request persisted to local queue (offline) |
-| `OnRetrying` | A queued request is being attempted again after an earlier failure |
-| `OnSynced` | Request successfully delivered |
-| `OnFailed` | Request dead-lettered — rejected by the server, or out of retries |
-| `OnUpdated` | Cached response refreshed |
+| Event | Meaning | Carries an outcome |
+|-------|---------|---|
+| `OnQueued` | Request persisted to local queue (offline) | No — nothing has been attempted |
+| `OnRetrying` | A queued request is being attempted again after an earlier failure | Yes — the previous attempt's |
+| `OnSynced` | Request successfully delivered | Yes |
+| `OnFailed` | Request dead-lettered — rejected by the server, or out of retries | Yes |
+| `OnUpdated` | Cached response refreshed | No |
 
 These are Hyperwyc's own events, not your app's lifecycle — see below for how the two relate.
+
+### Knowing which request an event is about
+
+When a write is deferred, the caller has already been given a `202` and moved on. For the
+eventual outcome to be useful, the event has to say *which* write it concerns — three sales
+queued to `/sales` are indistinguishable by URL and method.
+
+Every event carries a `CorrelationId`. **If you set one, Hyperwyc uses it**, which means you can
+correlate on an id you already have and keep no mapping table:
+
+```csharp
+var request = new HttpRequestMessage(HttpMethod.Post, "/sales")
+{
+    Content = JsonContent.Create(sale)
+};
+request.Options.Set(HyperwycRequestOptions.CorrelationId, sale.Id.ToString());
+
+await client.SendAsync(request);
+```
+
+If you don't, Hyperwyc generates one and returns it on the `202` as
+`X-Hyperwyc-Correlation-Id`, so you can record the association at the moment you queue:
+
+```csharp
+var response = await client.PostAsJsonAsync("/sales", sale);
+sale.CorrelationId = response.Headers.GetValues("X-Hyperwyc-Correlation-Id").Single();
+```
+
+The header is present either way. Hyperwyc neither requires the value to be unique nor
+deduplicates on it — it is your key, carrying your meaning. It is **not** an idempotency key;
+see [ADR 0001](docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md).
+
+Events also carry `RequestId` (Hyperwyc's own unique envelope id, which a diagnostics view would
+use) and `RequestBody`, so you can deserialise your own payload back out if you'd rather not
+keep a copy.
+
+### Reading the outcome
+
+`SyncOutcome` is what the server — or the network — actually said:
+
+```csharp
+hyperwyc.SyncEvents
+    .Where(e => e.Type == SyncEventType.OnFailed)
+    .Subscribe(e =>
+    {
+        var outcome = e.Outcome!;
+
+        if (outcome.Kind == SyncOutcomeKind.Rejected)
+        {
+            // The server refused it. outcome.StatusCode is 409, and the reason is in the body.
+            var detail = outcome.GetBodyAsText();
+            ShowRejection(e.CorrelationId!, outcome.StatusCode, detail);
+        }
+        else
+        {
+            // We ran out of retries, or never reached the server. Worth offering a retry.
+            OfferRetry(e.CorrelationId!);
+        }
+    });
+```
+
+| Member | What it tells you |
+|---|---|
+| `Kind` | `Succeeded`, `Rejected` (a 4xx — it will never work), `TransientFailure` (a 5xx/408/429), `TransportFailure` (never reached the server) |
+| `IsFinal` | Whether Hyperwyc has given up. `Rejected` + `IsFinal` is the server refusing; `TransientFailure` + `IsFinal` is the retry budget running out |
+| `StatusCode`, `ReasonPhrase`, `Headers` | As returned, or `null`/empty for a transport failure |
+| `Body`, `GetBodyAsText()`, `BodyTruncated` | The response body, up to `MaxOutcomeBodyBytes` (16 KB by default), clipped rather than dropped if longer |
+| `Error` | The transport failure message. A string rather than an exception, because this record is persisted |
+| `AttemptCount` | Attempts charged against the retry budget. Transport failures don't charge it |
+
+`OnSynced` carries an outcome too. A replayed `POST` may answer with the created resource —
+server-assigned ids, normalised values — which the caller never saw, so this is how you reconcile
+your local record with what was actually stored.
+
+> **Two things this does not do.** Failure detail is persisted on the envelope so a dead-lettered
+> write can still explain itself after a restart, but **success detail is not** — a delivered
+> envelope leaves the outbox, so if your app was killed mid-flush that response is gone. Re-read
+> the resource if you need certainty. And Hyperwyc has no opinion on what you do with any of
+> this: prompt, auto-reduce, back-order, escalate, discard. It hands you what the server said and
+> stops there.
+
+<details>
+<summary>A framing note, if it's useful</summary>
+
+Surfacing outcomes this way nudges you toward describing the action rather than its result —
+"order **submitted**", not "order **successful**" — with the outcome arriving separately and
+later. Most teams already think this way about their backend without having carried it into the
+client. It is genuinely optional: Hyperwyc does not require anyone to model their UI a particular
+way.
+
+</details>
 
 ---
 
@@ -297,15 +390,169 @@ anything needs it, with a message listing these options.
 
 ### Which implementation
 
-**Write one against your platform.** `IConnectivityService` is two members, so on .NET MAUI
-this is about twenty lines over `Connectivity.Current`, and it's what most apps should use.
-`MauiConnectivityService` in the [sample app](sample/) is a complete implementation to copy.
+**Write one against your platform.** `IConnectivityService` is two members, so this is short —
+and it's what most apps should use.
+
+```csharp
+public interface IConnectivityService
+{
+    bool IsConnected { get; }
+    IObservable<bool> ConnectivityChanged { get; }
+}
+```
 
 It's a copy rather than a package because taking it as a dependency would put MAUI in
 Hyperwyc's dependency graph for everyone, including the console apps, services and Blazor hosts
-that have no use for it. Owning twenty lines costs you very little, and it leaves you free to
-define "connected" as your app needs — treating `ConstrainedInternet` as offline, say, or
-folding in a health check against your own API.
+that have no use for it. Owning it costs you very little, and it leaves you free to define
+"connected" as your app needs — treating `ConstrainedInternet` as offline, say, or folding in a
+health check against your own API.
+
+The implementation below is the one in the [sample app](sample/Hyperwyc.Sample.Maui/Services/MauiConnectivityService.cs),
+proven on an Android device: with Wi-Fi and mobile data disabled it reports disconnected, which
+is what routes a read to the cache.
+
+<details>
+<summary><b>MauiConnectivityService</b> — copy this</summary>
+
+```csharp
+using Hyperwyc.Interfaces;
+
+public sealed class MauiConnectivityService : IConnectivityService, IDisposable
+{
+    private readonly object _gate = new();
+    private readonly List<IObserver<bool>> _observers = [];
+
+    private bool _lastPublished;
+    private bool _disposed;
+
+    public bool IsConnected => Connectivity.Current.NetworkAccess == NetworkAccess.Internet;
+
+    public IObservable<bool> ConnectivityChanged { get; }
+
+    public MauiConnectivityService()
+    {
+        _lastPublished = IsConnected;
+        ConnectivityChanged = new ChangeStream(this);
+
+        Connectivity.Current.ConnectivityChanged += OnPlatformConnectivityChanged;
+    }
+
+    public void Dispose()
+    {
+        IObserver<bool>[] observers;
+
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+
+            observers = [.. _observers];
+            _observers.Clear();
+        }
+
+        Connectivity.Current.ConnectivityChanged -= OnPlatformConnectivityChanged;
+
+        foreach (var observer in observers)
+            observer.OnCompleted();
+    }
+
+    private void OnPlatformConnectivityChanged(object? sender, ConnectivityChangedEventArgs e)
+    {
+        var connected = e.NetworkAccess == NetworkAccess.Internet;
+
+        IObserver<bool>[] observers;
+
+        lock (_gate)
+        {
+            if (_disposed || connected == _lastPublished) return;
+
+            _lastPublished = connected;
+            observers = [.. _observers];
+        }
+
+        foreach (var observer in observers)
+            observer.OnNext(connected);
+    }
+
+    private void Subscribe(IObserver<bool> observer)
+    {
+        lock (_gate)
+        {
+            if (!_disposed)
+            {
+                _observers.Add(observer);
+                return;
+            }
+        }
+
+        observer.OnCompleted();
+    }
+
+    private void Unsubscribe(IObserver<bool> observer)
+    {
+        lock (_gate)
+            _observers.Remove(observer);
+    }
+
+    private sealed class ChangeStream(MauiConnectivityService owner) : IObservable<bool>
+    {
+        public IDisposable Subscribe(IObserver<bool> observer)
+        {
+            ArgumentNullException.ThrowIfNull(observer);
+
+            owner.Subscribe(observer);
+            return new Subscription(owner, observer);
+        }
+
+        private sealed class Subscription(MauiConnectivityService owner, IObserver<bool> observer)
+            : IDisposable
+        {
+            private IObserver<bool>? _observer = observer;
+
+            public void Dispose()
+            {
+                var subscribed = Interlocked.Exchange(ref _observer, null);
+                if (subscribed is not null)
+                    owner.Unsubscribe(subscribed);
+            }
+        }
+    }
+}
+```
+
+</details>
+
+Five things in there are deliberate, and worth understanding before you change them:
+
+**No `System.Reactive`.** The first version used a `BehaviorSubject<bool>`, which meant a
+package reference existing for one field. Hand-rolling matches how Hyperwyc implements
+`IObservable<T>` internally and keeps a dependency out of your app that Hyperwyc deliberately
+avoids. If you already use Rx, by all means use a subject — the interface doesn't care.
+
+**A change stream, not a state view.** Nothing is replayed on subscribe; `IsConnected` answers
+"right now". Getting this wrong is easy: an earlier version seeded a subject with `false` at
+startup, so a subscriber was told "offline" on connect while `IsConnected` read live state and
+said otherwise.
+
+**Only publish on an actual change.** MAUI raises `ConnectivityChanged` for any change in
+network access, including moving between Wi-Fi and cellular while staying online. Forwarding
+that as a connectivity restoration triggers a flush with nothing to send, so the service
+compares against the last value it published — seeded from live state — and stays quiet
+otherwise.
+
+**`IDisposable`, to unhook the platform event.** `Connectivity.Current` is a long-lived static,
+so a handler left attached keeps the service and everything it captures alive for the process
+lifetime. Irrelevant for an app-lifetime singleton, but reference code gets copied into places
+where it isn't one. Note that `IConnectivityService` itself is not `IDisposable` — Hyperwyc
+never disposes your instance. Register it as a singleton and the container will.
+
+**Events arrive on whatever thread the platform raised them on**, which on MAUI is usually not
+the UI thread. That's intentional: forcing a dispatcher dependency into the service would make
+it untestable and useless off-platform. Marshal in your subscriber if you're touching UI.
+
+`NetworkAccess.ConstrainedInternet` counts as disconnected here — the conservative reading, on
+the grounds that a captive portal is not the internet. If your API is reachable under it, flip
+that condition.
 
 **`NetworkAvailabilityConnectivityService`** ships in the box if you'd rather not, built on
 `NetworkInterface.GetIsNetworkAvailable()` with no platform dependency:
@@ -328,6 +575,47 @@ host, and a reasonable starting point on mobile until you write the platform ver
 **`AlwaysOnlineConnectivityService`** reports connected, always. Legitimate for a host that
 genuinely is — or when you want the response cache and nothing else. **Nothing is ever queued
 or replayed under it**, so don't reach for it just to get past the startup error.
+
+### Faking connectivity in your own tests
+
+Hyperwyc ships no test double, deliberately: `IConnectivityService` is two members, so a mocking
+library does it in a line and a hand-written fake does it in a few. Shipping one in the main
+package would mean a type you can accidentally reference from production code, and a separate
+testing package is not worth publishing for this.
+
+Most tests never need the change stream, because they drive sync explicitly with
+`IHyperwyc.FlushAsync()` rather than waiting for a connectivity event. That makes the fake
+almost nothing:
+
+```csharp
+internal sealed class FakeConnectivity(bool connected = true) : IConnectivityService
+{
+    public bool IsConnected { get; set; } = connected;
+
+    public IObservable<bool> ConnectivityChanged { get; } = new Never();
+
+    private sealed class Never : IObservable<bool>
+    {
+        public IDisposable Subscribe(IObserver<bool> observer) => new Noop();
+        private sealed class Noop : IDisposable { public void Dispose() { } }
+    }
+}
+```
+
+```csharp
+var connectivity = new FakeConnectivity(connected: false);
+
+services.AddSingleton<IConnectivityService>(connectivity);
+// ... queue a write while offline ...
+
+connectivity.IsConnected = true;
+await hyperwyc.FlushAsync();
+```
+
+If you're testing the automatic flush on connectivity restoration rather than an explicit one,
+you need the stream to emit — reach for your mocking library's observable support, or a
+`Subject<bool>` from `System.Reactive` in the test project only. And if a test is simply online
+throughout, `AlwaysOnlineConnectivityService` is already the fake you want.
 
 ## When Hyperwyc Syncs
 

@@ -51,7 +51,7 @@ to say enough to be actionable: which URL, and ideally that the content actually
 than merely being re-fetched identically. Workbox's `BroadcastUpdatePlugin` exists precisely for
 this, and compares response bodies so it can stay quiet when nothing changed.
 
-That makes this issue dependent on [issue 40](40-surface-deferred-outcomes.md), which is already
+That makes this issue dependent on [issue 40](Done/40-surface-deferred-outcomes.md), which is already
 enriching the event payload. An `OnUpdated` that fires on every background refresh regardless of
 whether anything differs will train consumers to ignore it.
 

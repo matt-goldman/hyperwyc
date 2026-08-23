@@ -213,8 +213,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
 
         if (envelope.RetryCount > 0)
         {
-            _events.Publish(new SyncEvent(
-                SyncEventType.OnRetrying, envelope.Url, envelope.Method, DateTimeOffset.UtcNow));
+            _events.Publish(EventFor(SyncEventType.OnRetrying, envelope, envelope.LastOutcome));
         }
 
         HttpResponseMessage response;
@@ -222,11 +221,16 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         {
             response = await ResolveInvoker(envelope).SendAsync(request, ct).ConfigureAwait(false);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
             // The device believed it was online but the network is not usable — a captive
             // portal, DNS failure, or signal that dropped mid-flush. Every remaining
             // envelope would fail identically, so report it and let the flush stop.
+            //
+            // Recorded on the envelope even though no event fires and the budget is not
+            // charged: "last attempt could not reach the host" is exactly what a diagnostics
+            // view needs to explain an outbox that is not draining.
+            await RecordOutcomeAsync(envelope, TransportOutcome(envelope, ex), ct).ConfigureAwait(false);
             return SendOutcome.ConnectivityLost;
         }
 
@@ -234,7 +238,14 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         {
             if (response.IsSuccessStatusCode)
             {
-                await MarkDeliveredAsync(envelope, ct).ConfigureAwait(false);
+                // Captured even on success: a replayed POST may answer with the created
+                // resource — server-assigned ids, normalised values — which the caller never
+                // saw and may want to reconcile against.
+                var succeeded = await OutcomeFromAsync(
+                    response, envelope, SyncOutcomeKind.Succeeded, isFinal: true, ct)
+                    .ConfigureAwait(false);
+
+                await MarkDeliveredAsync(envelope, succeeded, ct).ConfigureAwait(false);
                 return SendOutcome.Synced;
             }
 
@@ -244,13 +255,131 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
             // pipeline. Retrying here would only delay an outcome already known.
             if (IsPermanentFailure(response.StatusCode))
             {
-                await DeadLetterAsync(envelope, ct).ConfigureAwait(false);
+                var rejected = await OutcomeFromAsync(
+                    response, envelope, SyncOutcomeKind.Rejected, isFinal: true, ct)
+                    .ConfigureAwait(false);
+
+                await DeadLetterAsync(envelope, rejected, ct).ConfigureAwait(false);
                 return SendOutcome.DeadLettered;
             }
 
-            return await DeferAsync(envelope, retryOptions, ct).ConfigureAwait(false);
+            // Whether this is the last attempt is not known until DeferAsync has charged the
+            // budget, so the outcome is built there rather than here.
+            var transient = await OutcomeFromAsync(
+                response, envelope, SyncOutcomeKind.TransientFailure, isFinal: false, ct)
+                .ConfigureAwait(false);
+
+            return await DeferAsync(envelope, transient, retryOptions, ct).ConfigureAwait(false);
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Outcome capture
+    //
+    // The persisted record is the primary artefact and the event is a live view of the same
+    // instance — a background flush can complete while the application is not running, so an
+    // outcome delivered only as an event is an outcome nobody hears about. See issue 40.
+    // -------------------------------------------------------------------------
+
+    /// <summary>Builds a <see cref="SyncOutcome"/> from a response, reading a capped body.</summary>
+    private async Task<SyncOutcome> OutcomeFromAsync(
+        HttpResponseMessage response,
+        Envelope envelope,
+        SyncOutcomeKind kind,
+        bool isFinal,
+        CancellationToken ct)
+    {
+        var (body, truncated) = await ReadCappedBodyAsync(
+            response.Content, _options.MaxOutcomeBodyBytes, ct).ConfigureAwait(false);
+
+        var headers = response.Headers
+            .Concat(response.Content?.Headers ?? Enumerable.Empty<KeyValuePair<string, IEnumerable<string>>>())
+            .ToDictionary(h => h.Key, h => string.Join(", ", h.Value), StringComparer.OrdinalIgnoreCase);
+
+        return new SyncOutcome
+        {
+            Kind = kind,
+            IsFinal = isFinal,
+            StatusCode = (int)response.StatusCode,
+            ReasonPhrase = response.ReasonPhrase,
+            Headers = headers,
+            Body = body,
+            BodyTruncated = truncated,
+            AttemptCount = envelope.RetryCount + 1,
+            OccurredUtc = DateTimeOffset.UtcNow,
+        };
+    }
+
+    private static SyncOutcome TransportOutcome(Envelope envelope, HttpRequestException ex) =>
+        new()
+        {
+            Kind = SyncOutcomeKind.TransportFailure,
+
+            // Never final: an unreachable network says nothing about the request, so the
+            // envelope keeps its place and waits for the next connectivity signal.
+            IsFinal = false,
+            Error = ex.Message,
+            AttemptCount = envelope.RetryCount,
+            OccurredUtc = DateTimeOffset.UtcNow,
+        };
+
+    /// <summary>
+    /// Reads at most <paramref name="cap"/> bytes of <paramref name="content"/>, reporting
+    /// whether there was more.
+    /// </summary>
+    /// <remarks>
+    /// Streamed rather than <c>ReadAsByteArrayAsync</c> so a pathological error body cannot be
+    /// pulled into memory in full just to be thrown away. A read that fails yields no body:
+    /// losing the explanation is bad, but failing the flush over it would be worse.
+    /// </remarks>
+    private static async Task<(byte[]? Body, bool Truncated)> ReadCappedBodyAsync(
+        HttpContent? content, int cap, CancellationToken ct)
+    {
+        if (content is null || cap <= 0)
+            return (null, false);
+
+        try
+        {
+            using var stream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            using var buffer = new MemoryStream();
+            var chunk = new byte[8192];
+
+            // Reads one chunk beyond the cap at most, which is how truncation is detected.
+            int read;
+            while (buffer.Length <= cap
+                && (read = await stream.ReadAsync(chunk, ct).ConfigureAwait(false)) > 0)
+            {
+                buffer.Write(chunk, 0, read);
+            }
+
+            if (buffer.Length == 0)
+                return (null, false);
+
+            var bytes = buffer.ToArray();
+            return bytes.Length > cap ? (bytes[..cap], true) : (bytes, false);
+        }
+        catch (Exception ex) when (ex is IOException or HttpRequestException or ObjectDisposedException)
+        {
+            return (null, false);
+        }
+    }
+
+    /// <summary>Persists <paramref name="outcome"/> against the envelope.</summary>
+    private async Task RecordOutcomeAsync(Envelope envelope, SyncOutcome outcome, CancellationToken ct)
+    {
+        envelope.LastOutcome = outcome;
+        await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
+    }
+
+    private static SyncEvent EventFor(SyncEventType type, Envelope envelope, SyncOutcome? outcome) =>
+        new(type,
+            envelope.Url,
+            envelope.Method,
+            DateTimeOffset.UtcNow,
+            CorrelationId: envelope.CorrelationId,
+            RequestId: envelope.Id,
+            RequestBody: envelope.RequestBody,
+            Outcome: outcome);
 
     /// <summary>
     /// Whether <paramref name="statusCode"/> means "this request will never succeed",
@@ -261,12 +390,17 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         && statusCode is not HttpStatusCode.RequestTimeout       // 408 — worth another go
         && statusCode is not HttpStatusCode.TooManyRequests;     // 429 — explicitly "later"
 
-    private async Task MarkDeliveredAsync(Envelope envelope, CancellationToken ct)
+    /// <remarks>
+    /// The outcome is published but not persisted. A delivered envelope leaves the outbox, so
+    /// there is nowhere for its record to live short of a "recently completed" table with its
+    /// own growth and eviction problem. A consumer that must reconcile after being killed
+    /// mid-flush can re-read the resource — see issue 40.
+    /// </remarks>
+    private async Task MarkDeliveredAsync(Envelope envelope, SyncOutcome outcome, CancellationToken ct)
     {
         await _store.MarkSyncedAsync(envelope.Id, ct).ConfigureAwait(false);
 
-        _events.Publish(new SyncEvent(
-            SyncEventType.OnSynced, envelope.Url, envelope.Method, DateTimeOffset.UtcNow));
+        _events.Publish(EventFor(SyncEventType.OnSynced, envelope, outcome));
 
         using var request = BuildRequest(envelope);
         if (_policy.ShouldInvalidateCacheOnWrite(request))
@@ -276,12 +410,20 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         }
     }
 
-    private async Task DeadLetterAsync(Envelope envelope, CancellationToken ct)
+    /// <remarks>
+    /// The outcome is written before the move rather than as part of it, which keeps
+    /// <see cref="ISyncStore"/> unchanged. The two writes are not atomic: a crash between them
+    /// leaves the envelope carrying its outcome but still in the outbox, so it is retried and
+    /// — classification being deterministic on the status code — reaches the same verdict. A
+    /// retry that should have been terminal, once, on a crash. That is a better trade than a
+    /// breaking change to a public interface.
+    /// </remarks>
+    private async Task DeadLetterAsync(Envelope envelope, SyncOutcome outcome, CancellationToken ct)
     {
+        await RecordOutcomeAsync(envelope, outcome with { IsFinal = true }, ct).ConfigureAwait(false);
         await _store.MoveToDeadLetterAsync(envelope.Id, ct).ConfigureAwait(false);
 
-        _events.Publish(new SyncEvent(
-            SyncEventType.OnFailed, envelope.Url, envelope.Method, DateTimeOffset.UtcNow));
+        _events.Publish(EventFor(SyncEventType.OnFailed, envelope, envelope.LastOutcome));
     }
 
     /// <summary>
@@ -294,6 +436,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     /// </remarks>
     private async Task<SendOutcome> DeferAsync(
         Envelope envelope,
+        SyncOutcome outcome,
         RetryOptions retryOptions,
         CancellationToken ct)
     {
@@ -301,11 +444,16 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
 
         if (envelope.RetryCount > retryOptions.MaxRetries)
         {
-            await DeadLetterAsync(envelope, ct).ConfigureAwait(false);
+            // Dead-lettered for a spent budget rather than a rejection. The outcome keeps its
+            // TransientFailure kind and gains IsFinal, which is what lets a consumer tell
+            // "the server refused this" from "we gave up" and decide whether to offer a
+            // retry affordance.
+            await DeadLetterAsync(envelope, outcome, ct).ConfigureAwait(false);
             return SendOutcome.DeadLettered;
         }
 
         envelope.NextRetryUtc = DateTimeOffset.UtcNow + BackoffFor(retryOptions, envelope.RetryCount);
+        envelope.LastOutcome = outcome with { AttemptCount = envelope.RetryCount };
         await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
 
         return SendOutcome.Deferred;

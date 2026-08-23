@@ -127,9 +127,12 @@ public sealed class HyperwycHandler : DelegatingHandler
             SyncEventType.OnQueued,
             request.RequestUri?.ToString() ?? string.Empty,
             request.Method.Method,
-            DateTimeOffset.UtcNow));
+            DateTimeOffset.UtcNow,
+            CorrelationId: envelope.CorrelationId,
+            RequestId: envelope.Id,
+            RequestBody: envelope.RequestBody));
 
-        return HyperwycResponseFactory.Queued(_options.OfflineResponsePolicy);
+        return HyperwycResponseFactory.Queued(_options.OfflineResponsePolicy, envelope.CorrelationId);
     }
 
     private async Task<HttpResponseMessage> HandleOfflineReadAsync(

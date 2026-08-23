@@ -47,7 +47,7 @@ Retargeted from the original notes domain to products and sales, matching
 - [x] **Catalogue reads served from cache with the device offline, across an app restart.**
 - [ ] Recording a sale offline queues it and surfaces as pending.
 - [ ] Queued sales replay when connectivity returns.
-- [ ] Per-sale sync state — blocked on [issue 40](40-surface-deferred-outcomes.md), since an
+- [ ] Per-sale sync state — blocked on [issue 40](Done/40-surface-deferred-outcomes.md), since an
       event cannot currently be attributed to a specific sale.
 - [ ] Live event log subscribed to `IHyperwyc.SyncEvents`.
 - [ ] "Sync now" calls `IHyperwyc.FlushAsync()`.

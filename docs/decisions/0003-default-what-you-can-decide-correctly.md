@@ -3,7 +3,7 @@
 **Status:** Accepted — implemented in
 [issue 47](../../Backlog/Done/47-connectivity-is-required.md), revising
 [issue 31](../../Backlog/Done/31-package-structure.md) and
-[issue 13](../../Backlog/13-connectivity-reference-implementation.md).
+[issue 13](../../Backlog/Done/13-connectivity-reference-implementation.md).
 
 ## Context
 
@@ -106,6 +106,6 @@ defaulting aggressively — but only where a mistake announces itself.
 - [Issue 32](../../Backlog/32-default-encryption-key.md) — the path-derived encryption key
   *stays* as a default, and is not a counter-example: it is weak, but its weakness is documented
   and visible in the threat model rather than hidden in the runtime behaviour. Question 2 passes.
-- [Issue 13](../../Backlog/13-connectivity-reference-implementation.md) — why the MAUI
+- [Issue 13](../../Backlog/Done/13-connectivity-reference-implementation.md) — why the MAUI
   implementation is copied rather than shipped, which is what made a required option necessary
   rather than merely defensible.

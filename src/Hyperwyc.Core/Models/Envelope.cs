@@ -17,6 +17,18 @@ public sealed class Envelope
     public string Id { get; init; }
 
     /// <summary>
+    /// The application's identifier for this write, echoed on every <see cref="SyncEvent"/>
+    /// concerning it so a deferred outcome can be matched back to the record that produced it.
+    /// </summary>
+    /// <remarks>
+    /// Taken from <see cref="HyperwycRequestOptions.CorrelationId"/> when the caller set one,
+    /// and otherwise defaulted to <see cref="Id"/>. Kept as a distinct field because it is
+    /// under the application's control and carries no uniqueness guarantee, whereas
+    /// <see cref="Id"/> keys the store.
+    /// </remarks>
+    public string CorrelationId { get; init; }
+
+    /// <summary>
     /// The full URL of the request.
     /// </summary>
     public string Url { get; init; }
@@ -80,12 +92,24 @@ public sealed class Envelope
     public CachedResponse? Response { get; set; }
 
     /// <summary>
+    /// What happened on the most recent delivery attempt, or <see langword="null"/> if none
+    /// has been made.
+    /// </summary>
+    /// <remarks>
+    /// Persisted so a dead-lettered envelope can still explain itself after a restart, which
+    /// an event cannot. Only failures are retained: a successful envelope leaves the outbox,
+    /// so there is nowhere for its outcome to live — see issue 40.
+    /// </remarks>
+    public SyncOutcome? LastOutcome { get; set; }
+
+    /// <summary>
     /// Initialises a new <see cref="Envelope"/> with a generated <see cref="Id"/>
     /// and the current UTC time as <see cref="CreatedUtc"/>.
     /// </summary>
     public Envelope()
     {
         Id = Guid.NewGuid().ToString();
+        CorrelationId = Id;
         Url = string.Empty;
         Method = string.Empty;
         RequestHeaders = [];
@@ -117,9 +141,19 @@ public sealed class Envelope
                 headers[key] = value;
         }
 
+        var id = Guid.NewGuid().ToString();
+
+        // The caller's own key if they set one, so they need no mapping table; otherwise
+        // Hyperwyc's id, which the synthetic 202 hands back.
+        var correlationId = request.Options.TryGetValue(HyperwycRequestOptions.CorrelationId, out var supplied)
+            && !string.IsNullOrWhiteSpace(supplied)
+                ? supplied
+                : id;
+
         return new Envelope
         {
-            Id = Guid.NewGuid().ToString(),
+            Id = id,
+            CorrelationId = correlationId,
             Url = request.RequestUri?.ToString() ?? string.Empty,
             Method = request.Method.Method,
             ClientName = clientName,
