@@ -18,6 +18,18 @@ public sealed class CabinetSyncStore : ISyncStore
 {
     private readonly RecordSet<Envelope> _records;
 
+    // Every operation is serialised. Cabinet's FileOfflineStore saves by writing
+    // "Envelope.dat.tmp" and then File.Move-ing it over "Envelope.dat", so two saves in
+    // flight at once race: the first Move consumes the temp file and the second throws
+    // FileNotFoundException, losing the write. Serialising also makes the read-modify-write
+    // sequences below atomic, which they were not — two concurrent callers could each read
+    // the same envelope and the second write would silently discard the first.
+    //
+    // Concurrency is not exotic here. HyperwycHandler is transient and runs on whatever
+    // thread the caller used, so two overlapping HTTP requests reach the store at once, and
+    // an orchestrator flush runs on a background task alongside all of it.
+    private readonly SemaphoreSlim _lock = new(1, 1);
+
     /// <summary>
     /// Initialises a new <see cref="CabinetSyncStore"/> with a per-path key
     /// derived from <paramref name="dbDirectory"/> via SHA-256.
@@ -91,17 +103,33 @@ public sealed class CabinetSyncStore : ISyncStore
     /// <inheritdoc/>
     public async Task<Envelope?> GetCachedResponseAsync(string url, CancellationToken ct = default)
     {
-        var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
-        return all.FirstOrDefault(e => e.Url == url && e.Response is not null && !e.IsDeadLettered);
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
+            return all.FirstOrDefault(e => e.Url == url && e.Response is not null && !e.IsDeadLettered);
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
     /// <inheritdoc/>
     public async Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default)
     {
-        var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
-        return [.. all
-            .Where(e => !e.IsSynced && !e.IsDeadLettered)
-            .OrderBy(e => e.CreatedUtc)];
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
+            return [.. all
+                .Where(e => !e.IsSynced && !e.IsDeadLettered)
+                .OrderBy(e => e.CreatedUtc)];
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
     /// <inheritdoc/>
@@ -109,10 +137,18 @@ public sealed class CabinetSyncStore : ISyncStore
         DateTimeOffset now,
         CancellationToken ct = default)
     {
-        var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
-        return [.. all
-            .Where(e => !e.IsSynced && !e.IsDeadLettered && (e.NextRetryUtc is null || e.NextRetryUtc <= now))
-            .OrderBy(e => e.CreatedUtc)];
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
+            return [.. all
+                .Where(e => !e.IsSynced && !e.IsDeadLettered && (e.NextRetryUtc is null || e.NextRetryUtc <= now))
+                .OrderBy(e => e.CreatedUtc)];
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
     /// <inheritdoc/>
@@ -120,31 +156,55 @@ public sealed class CabinetSyncStore : ISyncStore
     {
         ArgumentNullException.ThrowIfNull(envelope);
 
-        var existing = await _records.GetByIdAsync(envelope.Id, ct).ConfigureAwait(false);
-        if (existing is null)
-            await _records.AddAsync(envelope, ct).ConfigureAwait(false);
-        else
-            await _records.UpdateAsync(envelope.Id, envelope, ct).ConfigureAwait(false);
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var existing = await _records.GetByIdAsync(envelope.Id, ct).ConfigureAwait(false);
+            if (existing is null)
+                await _records.AddAsync(envelope, ct).ConfigureAwait(false);
+            else
+                await _records.UpdateAsync(envelope.Id, envelope, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
     /// <inheritdoc/>
     public async Task MarkSyncedAsync(string id, CancellationToken ct = default)
     {
-        var envelope = await _records.GetByIdAsync(id, ct).ConfigureAwait(false);
-        if (envelope is null) return;
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var envelope = await _records.GetByIdAsync(id, ct).ConfigureAwait(false);
+            if (envelope is null) return;
 
-        envelope.IsSynced = true;
-        await _records.UpdateAsync(id, envelope, ct).ConfigureAwait(false);
+            envelope.IsSynced = true;
+            await _records.UpdateAsync(id, envelope, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
     /// <inheritdoc/>
     public async Task MoveToDeadLetterAsync(string id, CancellationToken ct = default)
     {
-        var envelope = await _records.GetByIdAsync(id, ct).ConfigureAwait(false);
-        if (envelope is null) return;
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var envelope = await _records.GetByIdAsync(id, ct).ConfigureAwait(false);
+            if (envelope is null) return;
 
-        envelope.IsDeadLettered = true;
-        await _records.UpdateAsync(id, envelope, ct).ConfigureAwait(false);
+            envelope.IsDeadLettered = true;
+            await _records.UpdateAsync(id, envelope, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
     /// <inheritdoc/>
@@ -152,20 +212,36 @@ public sealed class CabinetSyncStore : ISyncStore
     {
         ArgumentNullException.ThrowIfNull(urlPrefix);
 
-        var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
-        foreach (var envelope in all.Where(e => e.Url.StartsWith(urlPrefix, StringComparison.Ordinal)).ToList())
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            envelope.Response = null;
-            await _records.UpdateAsync(envelope.Id, envelope, ct).ConfigureAwait(false);
+            var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
+            foreach (var envelope in all.Where(e => e.Url.StartsWith(urlPrefix, StringComparison.Ordinal)).ToList())
+            {
+                envelope.Response = null;
+                await _records.UpdateAsync(envelope.Id, envelope, ct).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _lock.Release();
         }
     }
 
     /// <inheritdoc/>
     public async Task ResetAsync(CancellationToken ct = default)
     {
-        var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
-        foreach (var envelope in all.ToList())
-            await _records.RemoveAsync(envelope.Id, ct).ConfigureAwait(false);
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
+            foreach (var envelope in all.ToList())
+                await _records.RemoveAsync(envelope.Id, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
     // -------------------------------------------------------------------------

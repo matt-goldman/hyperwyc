@@ -59,6 +59,7 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | 40 | [Surface the outcome of a deferred request](Done/40-surface-deferred-outcomes.md) | ✅ Done | `SyncEvent` gains `CorrelationId`/`RequestId`/`RequestBody`/`Outcome`; `SyncOutcome` is persisted on the envelope so a dead-lettered write explains itself after a restart. Correlation id is the caller's if they set one via `HyperwycRequestOptions.CorrelationId`, otherwise generated and returned on the `202`. Unblocks 19's per-sale status |
 | 47 | [Connectivity is required](Done/47-connectivity-is-required.md) | ✅ Done | Ships `NetworkAvailabilityConnectivityService` (BCL-only) **and** removes the `AlwaysOnline` default: a consumer registers an `IConnectivityService` (either side of `AddHyperwyc`) or sets the option, and resolving throws if they do neither. The default failed silently — always-connected means nothing is ever queued or replayed, and the library looks like it works. Narrows 31's zero-config headline, deliberately |
 | 13 | [Connectivity documentation](Done/13-connectivity-reference-implementation.md) | ✅ Done | **Scope revised three times, each removing something from the package**: ship a MAUI type → ship a test double → documentation only → documentation with no default ([47](Done/47-connectivity-is-required.md)). README now carries the full `MauiConnectivityService`, the five decisions in it, and how to fake connectivity in your own tests. The sample source carries the same reasoning as comments, since that is what gets copied |
+| 51 | [`CabinetSyncStore` was not thread-safe](Done/51-cabinet-store-not-thread-safe.md) | ✅ Done | Crash reported from the sample: two overlapping GETs both caching a response raced Cabinet's write-temp-then-move, and the second `File.Move` threw `FileNotFoundException`. No synchronisation since the file was created; every mutating method was also an unguarded read-modify-write. Hidden because store tests only ever ran against `InMemorySyncStore`, which does serialise |
 | 16 | [`ResetStoreAsync()`](Done/16-reset-store-async.md) | ✅ Done | Moved onto `SyncOrchestrator`, which owns the flush gate. Acquires it **blocking** — `FlushAsync`'s try-acquire returns immediately when a flush is running, so the first cut wiped the store underneath one and a deferred envelope was upserted back in afterwards. Reset discards and does not flush: on logout a flush replays through the auth handler the app is revoking, so every write 401s and dead-letters before being wiped anyway |
 | **19** | [Sample — .NET MAUI app](19-poc-maui-app.md) | 🟡 Partial | **Core scenario proven on device:** catalogue served from cache with the network off, across an app restart. Remaining: offline writes, sync-now, event log, and per-sale state — the last blocked on [40](Done/40-surface-deferred-outcomes.md) |
 
@@ -157,6 +158,12 @@ request grouping / bulk sync, and GraphQL support.
   transport-level and does not promise delivery, so an unreadable store is a fact to report, not
   a problem to solve — log it, raise an event, carry on. The scope correction shrank the item and
   dissolved a dependency on an upstream Cabinet change.
+- **Item 51 is what happens when two implementations of one interface are held to different
+  standards.** `InMemorySyncStore` serialised everything; `CabinetSyncStore` serialised nothing;
+  `ISyncStore` said neither was required. Every store test ran against the safe one and passed,
+  and the durable one — the one consumers actually use — corrupted its own file under two
+  concurrent requests. A shared conformance suite over both implementations is the structural
+  fix and is not yet filed.
 - **Item 16's bug was hidden by a method name.** Delegating to `FlushAsync` before wiping reads
   as "let the in-flight flush finish", and does not do that — it is a try-acquire that returns
   immediately when a flush is running. The visible symptom would have been rare and awful: a
