@@ -61,7 +61,7 @@ Everything else on the backlog can be worked around by a consumer. These two can
 
 ## 🥉 v1.2 — ergonomics and operational visibility
 
-- [ ] Decide and implement what happens when the store cannot be decrypted ([49](Backlog/49-unreadable-store-recovery.md)) — today a key mismatch throws a raw `CryptographicException`, sometimes out of the consumer's own HTTP call
+- [ ] Report an unreadable store rather than throwing ([49](Backlog/49-unreadable-store-recovery.md)) — today a key mismatch throws a raw `CryptographicException`, sometimes out of the consumer's own HTTP call. Log it, raise an event, degrade to empty; recovery is the application's call
 - [ ] Document excluding the store from iCloud and Google Drive backups ([48](Backlog/48-exclude-store-from-os-backup.md)) — a restored outbox replays writes that already happened, and Hyperwyc has no duplicate suppression by design
 - [ ] MAUI `SecureStorage` reference implementation for the store encryption key ([32](Backlog/32-default-encryption-key.md)) — the path-derived key stays as the free default, and is documented as such
 - [ ] `Date` header rewriting when serving responses from cache ([21](Backlog/21-v1-date-header-rewriting.md))
@@ -104,6 +104,7 @@ No backlog items written yet — these are direction, not commitments.
 - [ ] **Under consideration:** Typed-response shaping for offline reads ([26](Backlog/26-v2-typed-response-shaping.md)) — revised down to three layers, the first of which is simply returning `null` rather than an empty body, since an empty body throws for objects as well as collections
 
 ---
+- [ ] "Designing resilient applications with Hyperwyc" ([50](Backlog/50-resilient-applications-guide.md)) — the application-owned-store pattern, for consumers who need delivery guarantees Hyperwyc deliberately does not provide
 
 ## Out of Scope
 

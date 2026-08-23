@@ -76,7 +76,9 @@ Two things follow:
   loses the store. Needs verifying on device, then recording against 32.
 - What Hyperwyc *does* on encountering that store is [issue 49](49-unreadable-store-recovery.md),
   which is a real defect rather than documentation: today it throws a raw `CryptographicException`
-  from wherever the store is first read.
+  from wherever the store is first read. 49 settles on reporting it and degrading to an empty
+  store — Hyperwyc does not delete the files or refuse to start, since neither is a
+  transport-level decision.
 
 Android is unaffected — `/data/user/0/<package>/…` is stable, because the package name does not
 change.

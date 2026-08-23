@@ -2,15 +2,17 @@
 
 ## Summary
 
-Hyperwyc has no answer for a store it cannot read. A key mismatch surfaces as an unhandled
-`CryptographicException` from wherever the store was first touched — including out of the
-consumer's own `HttpClient.SendAsync`. Decide the policy, distinguish recoverable from
-unrecoverable, and make the failure land somewhere it can be understood.
+Hyperwyc has no answer for a store it cannot read: a key mismatch surfaces as an unhandled
+`CryptographicException` from wherever the store was first touched, including out of the
+consumer's own `HttpClient.SendAsync`.
+
+**Report it and carry on.** Log through `ILogger` if one is available, publish an event, degrade
+to an empty store, and stop there. Do not throw, do not delete, do not attempt recovery.
 
 ## Status
 
 ⬜ Open. Filed 2026-08-23. The question predates
-[issue 48](48-exclude-store-from-os-backup.md); 48 is only what made it visible.
+[issue 48](48-exclude-store-from-os-backup.md); 48 only supplied a likely trigger.
 
 ## What happens today
 
@@ -18,7 +20,7 @@ Nothing catches it. `CabinetSyncStore` calls `RecordSet<Envelope>.GetAllAsync`, 
 with `AesGcmEncryptionProvider`, and a wrong key fails the AES-GCM authentication tag. There is
 no `catch` for `CryptographicException` anywhere in the codebase.
 
-Where it lands depends on which call touches the store first, and none of the options are good:
+Where it lands depends on which call touches the store first:
 
 | First touch | Where the exception appears |
 |---|---|
@@ -26,155 +28,188 @@ Where it lands depends on which call touches the store first, and none of the op
 | `HyperwycHandler` on a read | **Out of the consumer's `HttpClient.SendAsync`** |
 | `HyperwycHandler` on an offline write | Out of `SendAsync`, and the write is lost |
 
-The second is the one to fix regardless of policy. A caller doing `GetFromJsonAsync<Product[]>()`
-has no reason to expect a cryptography exception, and no way to tell from the call site that the
-problem is a local store rather than the request they just made.
+The second is the defect. A caller doing `GetFromJsonAsync<Product[]>()` has no reason to expect
+a cryptography exception, and nothing at the call site suggests the problem is a local store
+rather than the request they just made. Hyperwyc is a transport-level component; leaking a
+storage implementation's exception through an HTTP call is a boundary violation regardless of
+what policy is chosen for the underlying condition.
 
-Fixing only that — catching at the `CabinetSyncStore` boundary and rethrowing as a typed
-Hyperwyc exception with a message that names the store path — is worth doing on its own even if
-every other question here is deferred.
+## Decision: report and degrade
 
-## The rule: recoverable or not, rather than which key
+This is a **transport-level** tool. It does not guarantee delivery, in the same way and for the
+same reason that it takes no position on sync conflict resolution or duplicate suppression
+([ADR 0001](../docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md)). An unreadable store
+means Hyperwyc has less to work with; it does not make Hyperwyc responsible for putting it right.
 
-The instinct is to split on where the key came from: throw for a supplied key, recreate for the
-derived one. That reaches the right answer, but the reason generalises better if it is stated as
-**can anyone still read this data?**
+So, on a decryption failure:
 
-**Derived key — unrecoverable by construction.** The key is `SHA256(DirectoryPath)`, a pure
-function of a value Hyperwyc already has. If decryption fails, there is no key the consumer could
-supply that would work. Throwing hands them an error they can do nothing about, and — since it
-throws again on every subsequent launch — an application that can never start.
+1. **Log it**, through an optional `ILogger` if the container has one.
+2. **Publish an event**, so an application watching `SyncEvents` can react.
+3. **Return what can be read**, which may be nothing.
+4. **Nothing else.** No exception, no deletion, no quarantine, no recovery attempt.
 
-**Supplied key — recoverable in principle.** The correct key exists outside Hyperwyc: in secure
-storage, in a config file, in a password manager. A mismatch usually means the wrong key was
-passed, not that the data is worthless. Destroying it would be irreversible, and would destroy
-data whose owner was doing the more careful thing.
+Uniform across every case. Reads degrade to empty; the application is told; it decides.
 
-Stated as recoverability rather than provenance, the rule also answers cases not yet built. The
-`SecureStorage`-backed key in [issue 32](32-default-encryption-key.md) is supplied-from-outside,
-so it throws — even though the consumer never typed it.
+### What this replaces
 
-## Recreate, but never silently
+An earlier draft of this item proposed a policy that branched on whether the key was derived or
+supplied — recreate the store in the first case, throw in the second — on the reasoning that the
+derived key is unrecoverable by construction while a supplied key might simply be the wrong one.
 
-For the derived-key case the recreate is essentially forced: the alternative is an application
-that cannot start. The open part is not *whether* to recreate but whether the consumer is told,
-and here [ADR 0003](../docs/decisions/0003-default-what-you-can-decide-correctly.md)'s defaults
-test is decisive.
+The analysis was right and the conclusion was out of scope. Both branches have Hyperwyc taking
+custody of a decision that is not its own:
 
-> 2. If the default is wrong, does the consumer find out? Wrong-and-loud is fine; wrong-and-silent
->    ships.
+- **Recreating** destroys the consumer's data on their behalf. Even unreadable data is theirs, and
+  deleting it is irreversible.
+- **Throwing** bricks the application. Refusing to start because local storage is damaged is a
+  policy an application might reasonably choose, but Hyperwyc choosing it for them is worse than
+  either alternative.
 
-A silent recreate discards a pending outbox — queued writes the user was told had been accepted —
-with no signal at all. That the data was *already* lost is true and beside the point: the data is
-unrecoverable, but the knowledge that it was lost is not, and that is the part still worth
-preserving. An application that knows can prompt, re-submit from its own records, or at minimum
-stop showing an order as pending.
+Reporting and degrading is the option that requires no opinion about whose data it is or how much
+the application can tolerate losing.
 
-So: recreate, and report. Reporting needs a channel, which is the main design question below.
+The distinction between derived and supplied keys survives, but only as **what the log message
+says** — "the derived key does not match, which usually means the store directory moved" against
+"the supplied key does not match this store" — not as a difference in behaviour. That is a much
+smaller thing to get right, and it cannot do any damage if it is wrong.
 
-## Not every failure should condemn the whole store
+### The remedy already exists, and belongs to the application
 
-An important distinction, and one that decides how much of this is even Hyperwyc's to build.
+`IHyperwyc.ResetStoreAsync()` ([issue 16](16-reset-store-async.md)) already clears the store. That
+is the recovery action, it is already in the public surface, and it is the application's to call.
 
-- **Every document fails** → a key mismatch. The store is uniformly unreadable and recreating it
-  is the only way forward.
-- **One document fails** → corruption of a single file, a partial write, a bad sector. Recreating
-  the entire store here would be an appalling overreaction: it would discard every other queued
-  write to salvage nothing.
+Hyperwyc reports that the store is unreadable. An application that wants a clean slate calls
+`ResetStoreAsync`. An application that would rather preserve the files for support, or prompt the
+user, or refuse to run, does that instead. None of those are transport concerns, and Hyperwyc
+does not need to know which one was chosen.
 
-The right behaviour for a single bad document is to skip it, report it, and carry on — the store
-keeps working and one envelope is lost instead of all of them.
+This is worth stating in the README next to the event, because otherwise the obvious reading of
+"reports and carries on" is that nothing can be done.
 
-Whether that is *possible* depends on Cabinet. `RecordSet<T>.GetAllAsync` currently surfaces the
-first decryption failure as an exception, so Hyperwyc cannot tell the two cases apart: it sees an
-exception either way. Distinguishing them needs Cabinet to be able to enumerate with
-skip-and-report semantics rather than fail-fast.
+## Partial failure needs nothing extra
 
-That makes part of this an upstream question rather than a Hyperwyc one, and it should be settled
-before the policy is implemented — a policy that cannot tell "the key is wrong" from "one file is
-damaged" will get the damaged-file case badly wrong.
+A useful consequence of the decision.
 
-## Where the failure should be detected
+An earlier draft treated "every document fails" (key mismatch) and "one document fails"
+(corruption) as cases needing to be told apart, since one warranted recreating the store and the
+other emphatically did not. That mattered only because a destructive action was on the table.
 
-Store construction is deliberately lazy ([issue 31](Done/31-package-structure.md)), so nothing
-touches the filesystem at registration and the first failure lands wherever the first read
-happens to be.
+Under report-and-degrade the same rule covers both: **skip what cannot be read, report it, return
+the rest.** One bad document loses one envelope. A wholly unreadable store reads as empty. No
+branch, no distinction, nothing to get wrong.
 
-Options, roughly in order of preference:
+It also removes an upstream blocker. Cabinet's `GetAllAsync` currently fails fast, so Hyperwyc
+cannot skip individual documents — but it can catch at its own boundary and degrade the whole
+read to empty, which is the same policy at coarser granularity. Per-document granularity becomes
+a **refinement** Cabinet could enable later, rather than something this issue waits on.
 
-1. **Probe once at startup.** Register `HyperwycHostedService` unconditionally and have it read
-   the store before deciding whether to flush, so the failure surfaces during host startup where
-   it can be reasoned about. Currently the hosted service is only registered when
-   `FlushOnStartup` is true, so a consumer who turned that off has no probe point at all. A small
-   change, and it puts the error somewhere sensible.
-2. **Convert at the boundary.** Catch in `CabinetSyncStore` and rethrow typed. Necessary anyway;
-   not sufficient, because it still surfaces inside an HTTP call.
-3. **Leave it lazy and document it.** Cheapest, and the worst experience.
+## An unusable store degrades to pass-through, not to a half-working one
 
-1 and 2 are complementary and should both happen.
+Settled rather than left open, because the answer follows from the one promise Hyperwyc does
+make.
+
+Reads degrading to empty is straightforward. Writes are not, and the tempting answer — keep
+accepting them into a store whose reads just failed — is wrong. Cabinet may hold an in-memory set
+seeded from disk, so a write might fail, might land alongside the unreadable documents, or might
+clobber an index. Whichever it is, the write may not be there after a restart.
+
+**That breaks the only guarantee Hyperwyc offers.** Queueing a write means it survives the
+process ending, and on mobile the process ending is routine rather than exceptional — the app is
+backgrounded and reaped between the user tapping "submit" and looking at their phone again. A
+store that accepts writes it cannot reliably persist fails at exactly the moment it exists for,
+and fails silently.
+
+The synthetic `202` is where this bites. `202 Accepted` is Hyperwyc's promise that it has taken
+custody of the request. **Returning it when the store could not accept the envelope is a lie**,
+and a worse outcome than any error, because the application stops tracking a write that is not
+going to happen.
+
+So the store either works or it does not. When it does not, Hyperwyc degrades to **pass-through**:
+it forwards requests and adds nothing. No cache lookups, no queueing, no synthetic responses.
+Offline, an application then sees the transport failure it would have seen without Hyperwyc
+installed — which is the truth, and is recoverable, where a `202` is neither.
+
+This needs the handler to know the store is unusable, so the latch below is load-bearing rather
+than merely a log-volume optimisation.
+
+## Reporting the failure
+
+`ILogger` is the primary channel, since this is diagnostic. `Microsoft.Extensions.Logging.Abstractions`
+is already in `Hyperwyc.Core`'s dependency graph transitively via `Microsoft.Extensions.Hosting.Abstractions`,
+so a direct reference costs nothing new. Inject `ILogger<T>?` and no-op when absent — Hyperwyc
+must stay usable without a container.
+
+The event is the programmatic channel, and is the part that needs design. Every existing
+`SyncEventType` describes one request moving through its lifecycle; this describes the store. See
+Open Questions.
+
+**Report once, not per read.** A latch on the store instance, so an application whose every read
+degrades does not get one log line and one event per HTTP call. The condition does not change
+until the process restarts or the store is reset.
 
 ## Open Questions
 
-1. **What channel reports a recreated store?** `SyncEvents` is the obvious one, but every existing
-   `SyncEventType` describes a single request moving through its lifecycle, and this describes the
-   store. A `StoreReset`-style member would be the first event that is not about a request. The
-   alternatives are an `ILogger` line (easy to miss, and Hyperwyc takes no logging dependency
-   today) or a callback on `HyperwycOptions` (explicit, but a different shape from everything
-   else). Leaning toward the event, and accepting that the event stream becomes "things that
-   happened", not "things that happened to a request".
-2. **Should the policy be configurable?** ADR 0003 argues against an option where the correct
-   answer is knowable, and it is knowable here. But a consumer on the derived key might still
-   prefer to fail loudly rather than lose an outbox quietly, even knowing it is unrecoverable.
-   Resist until someone asks.
-3. **Quarantine instead of delete?** Renaming the unreadable directory aside rather than deleting
-   it converts an irreversible act into a reversible one. Mostly pointless for the derived-key
-   case — though not entirely, since `SHA256(oldPath)` is computable by anyone who knows the old
-   path. It leaves orphaned data on a phone forever unless bounded to a single generation.
-4. **Does Cabinet need to change?** See the section above. Likely yes, for the
-   partial-failure case.
+1. **What does the event look like?** `SyncEvent` is built around a request — `Url`, `Method`,
+   `CorrelationId`, `RequestBody` are all meaningless here. Options: a new `SyncEventType` with
+   those fields null and the detail in a new field; a separate `IObservable` for store-level
+   events; or logging only, with no event at all. Leaning toward a new `SyncEventType`, accepting
+   that the stream becomes "things that happened" rather than "things that happened to a request",
+   because a second observable is a worse thing to ask a consumer to remember to subscribe to.
+2. **Should `ResetStoreAsync` be able to clear a store it cannot read?** It presumably deletes
+   files rather than records, in which case yes and this is free. Worth confirming, since the
+   recommended remedy is useless if it needs to decrypt first. **This is
+   [issue 16](16-reset-store-async.md)'s to answer** — it is already doing the work on that
+   method.
 
 ## The better fix, upstream of all of this
 
-Worth stating because it would shrink this issue considerably.
+Worth restating because it reduces how often any of this is reached.
 
-The derived key fails in the first place because it is `SHA256` of a **volatile absolute path**.
-On iOS that path contains the app container UUID, which changes on reinstall or restore
-([issue 48](48-exclude-store-from-os-backup.md)). Deriving from something stable instead — a
-fixed salt plus an application identity — would make the store readable across exactly the events
-that currently break it.
+The derived key fails because it is `SHA256` of a **volatile absolute path**. On iOS that path
+contains the app container UUID, which changes on reinstall or restore
+([issue 48](48-exclude-store-from-os-backup.md)). Deriving from something stable instead — a fixed
+salt plus an application identity — makes the store readable across exactly the events that
+currently break it, leaving genuine corruption as the only trigger.
 
-That would leave the derived-key case failing only on genuine corruption, which is rare and is
-the single-document case rather than the whole-store one. The policy question does not disappear,
-but it stops being something a normal iOS restore triggers.
-
-This belongs to [issue 32](32-default-encryption-key.md) and should be decided there first. There
-is no compatibility cost — nothing is released.
+That belongs to [issue 32](32-default-encryption-key.md) and should be settled first. No
+compatibility cost; nothing is released.
 
 ## Acceptance Criteria
 
-- [ ] A decryption failure never escapes as a raw `CryptographicException`; it is a typed
-      Hyperwyc exception naming the store path and the likely cause.
-- [ ] A decryption failure never escapes through `HttpClient.SendAsync` unexplained.
-- [ ] Derived key + wholly unreadable store → recreated, and reported through a channel the
-      application can observe.
-- [ ] Supplied key + unreadable store → throws, and destroys nothing.
-- [ ] A single unreadable document does not condemn the store — or, if Cabinet cannot yet support
-      that, the limitation is documented and an upstream issue is raised.
-- [ ] The failure is detected at a predictable point rather than wherever the first read lands.
+- [ ] A decryption failure never escapes `CabinetSyncStore` as a raw `CryptographicException`,
+      and never escapes through `HttpClient.SendAsync`.
+- [ ] Reads degrade to what can be read — nothing, in the whole-store case — rather than throwing.
+- [ ] The failure is logged through an optional `ILogger`, with a message that distinguishes a
+      derived-key mismatch from a supplied-key one.
+- [ ] The failure is published as an event an application can observe.
+- [ ] Reported once per store instance, not once per read.
+- [ ] Nothing is deleted, moved or recreated by Hyperwyc.
+- [ ] An unusable store degrades to pass-through: no cache lookups, no queueing, and **no
+      synthetic `202`** for a write Hyperwyc cannot persist.
 - [ ] Decision recorded on each open question.
-- [ ] Tests: wrong supplied key throws; derived-key mismatch recreates and reports; a recreated
-      store is usable afterwards.
-- [ ] README documents both behaviours under storage and encryption.
+- [ ] Tests: a store opened with the wrong key reads as empty rather than throwing; the event
+      fires; the log is written; it is reported once across several reads; nothing on disk is
+      removed; an offline write against an unusable store does **not** receive a `202`.
+- [ ] README documents the behaviour and names `ResetStoreAsync` as the application's remedy.
 
 ## Notes
 
 - Raised by the author while reviewing [issue 48](48-exclude-store-from-os-backup.md): "how do we
   handle a failed decryption... this question should have existed before we knew this anyway."
-  Correct — 48 supplied a likely trigger, not the problem.
-- Suggested milestone **v1.0**. Unlike 48 this is not documentation: an unhandled
-  `CryptographicException` out of an HTTP call is a defect, and "the app can never start again"
-  is not an acceptable response to a restored backup. The v1.0 list is deliberately short, so
-  this is a proposal rather than an assumption — the minimum that must ship is the typed
-  exception and the boundary catch, which is small.
-- Sequencing: settle [32](32-default-encryption-key.md)'s derivation first. It changes how often
-  this code path is reached, which changes how much of it is worth building.
+- **The scope correction is the point of this item.** The first draft reasoned its way to a
+  branching recovery policy because the analysis of *recoverability* was interesting. Interesting
+  analysis is not a mandate: Hyperwyc is transport-level, guaranteed delivery is not its promise,
+  and an unreadable store is a fact to report rather than a problem to solve. Worth an ADR if
+  this shape recurs — it is the same failure mode as ADR 0001, arrived at from a different
+  direction.
+- Suggested milestone **v1.0** for the boundary fix specifically — a raw `CryptographicException`
+  out of an HTTP call is a defect, and it is small. The event and the logging can follow.
+- Sequencing: settle [32](32-default-encryption-key.md)'s derivation first.
+- **This item is captured, not scheduled.** The remaining open questions are deliberately open:
+  the shape of a store-level event is a design decision worth taking with the diagnostics work
+  ([23](23-v1-diagnostics-view.md)) in view rather than in isolation, and the `ResetStoreAsync`
+  question belongs to [16](16-reset-store-async.md). Nothing here needs solving before v1.0
+  except the boundary fix.
+- Guidance for applications that need genuine delivery guarantees — which generally means an
+  application-owned store alongside Hyperwyc's — belongs in
+  [issue 50](50-resilient-applications-guide.md), not here.

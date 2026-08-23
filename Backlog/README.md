@@ -71,7 +71,7 @@ users to migrate.
 | # | Item | Status | Notes |
 |---|---|---|---|
 | 25 | [Binary request/response bodies](25-binary-request-response-bodies.md) | ⬜ Open | Bodies round-trip through `ReadAsStringAsync`, corrupting anything not text. Breaking change to the persisted shape; batch [43](43-honour-vary-header.md) and [44](44-cache-generation.md) with it if they are being done at all, since all three change how an entry is keyed or stored |
-| 49 | [Unreadable store recovery](49-unreadable-store-recovery.md) | ⬜ Open | **Proposed for v1.0, not yet agreed.** A key mismatch throws a raw `CryptographicException` from wherever the store is first touched, including out of the consumer's `HttpClient.SendAsync`. Rule: recreate what is unrecoverable (derived key) and report it; throw and destroy nothing where the data could still be read (supplied key). Sequence after [32](32-default-encryption-key.md) |
+| 49 | [Unreadable store recovery](49-unreadable-store-recovery.md) | ⬜ Open | **Proposed for v1.0, not yet agreed.** A key mismatch throws a raw `CryptographicException` from wherever the store is first touched, including out of the consumer's `HttpClient.SendAsync`. Policy: log, publish an event, degrade to an empty store, stop there — no throw, no delete, no recovery. `ResetStoreAsync` is already the application's remedy. Sequence after [32](32-default-encryption-key.md) |
 | 22 | [Per-route policies](22-v1-per-route-policies.md) | ⬜ Open | A single global policy cannot express "cache the catalogue for a day, never cache payments" — which the README already promises. Also where a `ReturnsCollection` flag would live (see [26](26-v2-typed-response-shaping.md)), and where `ApiFirst` should be renamed `NetworkFirst` |
 
 ## v1.2 — ergonomics and operational visibility
@@ -105,6 +105,7 @@ then **46 before 45**, since cheap revalidation is what makes stale-while-revali
 
 | # | Item | Status | Notes |
 |---|---|---|---|
+| 50 | ["Designing resilient applications with Hyperwyc"](50-resilient-applications-guide.md) | ⬜ Open | Guidance doc, deliberately unscheduled. Collects the scattered "not our remit" caveats into one place and describes the application-owned-store pattern for consumers who need guaranteed delivery. Write it once [22](22-v1-per-route-policies.md) and [25](25-binary-request-response-bodies.md) have stopped moving the surface |
 | 26 | [Typed response shaping for offline reads](26-v2-typed-response-shaping.md) | 💭 Under consideration | Revised down to three layers. Layer 0 — return `null` rather than an empty body — is nearly free and fixes objects, since an empty body throws for those too. Layer 1 is a `ReturnsCollection` flag on [22](22-v1-per-route-policies.md). Layer 2 (source generator) stays speculative |
 
 ## Unfiled roadmap items
@@ -151,9 +152,11 @@ request grouping / bulk sync, and GraphQL support.
   is unintuitive and worth documenting rather than rediscovering.
 - **Item 49 is the question item 48 exposed rather than created.** What should happen when the
   store cannot be decrypted was unanswered from the start; the backup finding only supplied a
-  likely trigger. The rule it settles on — recreate what is unrecoverable, throw where the data
-  could still be read — splits on recoverability rather than on where the key came from, which is
-  what makes it still correct for key sources not yet built.
+  likely trigger. Its first draft branched on whether the data was recoverable and had Hyperwyc
+  either recreate the store or refuse to start; both were rejected as out of scope. Hyperwyc is
+  transport-level and does not promise delivery, so an unreadable store is a fact to report, not
+  a problem to solve — log it, raise an event, carry on. The scope correction shrank the item and
+  dissolved a dependency on an upstream Cabinet change.
 - **Item 48 was filed from a question, and grew a second finding.** The question was about
   backup quota; the answer is that a restored outbox re-sends delivered writes. Writing it up
   also turned up that the path-derived encryption key is not stable across an iOS restore, which
