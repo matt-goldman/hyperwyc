@@ -17,10 +17,10 @@ When a user logs out, locally cached data and any queued requests should be disc
 
 ## Acceptance Criteria
 
-- [ ] `ResetStoreAsync(CancellationToken ct = default)` implemented on the concrete `Hyperwyc` service class that backs `IHyperwyc`.
-- [ ] In-flight flush is awaited or the semaphore is acquired before wiping.
-- [ ] `ISyncStore.ResetAsync()` is called.
-- [ ] Orchestrator continues to function after reset (no broken state).
+- [x] `ResetStoreAsync(CancellationToken ct = default)` implemented on the concrete `Hyperwyc` service class that backs `IHyperwyc`.
+- [x] In-flight flush is awaited or the semaphore is acquired before wiping.
+- [x] `ISyncStore.ResetAsync()` is called.
+- [x] Orchestrator continues to function after reset (no broken state).
 - [ ] Unit tests cover: reset on empty store, reset with pending outbox entries, reset while flush in progress.
 
 ## Notes
