@@ -6,9 +6,9 @@
              xmlns:models="clr-namespace:Shared;assembly=Shared"
              x:DataType="vm:CatalogueViewModel"
              x:Class="Hyperwyc.Sample.Maui.Pages.CataloguePage">
-    <Grid>
-        <VerticalStackLayout HorizontalOptions="Fill"
-                             VerticalOptions="Fill">
+    <RefreshView Command="{Binding LoadProductsCommand}"
+                 IsRefreshing="{Binding IsLoading}">
+        <VerticalStackLayout HorizontalOptions="Fill">
             <Label Text="Product Catalogue"
                    FontSize="24"
                    VerticalOptions="Center"
@@ -23,7 +23,7 @@
                 <CollectionView.ItemTemplate>
                     <DataTemplate>
                         <Border StrokeShape="RoundRectangle 20"
-                                Margin="20"
+                                Margin="20,10"
                                 Padding="10">
                             <Grid HorizontalOptions="Fill"
                                   VerticalOptions="Fill"
@@ -67,11 +67,5 @@
                 </CollectionView.ItemTemplate>
             </CollectionView>
         </VerticalStackLayout>
-
-        <ActivityIndicator VerticalOptions="Center"
-                           HorizontalOptions="Center"
-                           HeightRequest="20"
-                           IsVisible="{Binding IsLoading}"
-                           IsRunning="True" />
-    </Grid>
+    </RefreshView>
 </ContentPage>

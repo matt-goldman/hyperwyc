@@ -9,7 +9,7 @@
     <Grid>
         <VerticalStackLayout HorizontalOptions="Fill"
                              VerticalOptions="Fill">
-            <Label Text="Product Catalogue"
+            <Label Text="Sales"
                    FontSize="24"
                    VerticalOptions="Center"
                    HorizontalOptions="Center"

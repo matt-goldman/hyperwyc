@@ -35,7 +35,7 @@ public partial class SalesViewModel(
         else
         {
             await Application.Current!.Windows[0].Page!.DisplayAlertAsync("Not logged in", "You must be logged in to view sales. Please log in via the menu.", "OK");
-            await Shell.Current.GoToAsync("..");
+            await Shell.Current.GoToAsync("//Products");
         }
     }
 }

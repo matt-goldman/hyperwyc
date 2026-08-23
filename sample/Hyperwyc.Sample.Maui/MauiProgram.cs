@@ -66,8 +66,6 @@ public static class MauiProgram
             client.BaseAddress = new Uri(apiAddress);
         });
 
-        builder.Services.AddSingleton<AuthenticationService>();
-
         builder.Services.AddSingleton<CatalogueViewModel>();
         builder.Services.AddSingleton<LoginViewModel>();
         builder.Services.AddSingleton<NewSaleViewModel>();

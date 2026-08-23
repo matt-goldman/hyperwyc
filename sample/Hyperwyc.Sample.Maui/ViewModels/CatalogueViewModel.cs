@@ -18,6 +18,7 @@ public partial class CatalogueViewModel(
     [ObservableProperty]
     public partial bool IsLoading { get; set; }
 
+    [RelayCommand]
     public async Task LoadProducts()
     {
         IsLoading = true;
@@ -39,7 +40,7 @@ public partial class CatalogueViewModel(
 
         if (isLoggedIn)
         {
-            await Shell.Current.GoToAsync("sales/new", new ShellNavigationQueryParameters { { "product", SelectedProduct } });
+            await Shell.Current.GoToAsync("//Sales/new", new ShellNavigationQueryParameters { { "product", SelectedProduct } });
         }
         else
         {
