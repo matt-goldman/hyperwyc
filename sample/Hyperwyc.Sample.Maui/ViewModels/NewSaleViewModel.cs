@@ -49,6 +49,10 @@ public partial class NewSaleViewModel(SalesApiClient client) : ObservableObject,
 
             var title = isValid ? "Sale Recorded" : "Sale Failed";
 
+            // TODO: this is wrong. Evaluate against created (api) vs accepted (hyperwyc).
+            //       The API already returns the proper form as well as the object so we
+            //       could keep this validation for created only. TBD.
+
             var message = isValid
                 ? $"Sale of {sale.Quantity} x {Product.Name} successfully recorded"
                 : "Something went wrong and the sale could not be recorded";
@@ -57,6 +61,7 @@ public partial class NewSaleViewModel(SalesApiClient client) : ObservableObject,
 
             if (isValid)
             {
+                QuantityToSell = 0;
                 await Shell.Current.GoToAsync("..");
             }
         }

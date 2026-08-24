@@ -573,6 +573,8 @@ constructed only once that resolution is complete.
 - **Use case fit:** Ideal for apps where API contracts are already stable, or where data
   conflicts are rare or handled server-side.
 
+**TODO:** Evaluate language used; we're using "sync" a lot in the code and it conflates Hyperwyc with these other solutions. May be fine, but needs an active decision rather than it just falling out of what we did.
+
 In essence, Datasync and Realm require you to architect your app *around* their sync model.
 Hyperwyc fits *into* your existing architecture — like adding a Service Worker to a web app:
 invisible by default, powerful when you need it.

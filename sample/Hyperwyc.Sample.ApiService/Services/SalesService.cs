@@ -38,7 +38,7 @@ public class SalesService(ApplicationDbContext context)
             Id          = sale.Id == Guid.Empty ? Guid.NewGuid() : sale.Id,
             ProductId   = sale.ProductId,
             Quantity    = sale.Quantity,
-            SoldAt      = DateTime.UtcNow,
+            SoldAt      = sale.SoldAt,
             ProductName = product.Name,
         };
 

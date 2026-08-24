@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Hyperwyc.Sample.Maui.Services;
 using Shared;
 
@@ -14,6 +15,7 @@ public partial class SalesViewModel(
     [ObservableProperty]
     public partial bool IsLoading { get; set; }
 
+    [RelayCommand]
     public async Task LoadApiSales()
     {
         var isLoggedIn = await authService.GetIsLoggedInAsync();

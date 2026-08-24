@@ -6,7 +6,8 @@
              xmlns:models="clr-namespace:Shared;assembly=Shared"
              x:DataType="vm:SalesViewModel"
              x:Class="Hyperwyc.Sample.Maui.Pages.SalesPage">
-    <Grid>
+    <RefreshView Command="{Binding LoadApiSalesCommand}"
+                 IsRefreshing="{Binding IsLoading}">
         <VerticalStackLayout HorizontalOptions="Fill"
                              VerticalOptions="Fill">
             <Label Text="Sales"
@@ -54,11 +55,5 @@
                 </CollectionView.ItemTemplate>
             </CollectionView>
         </VerticalStackLayout>
-
-        <ActivityIndicator VerticalOptions="Center"
-                           HorizontalOptions="Center"
-                           HeightRequest="20"
-                           IsVisible="{Binding IsLoading}"
-                           IsRunning="True" />
-    </Grid>
+    </RefreshView>
 </ContentPage>

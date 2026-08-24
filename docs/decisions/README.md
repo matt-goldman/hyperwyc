@@ -9,6 +9,7 @@ reversed.
 | [0001](0001-idempotency-is-not-hyperwycs-remit.md) | Idempotency is not Hyperwyc's remit | Accepted |
 | [0002](0002-replays-traverse-the-pipeline.md) | Replays traverse the application's pipeline | Accepted |
 | [0003](0003-default-what-you-can-decide-correctly.md) | Default what you can decide correctly; require what you cannot | Accepted |
+| [0004](0004-default-to-removal.md) | Default to removal | Accepted |
 
 ## What belongs here
 
@@ -119,3 +120,18 @@ scope test: given that Hyperwyc should do this, should it have a default?
 3. Could a wrong default quietly produce the failure the library exists to prevent? Then never.
 4. If it must be required, is the fix short and obvious? Ship something to point at, and make
    sure requiring a decision has not quietly required an *ordering* as well.
+
+## The standing removal test
+
+[ADR 0004](0004-default-to-removal.md) is the one to reach for first, because it changes where an
+assessment starts rather than how it concludes. **Begin from the premise that the problem is
+something we added and did not need.**
+
+1. What can come out? Ask before asking what goes in.
+2. Does a decision already taken orphan this code? Declining a responsibility invalidates the
+   apparatus that served it — go and collect it.
+3. Is this removing complexity or relocating it to the consumer? Both can be right; only one is a
+   reduction.
+4. Is this machinery around the promise, or the promise? The second is not negotiable.
+
+A default, not a conviction. Cheap when wrong, valuable when right.
