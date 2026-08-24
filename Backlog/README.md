@@ -59,19 +59,19 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | 40 | [Surface the outcome of a deferred request](Done/40-surface-deferred-outcomes.md) | ✅ Done | `SyncEvent` gains `CorrelationId`/`RequestId`/`RequestBody`/`Outcome`; `SyncOutcome` is persisted on the envelope so a dead-lettered write explains itself after a restart. Correlation id is the caller's if they set one via `HyperwycRequestOptions.CorrelationId`, otherwise generated and returned on the `202`. Unblocks 19's per-sale status |
 | 47 | [Connectivity is required](Done/47-connectivity-is-required.md) | ✅ Done | Ships `NetworkAvailabilityConnectivityService` (BCL-only) **and** removes the `AlwaysOnline` default: a consumer registers an `IConnectivityService` (either side of `AddHyperwyc`) or sets the option, and resolving throws if they do neither. The default failed silently — always-connected means nothing is ever queued or replayed, and the library looks like it works. Narrows 31's zero-config headline, deliberately |
 | 13 | [Connectivity documentation](Done/13-connectivity-reference-implementation.md) | ✅ Done | **Scope revised three times, each removing something from the package**: ship a MAUI type → ship a test double → documentation only → documentation with no default ([47](Done/47-connectivity-is-required.md)). README now carries the full `MauiConnectivityService`, the five decisions in it, and how to fake connectivity in your own tests. The sample source carries the same reasoning as comments, since that is what gets copied |
-| 51 | [`CabinetSyncStore` was not thread-safe](Done/51-cabinet-store-not-thread-safe.md) | ✅ Done | Crash reported from the sample: two overlapping GETs both caching a response raced Cabinet's write-temp-then-move, and the second `File.Move` threw `FileNotFoundException`. No synchronisation since the file was created; every mutating method was also an unguarded read-modify-write. Hidden because store tests only ever ran against `InMemorySyncStore`, which does serialise |
+| 51 | [`CabinetSyncStore` was not thread-safe](Done/51-cabinet-store-not-thread-safe.md) | ✅ Done | Crash from the sample: two overlapping saves raced Cabinet's write-temp-then-move and the second `File.Move` threw `FileNotFoundException`. Never synchronised since the file was created; every mutating method was also an unguarded read-modify-write. **Fix confirmed, trigger not explained** — the failure went from never to always without a diff that accounts for it; the leading unproven hypothesis is the resilience handler's per-attempt timeout overlapping a retry with an in-flight cache write |
 | 16 | [`ResetStoreAsync()`](Done/16-reset-store-async.md) | ✅ Done | Moved onto `SyncOrchestrator`, which owns the flush gate. Acquires it **blocking** — `FlushAsync`'s try-acquire returns immediately when a flush is running, so the first cut wiped the store underneath one and a deferred envelope was upserted back in afterwards. Reset discards and does not flush: on logout a flush replays through the auth handler the app is revoking, so every write 401s and dead-letters before being wiped anyway |
 | **19** | [Sample — .NET MAUI app](19-poc-maui-app.md) | 🟡 Partial | **Core scenario proven on device:** catalogue served from cache with the network off, across an app restart. Remaining: offline writes, sync-now, event log, and per-sale state — the last blocked on [40](Done/40-surface-deferred-outcomes.md) |
 
 ## v1.0 — release candidate
 
 Deliberately only two items. Everything else on this list can be worked around by a consumer;
-these cannot. Do 25 first — it changes the persisted shape, so it wants to land before there are
-users to migrate.
+these cannot. Do 25 first — it changes the persisted shape, and every later item that touches
+storage is cheaper once bodies are already bytes.
 
 | # | Item | Status | Notes |
 |---|---|---|---|
-| 25 | [Binary request/response bodies](25-binary-request-response-bodies.md) | ⬜ Open | Bodies round-trip through `ReadAsStringAsync`, corrupting anything not text. Breaking change to the persisted shape; batch [43](43-honour-vary-header.md) and [44](44-cache-generation.md) with it if they are being done at all, since all three change how an entry is keyed or stored |
+| 25 | [Binary request/response bodies](25-binary-request-response-bodies.md) | ⬜ Open | Bodies round-trip through `ReadAsStringAsync`, corrupting anything not text. Changes the persisted shape, which costs nothing while the repo is private and the only consumers are the sample and the tests. Batch [43](43-honour-vary-header.md) and [44](44-cache-generation.md) with it if they are being done at all, since all three change how an entry is keyed or stored |
 | 49 | [Unreadable store recovery](49-unreadable-store-recovery.md) | ⬜ Open | **Proposed for v1.0, not yet agreed.** A key mismatch throws a raw `CryptographicException` from wherever the store is first touched, including out of the consumer's `HttpClient.SendAsync`. Policy: log, publish an event, degrade to an empty store, stop there — no throw, no delete, no recovery. `ResetStoreAsync` is already the application's remedy. Sequence after [32](32-default-encryption-key.md) |
 | 22 | [Per-route policies](22-v1-per-route-policies.md) | ⬜ Open | A single global policy cannot express "cache the catalogue for a day, never cache payments" — which the README already promises. Also where a `ReturnsCollection` flag would live (see [26](26-v2-typed-response-shaping.md)), and where `ApiFirst` should be renamed `NetworkFirst` |
 
@@ -81,6 +81,8 @@ users to migrate.
 |---|---|---|---|
 | 32 | [Default encryption key](32-default-encryption-key.md) | 🟡 Partial | Decided: keep the path-derived key as the free default, documented as such. Remaining is the MAUI `SecureStorage` reference implementation |
 | 48 | [Exclude the store from OS backup](48-exclude-store-from-os-backup.md) | ⬜ Open | Documentation. The store sits where iOS and Android back it up by default; a **restored outbox replays writes that already happened**, and Hyperwyc has no duplicate suppression by design. Android's 25 MB backup quota is the secondary argument. Path-level exclusion works on both platforms |
+| 52 | [Every cache write rewrites the whole store](52-store-rewrites-whole-set-per-write.md) | ⬜ Open | Cabinet's `RecordSet` calls `SaveAllAsync` for a single-record change, so one cached response costs O(total records) to store and filling a cache costs O(n²). Widens every concurrency window as the store grows, which is the leading explanation for [51](Done/51-cabinet-store-not-thread-safe.md)'s never-to-always failure rate. Partly an upstream Cabinet question |
+| 53 | [Not AOT-safe: no `JsonSerializerContext`](53-aot-json-serialization.md) | ⬜ Open | `CabinetSyncStore` passes `null` where Cabinet accepts `JsonSerializerOptions`, so serialisation falls back to reflection — in a library whose primary audience ships iOS release builds with AOT on by default. Structurally unfixable by the consumer. **Proposed for v1.0** |
 | 21 | [`Date` header rewriting](21-v1-date-header-rewriting.md) | ⬜ Open | Plus the `X-Hyperwyc-Cached-At` header |
 | 23 | [Diagnostics view](23-v1-diagnostics-view.md) | ⬜ Open | Read-only outbox and dead-letter queries on `IHyperwyc`. [40](Done/40-surface-deferred-outcomes.md) persisted the failure detail; this is the read path that makes it observable — and the only place a transport failure, which publishes no event, can be seen |
 | 24 | [Dead-letter management](24-v1-dead-letter-management.md) | ⬜ Open | Requeue and dismiss. Depends on 23 for the UI surface |
@@ -127,6 +129,10 @@ request grouping / bulk sync, and GraphQL support.
   before filing a feature.
 - **Public surface: start internal, widen on demand.** Pre-1.0 anything can be made public
   later; nothing can be taken back. See [36](Done/36-public-surface.md).
+- **Persisted-format changes are free, for now.** Nothing is published and the only consumers are
+  the sample and the tests, so no item needs a migration, a compatibility shim or a documented
+  reset-on-upgrade. Revisit this line the day the first package ships; until then, treat any item
+  proposing migration work as over-scoped.
 - **Numbering is sequential and permanent.** Items keep their number when they move to
   `Done/`; numbers are never reused.
 - **A file moves to `Done/` only when its acceptance criteria are ticked and the behaviour
@@ -164,6 +170,12 @@ request grouping / bulk sync, and GraphQL support.
   and the durable one — the one consumers actually use — corrupted its own file under two
   concurrent requests. A shared conformance suite over both implementations is the structural
   fix and is not yet filed.
+
+  The item also carries a **"what this does not explain"** section. The fix is right, but the
+  reported failure rate went from never to always without a diff that accounts for it, and
+  writing "fixed" without recording that would have been false confidence. Anything that
+  recurs here starts from that section — and from [52](52-store-rewrites-whole-set-per-write.md),
+  which came out of it and is the leading explanation.
 - **Item 16's bug was hidden by a method name.** Delegating to `FlushAsync` before wiping reads
   as "let the in-flight flush finish", and does not do that — it is a try-acquire that returns
   immediately when a flush is running. The visible symptom would have been rare and awful: a

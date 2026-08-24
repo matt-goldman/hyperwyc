@@ -21,12 +21,14 @@ Support binary HTTP request and response payloads end-to-end through Hyperwyc's 
 - [ ] Round-trip tests cover: JSON request, binary request (e.g. PNG bytes), JSON response, binary response, gzip-encoded response read as bytes.
 - [ ] Replayed binary requests preserve byte-for-byte equality.
 - [ ] Cached binary responses are served with the original `Content-Type` and `Content-Encoding`.
-- [ ] `CabinetSyncStore` schema migration handles existing string-encoded rows or is documented as a breaking change requiring a store reset.
+- [x] ~~`CabinetSyncStore` schema migration handles existing string-encoded rows or is documented as a breaking change requiring a store reset.~~ **Not required** — nothing is released, so the persisted shape is free to change. Just change it.
 - [ ] `InMemorySyncStore` updated to the new shape.
 
 ## Notes
 
-- This is a breaking change to the persisted shape of `Envelope` and `CachedResponse`. Either a schema migration in `Hyperwyc.Cabinet` or a documented one-time `ResetStoreAsync` on upgrade is required.
+- This changes the persisted shape of `Envelope` and `CachedResponse`, and that costs nothing:
+  the repository is private, nothing is published, and the only consumers are the sample and the
+  tests. No migration, no documented reset, no compatibility shim. Change the shape and move on.
 - Consider whether to offer a convenience string view (e.g. `Envelope.GetRequestBodyAsString()`) for callers/diagnostics that previously relied on string content.
 - Streaming uploads/downloads (chunked, indeterminate length) are explicitly out of scope for this issue — buffered byte arrays only. Streaming can be a follow-up if demand emerges.
 - **Decision:** Migration and breaking-change mitigation are NOT required. Current version is v <1, and this is in scope for v1. As this library is preview, breaking changes are to be expected and support is not required.
