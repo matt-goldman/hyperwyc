@@ -152,9 +152,7 @@ public class ResetStoreTests
 
         var transport = new GatedTransport(HttpStatusCode.ServiceUnavailable);
 
-        // A long initial delay keeps the scheduled follow-up from firing during the test.
-        using var sp = Build(store, transport, new RetryOptions(
-            MaxRetries: 5, InitialDelay: TimeSpan.FromSeconds(30), BackoffMultiplier: 2.0));
+        using var sp = Build(store, transport);
         var hyperwyc = sp.GetRequiredService<IHyperwyc>();
 
         var flush = hyperwyc.FlushAsync();
@@ -203,19 +201,14 @@ public class ResetStoreTests
         },
     };
 
-    private static ServiceProvider Build(
-        ISyncStore store, HttpMessageHandler transport, RetryOptions? retry = null)
+    private static ServiceProvider Build(ISyncStore store, HttpMessageHandler transport)
     {
         var services = new ServiceCollection();
         services.AddSingleton<IConnectivityService>(new FakeConnectivityService(isConnected: true));
-        if (retry is not null)
-            services.AddSingleton<ISyncPolicy>(new FakeSyncPolicy(retryOptions: retry));
-
         services.AddHyperwycCore(_ => store, o =>
         {
             o.FlushOnStartup = false;
             o.ReplayTransport = transport;
-            o.ConnectivityDebounceDelay = TimeSpan.Zero;
         });
         return services.BuildServiceProvider();
     }

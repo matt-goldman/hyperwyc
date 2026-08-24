@@ -6,13 +6,14 @@ namespace Hyperwyc;
 
 /// <summary>
 /// Listens for connectivity restoration, drains the outbox in order, and
-/// manages the single-flush semaphore and connectivity-event debounce.
+/// manages the single-flush semaphore.
 /// </summary>
 /// <remarks>
-/// Internal: consumers reach flushing through <see cref="IHyperwyc.FlushAsync"/>
-/// rather than depending on this type. The orchestrator reacts automatically to
-/// <see cref="IConnectivityService.ConnectivityChanged"/> events with a
-/// configurable debounce delay (<see cref="HyperwycOptions.ConnectivityDebounceDelay"/>).
+/// Internal: consumers reach flushing through <see cref="IHyperwyc.FlushAsync"/> rather than
+/// depending on this type. It flushes on exactly two triggers — application start, and
+/// <see cref="IConnectivityService.ConnectivityChanged"/> reporting connectivity restored.
+/// There is no retry budget, no backoff and no scheduled follow-up: a write the server refuses
+/// is dead-lettered, and anything else stays in the outbox for the next flush.
 /// </remarks>
 internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
 {
@@ -20,8 +21,6 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     /// Ceiling on a computed backoff, so a generous retry budget cannot schedule an
     /// attempt absurdly far out — or overflow the arithmetic getting there.
     /// </summary>
-    private static readonly TimeSpan MaxBackoff = TimeSpan.FromHours(1);
-
     private readonly ISyncStore _store;
     private readonly Interfaces.ISyncPolicy _policy;
     private readonly IConnectivityService _connectivity;
@@ -39,8 +38,6 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     /// </summary>
     private readonly CancellationTokenSource _lifetimeCts = new();
 
-    private CancellationTokenSource? _debounceCts;
-    private CancellationTokenSource? _followUpCts;
     private bool _disposed;
 
     /// <summary>
@@ -121,8 +118,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
 
         try
         {
-            var ready = await _store.GetReadyToSendAsync(DateTimeOffset.UtcNow, token)
-                .ConfigureAwait(false);
+            var ready = await _store.GetPendingOutboxAsync(token).ConfigureAwait(false);
 
             foreach (var envelope in ready)
             {
@@ -144,8 +140,6 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         {
             _flushGate.Release();
         }
-
-        await ScheduleNextPassAsync(token).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -160,7 +154,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     /// The gate is acquired <em>blocking</em>, unlike <see cref="FlushAsync"/>'s
     /// try-acquire. A flush that is mid-loop holds a list of envelopes read before the wipe
     /// and keeps acting on them: it would go on sending writes the caller just asked to
-    /// discard, and — worse — <c>DeferAsync</c> and <c>MarkSyncedAsync</c> write back, so a
+    /// discard, and — worse — <c>RecordOutcomeAsync</c> and <c>MarkSyncedAsync</c> write back, so a
     /// transiently-failing envelope would be <em>re-inserted</em> into a store that had just
     /// been emptied. On the logout this method exists for, that resurrects the previous
     /// user's data.
@@ -182,13 +176,6 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         try
         {
             await _store.ResetAsync(token).ConfigureAwait(false);
-
-            // Any scheduled pass was scheduled for envelopes that no longer exist. Cancelled
-            // after the wipe rather than before, so a follow-up scheduled by the flush this
-            // call just waited out is also cleared.
-            var followUp = Interlocked.Exchange(ref _followUpCts, null);
-            followUp?.Cancel();
-            followUp?.Dispose();
         }
         finally
         {
@@ -196,37 +183,6 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Schedules one further flush for when the earliest waiting envelope becomes
-    /// eligible, if anything is waiting.
-    /// </summary>
-    /// <remarks>
-    /// Derived from the store rather than from what this pass happened to defer. That
-    /// matters: a follow-up timer can fire a moment early, find nothing ready and defer
-    /// nothing, and if scheduling depended on deferrals it would schedule nothing
-    /// further — stranding the envelope until the next connectivity change. Asking what
-    /// is still waiting is correct regardless of why this pass deferred nothing.
-    /// </remarks>
-    private async Task ScheduleNextPassAsync(CancellationToken ct)
-    {
-        if (_disposed || ct.IsCancellationRequested) return;
-
-        DateTimeOffset? nextDue;
-        try
-        {
-            var pending = await _store.GetPendingOutboxAsync(ct).ConfigureAwait(false);
-            nextDue = pending
-                .Where(e => e.NextRetryUtc is not null)
-                .Min(e => e.NextRetryUtc);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
-
-        if (nextDue is { } due)
-            ScheduleFollowUp(due);
-    }
 
     // -------------------------------------------------------------------------
     // Sending
@@ -257,12 +213,6 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     private async Task<SendOutcome> SendAsync(Envelope envelope, CancellationToken ct)
     {
         using var request = BuildRequest(envelope);
-        var retryOptions = _policy.GetRetryOptions(request);
-
-        if (envelope.RetryCount > 0)
-        {
-            _events.Publish(EventFor(SyncEventType.OnRetrying, envelope, envelope.LastOutcome));
-        }
 
         HttpResponseMessage response;
         try
@@ -278,7 +228,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
             // Recorded on the envelope even though no event fires and the budget is not
             // charged: "last attempt could not reach the host" is exactly what a diagnostics
             // view needs to explain an outbox that is not draining.
-            await RecordOutcomeAsync(envelope, TransportOutcome(envelope, ex), ct).ConfigureAwait(false);
+            await RecordOutcomeAsync(envelope, TransportOutcome(ex), ct).ConfigureAwait(false);
             return SendOutcome.ConnectivityLost;
         }
 
@@ -290,8 +240,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
                 // resource — server-assigned ids, normalised values — which the caller never
                 // saw and may want to reconcile against.
                 var succeeded = await OutcomeFromAsync(
-                    response, envelope, SyncOutcomeKind.Succeeded, isFinal: true, ct)
-                    .ConfigureAwait(false);
+                    response, envelope, SyncOutcomeKind.Succeeded, ct).ConfigureAwait(false);
 
                 await MarkDeliveredAsync(envelope, succeeded, ct).ConfigureAwait(false);
                 return SendOutcome.Synced;
@@ -304,20 +253,19 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
             if (IsPermanentFailure(response.StatusCode))
             {
                 var rejected = await OutcomeFromAsync(
-                    response, envelope, SyncOutcomeKind.Rejected, isFinal: true, ct)
-                    .ConfigureAwait(false);
+                    response, envelope, SyncOutcomeKind.Rejected, ct).ConfigureAwait(false);
 
                 await DeadLetterAsync(envelope, rejected, ct).ConfigureAwait(false);
                 return SendOutcome.DeadLettered;
             }
 
-            // Whether this is the last attempt is not known until DeferAsync has charged the
-            // budget, so the outcome is built there rather than here.
+            // The server answered, and not with a refusal. Nothing is charged and nothing is
+            // scheduled: the envelope keeps its place and the next flush tries again.
             var transient = await OutcomeFromAsync(
-                response, envelope, SyncOutcomeKind.TransientFailure, isFinal: false, ct)
-                .ConfigureAwait(false);
+                response, envelope, SyncOutcomeKind.TransientFailure, ct).ConfigureAwait(false);
 
-            return await DeferAsync(envelope, transient, retryOptions, ct).ConfigureAwait(false);
+            await RecordOutcomeAsync(envelope, transient, ct).ConfigureAwait(false);
+            return SendOutcome.Deferred;
         }
     }
 
@@ -334,40 +282,27 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         HttpResponseMessage response,
         Envelope envelope,
         SyncOutcomeKind kind,
-        bool isFinal,
         CancellationToken ct)
     {
         var (body, truncated) = await ReadCappedBodyAsync(
             response.Content, _options.MaxOutcomeBodyBytes, ct).ConfigureAwait(false);
 
-        var headers = response.Headers
-            .Concat(response.Content?.Headers ?? Enumerable.Empty<KeyValuePair<string, IEnumerable<string>>>())
-            .ToDictionary(h => h.Key, h => string.Join(", ", h.Value), StringComparer.OrdinalIgnoreCase);
-
         return new SyncOutcome
         {
             Kind = kind,
-            IsFinal = isFinal,
             StatusCode = (int)response.StatusCode,
             ReasonPhrase = response.ReasonPhrase,
-            Headers = headers,
             Body = body,
             BodyTruncated = truncated,
-            AttemptCount = envelope.RetryCount + 1,
             OccurredUtc = DateTimeOffset.UtcNow,
         };
     }
 
-    private static SyncOutcome TransportOutcome(Envelope envelope, HttpRequestException ex) =>
+    private static SyncOutcome TransportOutcome(HttpRequestException ex) =>
         new()
         {
             Kind = SyncOutcomeKind.TransportFailure,
-
-            // Never final: an unreachable network says nothing about the request, so the
-            // envelope keeps its place and waits for the next connectivity signal.
-            IsFinal = false,
             Error = ex.Message,
-            AttemptCount = envelope.RetryCount,
             OccurredUtc = DateTimeOffset.UtcNow,
         };
 
@@ -468,65 +403,12 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     /// </remarks>
     private async Task DeadLetterAsync(Envelope envelope, SyncOutcome outcome, CancellationToken ct)
     {
-        await RecordOutcomeAsync(envelope, outcome with { IsFinal = true }, ct).ConfigureAwait(false);
+        await RecordOutcomeAsync(envelope, outcome, ct).ConfigureAwait(false);
         await _store.MoveToDeadLetterAsync(envelope.Id, ct).ConfigureAwait(false);
 
         _events.Publish(EventFor(SyncEventType.OnFailed, envelope, envelope.LastOutcome));
     }
 
-    /// <summary>
-    /// Records a transient failure against the envelope and schedules when it becomes
-    /// eligible again, or dead-letters it if the budget is spent.
-    /// </summary>
-    /// <remarks>
-    /// The count and the next-attempt time are persisted rather than held in memory, so
-    /// a budget survives the process being killed mid-flush — routine on mobile.
-    /// </remarks>
-    private async Task<SendOutcome> DeferAsync(
-        Envelope envelope,
-        SyncOutcome outcome,
-        RetryOptions retryOptions,
-        CancellationToken ct)
-    {
-        envelope.RetryCount++;
-
-        if (envelope.RetryCount > retryOptions.MaxRetries)
-        {
-            // Dead-lettered for a spent budget rather than a rejection. The outcome keeps its
-            // TransientFailure kind and gains IsFinal, which is what lets a consumer tell
-            // "the server refused this" from "we gave up" and decide whether to offer a
-            // retry affordance.
-            await DeadLetterAsync(envelope, outcome, ct).ConfigureAwait(false);
-            return SendOutcome.DeadLettered;
-        }
-
-        envelope.NextRetryUtc = DateTimeOffset.UtcNow + BackoffFor(retryOptions, envelope.RetryCount);
-        envelope.LastOutcome = outcome with { AttemptCount = envelope.RetryCount };
-        await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
-
-        return SendOutcome.Deferred;
-    }
-
-    /// <summary>
-    /// Exponential backoff with jitter, clamped so an over-generous retry budget cannot
-    /// produce an absurd — or arithmetically invalid — delay.
-    /// </summary>
-    private static TimeSpan BackoffFor(RetryOptions retryOptions, int attempt)
-    {
-        // A configured zero is honoured as zero: "retry as soon as you can" is a
-        // legitimate choice now that a retry is a later flush rather than a sleep.
-        var initial = retryOptions.InitialDelay > TimeSpan.Zero
-            ? retryOptions.InitialDelay
-            : TimeSpan.Zero;
-
-        var multiplier = retryOptions.BackoffMultiplier > 1 ? retryOptions.BackoffMultiplier : 1;
-        var seconds = initial.TotalSeconds * Math.Pow(multiplier, Math.Max(0, attempt - 1));
-
-        // Jitter spreads a fleet of clients that all reconnected at the same moment.
-        seconds *= 0.85 + (Random.Shared.NextDouble() * 0.3);
-
-        return TimeSpan.FromSeconds(Math.Min(seconds, MaxBackoff.TotalSeconds));
-    }
 
     // -------------------------------------------------------------------------
     // Helpers
@@ -575,77 +457,25 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     }
 
     // -------------------------------------------------------------------------
-    // Follow-up pass
+    // Connectivity
     // -------------------------------------------------------------------------
 
-    /// <summary>
-    /// Schedules one further flush for when the earliest deferred envelope becomes
-    /// eligible.
-    /// </summary>
     /// <remarks>
-    /// <para>
-    /// Without this, a transient server failure would wait for the next connectivity
-    /// change or app start — which may never come while the device sits happily online.
-    /// A backend having a bad day is a narrower case than the offline one Hyperwyc exists
-    /// for, but it is a real one, and "your write goes out when the outage ends" is the
-    /// only defensible answer to it.
-    /// </para>
-    /// <para>
-    /// This terminates: every deferral increments <see cref="Envelope.RetryCount"/>, so an
-    /// envelope that keeps failing eventually dead-letters and stops being rescheduled.
-    /// </para>
+    /// No debounce. <see cref="FlushAsync"/> try-acquires the flush gate and returns
+    /// immediately if one is already running, so a burst of connectivity signals is already a
+    /// no-op after the first — a timer to suppress them was guarding a cost that does not
+    /// exist. Fire-and-forget because this runs on the observer's thread, which must not block.
     /// </remarks>
-    private void ScheduleFollowUp(DateTimeOffset dueAt)
-    {
-        if (_disposed) return;
-
-        // A small buffer past the due time: timers can fire fractionally early, and a
-        // near-miss costs a whole extra scheduling round-trip.
-        var delay = dueAt - DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(15);
-        if (delay < TimeSpan.Zero) delay = TimeSpan.Zero;
-
-        var previous = Interlocked.Exchange(ref _followUpCts, new CancellationTokenSource());
-        previous?.Cancel();
-        previous?.Dispose();
-
-        var cts = _followUpCts!;
-
+    private void OnConnectivityRestored() =>
         _ = Task.Run(async () =>
         {
             try
             {
-                await Task.Delay(delay, cts.Token).ConfigureAwait(false);
-                await FlushAsync(cts.Token).ConfigureAwait(false);
+                await FlushAsync().ConfigureAwait(false);
             }
-            catch (OperationCanceledException) { /* superseded, or disposed */ }
-            catch (ObjectDisposedException) { /* disposed between the check and the flush */ }
-        }, cts.Token);
-    }
-
-    // -------------------------------------------------------------------------
-    // Connectivity debounce
-    // -------------------------------------------------------------------------
-
-    private void OnConnectivityRestored()
-    {
-        // Cancel any in-flight debounce timer and start a new one.
-        var previous = Interlocked.Exchange(ref _debounceCts, new CancellationTokenSource());
-        previous?.Cancel();
-        previous?.Dispose();
-
-        var cts = _debounceCts!;
-        var delay = _options.ConnectivityDebounceDelay;
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await Task.Delay(delay, cts.Token).ConfigureAwait(false);
-                await FlushAsync(cts.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) { /* debounce superseded */ }
-        }, cts.Token);
-    }
+            catch (OperationCanceledException) { /* disposed */ }
+            catch (ObjectDisposedException) { /* disposed mid-flight */ }
+        });
 
     // -------------------------------------------------------------------------
     // Disposal
@@ -724,11 +554,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
 
         _connectivitySubscription.Dispose();
 
-        _debounceCts?.Cancel();
-        _debounceCts?.Dispose();
 
-        _followUpCts?.Cancel();
-        _followUpCts?.Dispose();
 
         _lifetimeCts.Cancel();
     }

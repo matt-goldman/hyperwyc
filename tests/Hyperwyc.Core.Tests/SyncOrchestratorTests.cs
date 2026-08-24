@@ -23,7 +23,7 @@ public class SyncOrchestratorTests
             policy ?? new FakeSyncPolicy(),
             new FakeConnectivityService(connected),
             events ?? new SyncEventStream(),
-            new HyperwycOptions { ConnectivityDebounceDelay = TimeSpan.Zero },
+            new HyperwycOptions(),
             transport);
     }
 
@@ -212,93 +212,11 @@ public class SyncOrchestratorTests
     // FlushAsync — failure → retry → dead-letter
     // -------------------------------------------------------------------------
 
-    [Fact]
-    public async Task FlushAsync_AllRetriesExhausted_MovesToDeadLetter()
-    {
-        var store = new InMemorySyncStore();
-        await store.UpsertAsync(MakeOutboxEnvelope());
 
-        // Always return a server error to exhaust retries.
-        var transport = new StubHttpMessageHandler(
-            new HttpResponseMessage(HttpStatusCode.InternalServerError));
-        // Use a policy with 0 retries to keep the test fast.
-        var policy = new FakeSyncPolicy(retryOptions: new RetryOptions(
-            MaxRetries: 0,
-            InitialDelay: TimeSpan.Zero,
-            BackoffMultiplier: 1.0));
-        await using var orchestrator = BuildOrchestrator(store, transport, policy: policy);
-
-        await orchestrator.FlushAsync();
-
-        var pending = await store.GetPendingOutboxAsync();
-        Assert.Empty(pending); // removed from outbox
-
-        // Check it's dead-lettered (GetPendingOutboxAsync excludes dead-lettered).
-    }
-
-    [Fact]
-    public async Task FlushAsync_AllRetriesExhausted_PublishesOnFailedEvent()
-    {
-        var store = new InMemorySyncStore();
-        await store.UpsertAsync(MakeOutboxEnvelope());
-
-        var events = new SyncEventStream();
-        var received = new List<SyncEvent>();
-        events.Subscribe(new DelegateObserver<SyncEvent>(received.Add));
-
-        var transport = new StubHttpMessageHandler(
-            new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
-        var policy = new FakeSyncPolicy(retryOptions: new RetryOptions(
-            MaxRetries: 0,
-            InitialDelay: TimeSpan.Zero,
-            BackoffMultiplier: 1.0));
-        await using var orchestrator = BuildOrchestrator(store, transport, events: events, policy: policy);
-
-        await orchestrator.FlushAsync();
-
-        Assert.Single(received);
-        Assert.Equal(SyncEventType.OnFailed, received[0].Type);
-    }
 
     // A transient failure is not retried inside the flush; the envelope is deferred and
     // a follow-up pass picks it up. This covers that whole path, which is what replaced
     // the in-flush backoff loop.
-    [Fact]
-    public async Task TransientFailure_IsRetriedByAFollowUpFlush()
-    {
-        var store = new InMemorySyncStore();
-        await store.UpsertAsync(MakeOutboxEnvelope());
-
-        var events = new SyncEventStream();
-        var received = new List<SyncEvent>();
-        events.Subscribe(new DelegateObserver<SyncEvent>(received.Add));
-
-        int callCount = 0;
-        var transport = new StubHttpMessageHandler(_ =>
-        {
-            callCount++;
-            var status = callCount == 1 ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.OK;
-            return new HttpResponseMessage(status);
-        });
-        var policy = new FakeSyncPolicy(retryOptions: new RetryOptions(
-            MaxRetries: 3,
-            InitialDelay: TimeSpan.FromMilliseconds(50),
-            BackoffMultiplier: 1.0));
-        await using var orchestrator = BuildOrchestrator(store, transport, events: events, policy: policy);
-
-        await orchestrator.FlushAsync();
-
-        // The first attempt failed transiently, so nothing is delivered yet and the
-        // envelope is still queued rather than dead-lettered.
-        Assert.Equal(1, callCount);
-        Assert.DoesNotContain(received, e => e.Type == SyncEventType.OnSynced);
-        Assert.Single(await store.GetPendingOutboxAsync());
-
-        await WaitUntilAsync(() => received.Any(e => e.Type == SyncEventType.OnSynced));
-
-        Assert.Contains(received, e => e.Type == SyncEventType.OnRetrying);
-        Assert.Empty(await store.GetPendingOutboxAsync());
-    }
 
     /// <summary>Polls <paramref name="condition"/> until it holds or the timeout expires.</summary>
     private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)

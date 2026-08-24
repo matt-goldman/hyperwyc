@@ -9,15 +9,12 @@ namespace Hyperwyc;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The <c>X-Hyperwyc-Status</c> response header is always present on synthetic
-/// responses regardless of the <see cref="OfflineResponsePolicy"/>.
+/// The <c>X-Hyperwyc-Status</c> response header is always present on synthetic responses.
 /// </para>
 /// <para>
-/// With <see cref="OfflineResponsePolicy.Transparent"/> (the default) the
-/// handler behaves like a Service Worker — callers receive <c>200 OK</c> and
-/// never need to branch on connectivity.  With
-/// <see cref="OfflineResponsePolicy.Signal"/> the handler returns <c>503</c>
-/// so callers can detect the offline state through standard HTTP semantics.
+/// The handler behaves like a Service Worker: callers receive a normal-looking success
+/// response and never need to branch on connectivity. A caller that does want to know reads
+/// the status header, or — for a write — the <c>202</c>, which no ordinary success is.
 /// </para>
 /// </remarks>
 internal static class HyperwycResponseFactory
@@ -84,10 +81,10 @@ internal static class HyperwycResponseFactory
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Under <see cref="OfflineResponsePolicy.Transparent"/> this returns
-    /// <c>202 Accepted</c> rather than <c>200 OK</c>: the request has been
-    /// accepted for later processing but has not yet been performed against
-    /// the origin server.
+    /// Returns <c>202 Accepted</c> rather than <c>200 OK</c>: the request has been accepted
+    /// for later processing but has not yet been performed against the origin server. That
+    /// distinction is also how a caller tells a queued write from a delivered one, without
+    /// needing to read a header.
     /// </para>
     /// <para>
     /// The body is <c>null</c> rather than empty for the same reason as the read paths:
@@ -96,17 +93,13 @@ internal static class HyperwycResponseFactory
     /// There is no created resource yet, which <c>null</c> states accurately.
     /// </para>
     /// </remarks>
-    /// <param name="policy">Determines whether the response is a 202 or a 503.</param>
     /// <param name="correlationId">
     /// The value the outcome of this write will be reported under, returned as
     /// <c>X-Hyperwyc-Correlation-Id</c>.
     /// </param>
-    internal static HttpResponseMessage Queued(OfflineResponsePolicy policy, string correlationId)
+    internal static HttpResponseMessage Queued(string correlationId)
     {
-        var statusCode = policy == OfflineResponsePolicy.Transparent
-            ? HttpStatusCode.Accepted
-            : HttpStatusCode.ServiceUnavailable;
-        var response = new HttpResponseMessage(statusCode) { Content = JsonNull() };
+        var response = new HttpResponseMessage(HttpStatusCode.Accepted) { Content = JsonNull() };
         response.Headers.TryAddWithoutValidation(StatusHeader, "Queued");
         response.Headers.TryAddWithoutValidation(CorrelationHeader, correlationId);
         return response;
@@ -117,12 +110,9 @@ internal static class HyperwycResponseFactory
     /// not be served because the device is offline and no cached response is
     /// available.
     /// </summary>
-    internal static HttpResponseMessage Offline(OfflineResponsePolicy policy)
+    internal static HttpResponseMessage Offline()
     {
-        var statusCode = policy == OfflineResponsePolicy.Transparent
-            ? HttpStatusCode.OK
-            : HttpStatusCode.ServiceUnavailable;
-        var response = new HttpResponseMessage(statusCode) { Content = JsonNull() };
+        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonNull() };
         response.Headers.TryAddWithoutValidation(StatusHeader, "Offline");
         return response;
     }
@@ -137,12 +127,9 @@ internal static class HyperwycResponseFactory
     /// because the network was unavailable. Reporting <c>Offline</c> here would
     /// misdescribe the situation to any caller inspecting the header.
     /// </remarks>
-    internal static HttpResponseMessage CacheMiss(OfflineResponsePolicy policy)
+    internal static HttpResponseMessage CacheMiss()
     {
-        var statusCode = policy == OfflineResponsePolicy.Transparent
-            ? HttpStatusCode.OK
-            : HttpStatusCode.ServiceUnavailable;
-        var response = new HttpResponseMessage(statusCode) { Content = JsonNull() };
+        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonNull() };
         response.Headers.TryAddWithoutValidation(StatusHeader, "CacheMiss");
         return response;
     }

@@ -154,12 +154,10 @@ public class DeferredOutcomeTests
         var outcome = Assert.IsType<SyncOutcome>(failed.Outcome);
 
         Assert.Equal(SyncOutcomeKind.Rejected, outcome.Kind);
-        Assert.True(outcome.IsFinal);
         Assert.Equal(409, outcome.StatusCode);
         Assert.Equal("Conflict", outcome.ReasonPhrase);
         Assert.Equal(ServerSaid, outcome.GetBodyAsText());
         Assert.False(outcome.BodyTruncated);
-        Assert.Contains("Content-Type", outcome.Headers.Keys);
     }
 
     [Fact]
@@ -211,75 +209,45 @@ public class DeferredOutcomeTests
         var outcome = Assert.IsType<SyncOutcome>(pending.LastOutcome);
 
         Assert.Equal(SyncOutcomeKind.TransportFailure, outcome.Kind);
-        Assert.False(outcome.IsFinal);
         Assert.Null(outcome.StatusCode);
         Assert.Contains("No such host", outcome.Error);
-
-        // The network being unusable says nothing about the request, so it costs no budget.
-        Assert.Equal(0, pending.RetryCount);
-        Assert.Equal(0, outcome.AttemptCount);
     }
 
     [Fact]
-    public async Task BudgetExhausted_IsDistinguishableFromRejection()
+    public async Task ServerErrorAndRejection_AreDistinguishable()
     {
+        // There is no retry budget to exhaust (ADR 0004), so the distinction a consumer needs
+        // is between "the server refused this" and "the server was unwell" — the first is
+        // final, the second leaves the write queued for the next flush.
         var store = new InMemorySyncStore();
-        var captured = new OutcomeCapturingStore(store);
-        await captured.UpsertAsync(Outbox("sale-42"));
-
-        var transport = new StubHttpMessageHandler(
-            _ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
-
-        var policy = new FakeSyncPolicy(retryOptions:
-            new RetryOptions(MaxRetries: 1, InitialDelay: TimeSpan.Zero, BackoffMultiplier: 1.0));
+        await store.UpsertAsync(Outbox("refused", body: "refused"));
+        await store.UpsertAsync(Outbox("unwell", body: "unwell"));
 
         var events = new List<SyncEvent>();
         var stream = new SyncEventStream();
         using var subscription = stream.Subscribe(new Collector(events));
 
-        await using var orchestrator = Orchestrator(captured, transport, stream, policy);
-        await orchestrator.FlushAsync();   // attempt 1 — deferred
-        await orchestrator.FlushAsync();   // attempt 2 — budget spent, dead-lettered
+        var transport = new StubHttpMessageHandler(async request =>
+        {
+            var body = await request.Content!.ReadAsStringAsync();
+            return new HttpResponseMessage(body == "refused"
+                ? HttpStatusCode.Conflict
+                : HttpStatusCode.ServiceUnavailable);
+        });
+
+        await using var orchestrator = Orchestrator(store, transport, stream);
+        await orchestrator.FlushAsync();
 
         var failed = Assert.Single(events, e => e.Type == SyncEventType.OnFailed);
-        var outcome = Assert.IsType<SyncOutcome>(failed.Outcome);
+        Assert.Equal("refused", failed.CorrelationId);
+        Assert.Equal(SyncOutcomeKind.Rejected, failed.Outcome?.Kind);
 
-        // Not Rejected: the server never refused it, Hyperwyc gave up. That is the difference
-        // between "this will never work" and "worth offering a retry".
-        Assert.Equal(SyncOutcomeKind.TransientFailure, outcome.Kind);
-        Assert.True(outcome.IsFinal);
-        Assert.Equal(503, outcome.StatusCode);
+        // The unwell one is still queued, and says why.
+        var pending = Assert.Single(await store.GetPendingOutboxAsync());
+        Assert.Equal("unwell", pending.CorrelationId);
+        Assert.Equal(SyncOutcomeKind.TransientFailure, pending.LastOutcome?.Kind);
     }
 
-    [Fact]
-    public async Task Retrying_CarriesThePreviousAttemptsOutcome()
-    {
-        var store = new InMemorySyncStore();
-        await store.UpsertAsync(Outbox("sale-42"));
-
-        var transport = new StubHttpMessageHandler(
-            _ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
-
-        var policy = new FakeSyncPolicy(retryOptions:
-            new RetryOptions(MaxRetries: 5, InitialDelay: TimeSpan.Zero, BackoffMultiplier: 1.0));
-
-        var events = new List<SyncEvent>();
-        var stream = new SyncEventStream();
-        using var subscription = stream.Subscribe(new Collector(events));
-
-        await using var orchestrator = Orchestrator(store, transport, stream, policy);
-        await orchestrator.FlushAsync();
-        await orchestrator.FlushAsync();
-
-        var retrying = Assert.Single(events, e => e.Type == SyncEventType.OnRetrying);
-        var outcome = Assert.IsType<SyncOutcome>(retrying.Outcome);
-
-        // Explains why the retry is happening, which is what a diagnostics log wants.
-        Assert.Equal(SyncOutcomeKind.TransientFailure, outcome.Kind);
-        Assert.False(outcome.IsFinal);
-        Assert.Equal(1, outcome.AttemptCount);
-        Assert.Equal("sale-42", retrying.CorrelationId);
-    }
 
     // -------------------------------------------------------------------------
     // Body capture limits
@@ -304,7 +272,6 @@ public class DeferredOutcomeTests
         await using var orchestrator = Orchestrator(
             store, transport, stream, options: new HyperwycOptions
             {
-                ConnectivityDebounceDelay = TimeSpan.Zero,
                 MaxOutcomeBodyBytes = 100,
             });
         await orchestrator.FlushAsync();
@@ -336,7 +303,6 @@ public class DeferredOutcomeTests
         await using var orchestrator = Orchestrator(
             store, transport, stream, options: new HyperwycOptions
             {
-                ConnectivityDebounceDelay = TimeSpan.Zero,
                 MaxOutcomeBodyBytes = 0,
             });
         await orchestrator.FlushAsync();
@@ -375,7 +341,6 @@ public class DeferredOutcomeTests
 
         Assert.Equal("sale-42", restored.CorrelationId);
         Assert.Equal(SyncOutcomeKind.Rejected, outcome.Kind);
-        Assert.True(outcome.IsFinal);
         Assert.Equal(409, outcome.StatusCode);
         Assert.Contains("Only 20 left", outcome.GetBodyAsText());
     }
@@ -414,7 +379,7 @@ public class DeferredOutcomeTests
             policy ?? new FakeSyncPolicy(),
             new FakeConnectivityService(isConnected: true),
             events,
-            options ?? new HyperwycOptions { ConnectivityDebounceDelay = TimeSpan.Zero },
+            options ?? new HyperwycOptions(),
             transport);
 
     private static ServiceProvider BuildOfflineClient(
@@ -470,10 +435,6 @@ public class DeferredOutcomeTests
 
         public Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default) =>
             inner.GetPendingOutboxAsync(ct);
-
-        public Task<IReadOnlyList<Envelope>> GetReadyToSendAsync(
-            DateTimeOffset now, CancellationToken ct = default) =>
-            inner.GetReadyToSendAsync(now, ct);
 
         public Task MarkSyncedAsync(string id, CancellationToken ct = default) =>
             inner.MarkSyncedAsync(id, ct);

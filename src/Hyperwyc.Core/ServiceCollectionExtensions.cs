@@ -102,11 +102,6 @@ public static class ServiceCollectionExtensions
         if (options.DefaultPolicy is SyncPolicy.PresetSyncPolicy { Ttl: { } policyTtl })
             options.DefaultCacheTtl = policyTtl;
 
-        // Build the default evaluator only now, from the resolved TTL. Constructing
-        // it any earlier captures a TTL that configuration has not yet settled.
-        var stalenessEvaluator =
-            options.StalenessEvaluator ?? new TtlStalenessEvaluator(options.DefaultCacheTtl);
-
         // Register the options object itself as a singleton so HyperwycHandler
         // and SyncOrchestrator can receive it via constructor injection.
         services.AddSingleton(options);
@@ -127,7 +122,6 @@ public static class ServiceCollectionExtensions
                 _ => throw new InvalidOperationException(NoConnectivityMessage));
 
         services.TryAddSingleton<ISyncPolicy>(_ => options.DefaultPolicy);
-        services.TryAddSingleton<IStalenessEvaluator>(_ => stalenessEvaluator);
 
         // Core singletons.
         services.TryAddSingleton<SyncEventStream>();

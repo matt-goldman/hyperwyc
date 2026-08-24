@@ -6,30 +6,26 @@ using Xunit;
 namespace Hyperwyc.Tests;
 
 /// <summary>
-/// Covers issue #38: Hyperwyc retries connectivity failures when connectivity changes,
-/// rather than running a generic backoff loop inside a flush.
+/// Covers what a flush does with each class of failure. Issue #38 settled the classification;
+/// ADR 0004 then removed the retry apparatus that had survived it.
 /// </summary>
 /// <remarks>
-/// Previously every non-2xx was retried in place — a rejected write spent its whole
-/// budget (about a minute on defaults) before dead-lettering, and because the outbox
-/// drains sequentially it held up everything queued behind it.
+/// There is no retry budget, no backoff and no scheduled follow-up. A write the server refuses
+/// is dead-lettered on the first attempt; anything else stays in the outbox and is tried again
+/// on the next flush, which happens on connectivity restored or application start.
 /// </remarks>
-public class RetryModelTests
+public class DeliveryFailureTests
 {
     private static SyncOrchestrator BuildOrchestrator(
         InMemorySyncStore store,
         HttpMessageHandler transport,
-        RetryOptions? retryOptions = null,
         SyncEventStream? events = null) =>
         new(
             store,
-            new FakeSyncPolicy(retryOptions: retryOptions ?? new RetryOptions(
-                MaxRetries: 3,
-                InitialDelay: TimeSpan.FromHours(1),   // far enough out that no follow-up interferes
-                BackoffMultiplier: 2.0)),
+            new FakeSyncPolicy(),
             new FakeConnectivityService(isConnected: true),
             events ?? new SyncEventStream(),
-            new HyperwycOptions { ConnectivityDebounceDelay = TimeSpan.Zero },
+            new HyperwycOptions(),
             transport);
 
     private static Envelope Outbox(string url = "https://example.com/api/orders") =>
@@ -96,7 +92,7 @@ public class RetryModelTests
     }
 
     [Fact]
-    public async Task PermanentFailure_PublishesOnFailed_NotOnRetrying()
+    public async Task PermanentFailure_PublishesOnFailed()
     {
         var store = new InMemorySyncStore();
         await store.UpsertAsync(Outbox());
@@ -109,8 +105,8 @@ public class RetryModelTests
 
         await orchestrator.FlushAsync();
 
-        Assert.Contains(received, e => e.Type == SyncEventType.OnFailed);
-        Assert.DoesNotContain(received, e => e.Type == SyncEventType.OnRetrying);
+        // One attempt, one event. There is no retry to announce.
+        Assert.Single(received, e => e.Type == SyncEventType.OnFailed);
     }
 
     // -------------------------------------------------------------------------
@@ -142,11 +138,11 @@ public class RetryModelTests
     }
 
     // -------------------------------------------------------------------------
-    // Transient failures defer rather than retry in place
+    // Transient failures stay in the outbox
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task TransientFailure_LeavesEnvelopeQueuedWithRetryScheduled()
+    public async Task TransientFailure_LeavesTheEnvelopeQueuedForTheNextFlush()
     {
         var store = new InMemorySyncStore();
         await store.UpsertAsync(Outbox());
@@ -159,11 +155,36 @@ public class RetryModelTests
 
         var pending = Assert.Single(await store.GetPendingOutboxAsync());
         Assert.False(pending.IsDeadLettered);
-        Assert.Equal(1, pending.RetryCount);
-        Assert.NotNull(pending.NextRetryUtc);
 
-        // Deferred, so not eligible again until its scheduled time.
-        Assert.Empty(await store.GetReadyToSendAsync(DateTimeOffset.UtcNow));
+        // The server answered, and not with a refusal — so the write is still live, and the
+        // outcome recorded against it says why it has not gone yet.
+        Assert.Equal(SyncOutcomeKind.TransientFailure, pending.LastOutcome?.Kind);
+        Assert.Equal(503, pending.LastOutcome?.StatusCode);
+    }
+
+    [Fact]
+    public async Task TransientFailure_IsRetriedByTheNextFlush_WithNoBudgetToExhaust()
+    {
+        var store = new InMemorySyncStore();
+        await store.UpsertAsync(Outbox());
+        var failing = new CountingTransport(HttpStatusCode.ServiceUnavailable);
+
+        // Well past what the old five-attempt budget allowed. Nothing is counted, so nothing
+        // runs out: Hyperwyc keeps the write until the server takes it or the app discards it.
+        await using (var orchestrator = BuildOrchestrator(store, failing))
+        {
+            for (var i = 0; i < 8; i++)
+                await orchestrator.FlushAsync();
+        }
+
+        Assert.Equal(8, failing.CallCount);
+        Assert.Single(await store.GetPendingOutboxAsync());
+
+        var working = new CountingTransport(HttpStatusCode.OK);
+        await using (var orchestrator = BuildOrchestrator(store, working))
+            await orchestrator.FlushAsync();
+
+        Assert.Empty(await store.GetPendingOutboxAsync());
     }
 
     [Fact]
@@ -190,46 +211,7 @@ public class RetryModelTests
         Assert.Contains("flaky", pending.Url);
     }
 
-    [Fact]
-    public async Task TransientFailure_DeadLettersOnceTheBudgetIsSpent()
-    {
-        var store = new InMemorySyncStore();
-        var envelope = Outbox();
-        envelope.RetryCount = 3;   // budget is 3; the next failure exceeds it
-        await store.UpsertAsync(envelope);
 
-        var transport = new CountingTransport(HttpStatusCode.ServiceUnavailable);
-        await using var orchestrator = BuildOrchestrator(store, transport);
-
-        await orchestrator.FlushAsync();
-
-        Assert.Empty(await store.GetPendingOutboxAsync());
-    }
-
-    [Fact]
-    public async Task RetryBudget_SurvivesANewOrchestrator()
-    {
-        var store = new InMemorySyncStore();
-        await store.UpsertAsync(Outbox());
-        var transport = new CountingTransport(HttpStatusCode.ServiceUnavailable);
-
-        await using (var first = BuildOrchestrator(store, transport))
-            await first.FlushAsync();
-
-        var afterFirst = Assert.Single(await store.GetPendingOutboxAsync());
-        Assert.Equal(1, afterFirst.RetryCount);
-
-        // A second orchestrator — standing in for the process having been killed and
-        // restarted — continues the budget rather than starting it over.
-        afterFirst.NextRetryUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
-        await store.UpsertAsync(afterFirst);
-
-        await using (var second = BuildOrchestrator(store, transport))
-            await second.FlushAsync();
-
-        var afterSecond = Assert.Single(await store.GetPendingOutboxAsync());
-        Assert.Equal(2, afterSecond.RetryCount);
-    }
 
     // -------------------------------------------------------------------------
     // A dead network ends the flush
@@ -255,7 +237,7 @@ public class RetryModelTests
     }
 
     [Fact]
-    public async Task TransportFailure_DoesNotConsumeRetryBudgetOrDeadLetter()
+    public async Task TransportFailure_DoesNotDeadLetter()
     {
         var store = new InMemorySyncStore();
         await store.UpsertAsync(Outbox());
@@ -266,14 +248,13 @@ public class RetryModelTests
         var pending = Assert.Single(await store.GetPendingOutboxAsync());
         Assert.False(pending.IsDeadLettered);
 
-        // Being unable to reach the network says nothing about the request, so it is
-        // not held against it.
-        Assert.Equal(0, pending.RetryCount);
-        Assert.Null(pending.NextRetryUtc);
+        // Being unable to reach the network says nothing about the request.
+        Assert.Equal(SyncOutcomeKind.TransportFailure, pending.LastOutcome?.Kind);
+        Assert.Null(pending.LastOutcome?.StatusCode);
     }
 
     [Fact]
-    public async Task TransportFailure_LeavesEnvelopesImmediatelyEligibleAgain()
+    public async Task TransportFailure_LeavesEnvelopesEligibleForTheNextFlush()
     {
         var store = new InMemorySyncStore();
         await store.UpsertAsync(Outbox());
@@ -282,8 +263,8 @@ public class RetryModelTests
         await using (var orchestrator = BuildOrchestrator(store, throwing))
             await orchestrator.FlushAsync();
 
-        // Nothing was deferred, so the next connectivity signal retries straight away.
-        Assert.Single(await store.GetReadyToSendAsync(DateTimeOffset.UtcNow));
+        // Nothing was held back, so the next connectivity signal tries straight away.
+        Assert.Single(await store.GetPendingOutboxAsync());
 
         var working = new CountingTransport(HttpStatusCode.OK);
         await using (var orchestrator = BuildOrchestrator(store, working))

@@ -21,11 +21,4 @@ public interface ISyncPolicy
     /// shares the same path prefix.
     /// </summary>
     bool ShouldInvalidateCacheOnWrite(HttpRequestMessage request);
-
-    /// <summary>
-    /// Returns the retry configuration that governs how many times a failed
-    /// outbox entry for <paramref name="request"/> is retried before being
-    /// moved to the dead-letter queue.
-    /// </summary>
-    RetryOptions GetRetryOptions(HttpRequestMessage request);
 }

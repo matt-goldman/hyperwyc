@@ -133,6 +133,12 @@ request grouping / bulk sync, and GraphQL support.
   the sample and the tests, so no item needs a migration, a compatibility shim or a documented
   reset-on-upgrade. Revisit this line the day the first package ships; until then, treat any item
   proposing migration work as over-scoped.
+- **The ADR 0004 audit (2026-08-25) removed all retry apparatus, `IStalenessEvaluator`,
+  `OfflineResponsePolicy` and `SyncOutcome.Headers`.** No backlog item: the decision is in
+  [ADR 0004](../docs/decisions/0004-default-to-removal.md), the detail is in TECHNICAL_PLAN, and
+  the rest is git history. Items 12 and 28 are superseded by it. `SyncOrchestrator` went from 751
+  lines to 577, `HyperwycOptions` from eleven knobs to seven, and four public types plus two
+  public interface members are gone.
 - **Numbering is sequential and permanent.** Items keep their number when they move to
   `Done/`; numbers are never reused.
 - **A file moves to `Done/` only when its acceptance criteria are ticked and the behaviour

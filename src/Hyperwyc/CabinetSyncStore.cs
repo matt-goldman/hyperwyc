@@ -133,25 +133,6 @@ public sealed class CabinetSyncStore : ISyncStore
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<Envelope>> GetReadyToSendAsync(
-        DateTimeOffset now,
-        CancellationToken ct = default)
-    {
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
-            return [.. all
-                .Where(e => !e.IsSynced && !e.IsDeadLettered && (e.NextRetryUtc is null || e.NextRetryUtc <= now))
-                .OrderBy(e => e.CreatedUtc)];
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-
-    /// <inheritdoc/>
     public async Task UpsertAsync(Envelope envelope, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(envelope);

@@ -34,18 +34,6 @@ public interface ISyncStore
     /// </summary>
     Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default);
 
-    /// <summary>
-    /// Returns the outbox envelopes eligible to be sent at <paramref name="now"/>:
-    /// those never attempted, plus those whose scheduled retry time has arrived.
-    /// </summary>
-    /// <remarks>
-    /// An envelope that failed transiently carries a <see cref="Envelope.NextRetryUtc"/>
-    /// in the future and is deliberately excluded until then, so a flush does not
-    /// re-attempt work that is waiting. This is the query a flush drains;
-    /// <see cref="GetPendingOutboxAsync"/> reports everything queued regardless of
-    /// readiness, which is what a diagnostics view wants.
-    /// </remarks>
-    Task<IReadOnlyList<Envelope>> GetReadyToSendAsync(DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>
     /// Inserts or updates <paramref name="envelope"/> in the store.

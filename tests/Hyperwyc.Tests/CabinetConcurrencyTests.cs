@@ -86,7 +86,6 @@ public sealed class CabinetConcurrencyTests : IDisposable
             var n = i;
             work.Add(Task.Run(() => store.UpsertAsync(Cached($"https://example.com/api/{n}"))));
             work.Add(Task.Run(() => store.GetPendingOutboxAsync()));
-            work.Add(Task.Run(() => store.GetReadyToSendAsync(DateTimeOffset.UtcNow)));
         }
 
         await Task.WhenAll(work);

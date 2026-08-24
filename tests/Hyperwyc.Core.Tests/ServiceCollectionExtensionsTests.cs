@@ -98,26 +98,7 @@ public sealed class ServiceCollectionExtensionsTests
         Assert.Same(options.DefaultPolicy, policy);
     }
 
-    [Fact]
-    public void AddHyperwycCore_Defaults_RegistersIStalenessEvaluator()
-    {
-        var sp = BuildProvider(null);
 
-        var evaluator = sp.GetRequiredService<IStalenessEvaluator>();
-
-        Assert.IsType<TtlStalenessEvaluator>(evaluator);
-    }
-
-    [Fact]
-    public void AddHyperwycCore_CustomStalenessEvaluator_IsNotReplaced()
-    {
-        var custom = new FakeStalenessEvaluator(isStale: false);
-        var sp = BuildProvider(o => o.StalenessEvaluator = custom);
-
-        var resolved = sp.GetRequiredService<IStalenessEvaluator>();
-
-        Assert.Same(custom, resolved);
-    }
 
     // -------------------------------------------------------------------------
     // IHyperwyc is a singleton backed by the same SyncEventStream
@@ -241,30 +222,24 @@ public sealed class ServiceCollectionExtensionsTests
     // -------------------------------------------------------------------------
 
     [Fact]
-    public void AddHyperwycCore_CacheFirstPolicyTtl_IsAppliedByTheEvaluator()
+    public void AddHyperwycCore_CacheFirstPolicyTtl_ResolvesTheEffectiveTtl()
     {
         var sp = BuildProvider(o => o.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromDays(1)));
 
-        var evaluator = sp.GetRequiredService<IStalenessEvaluator>();
         var options = sp.GetRequiredService<HyperwycOptions>();
 
         Assert.Equal(TimeSpan.FromDays(1), options.DefaultCacheTtl);
-        Assert.False(IsStaleAfter(evaluator, TimeSpan.FromHours(23)));
-        Assert.True(IsStaleAfter(evaluator, TimeSpan.FromHours(25)));
     }
 
     [Fact]
-    public void AddHyperwycCore_ExplicitDefaultCacheTtl_IsAppliedByTheEvaluator()
+    public void AddHyperwycCore_ExplicitDefaultCacheTtl_ResolvesTheEffectiveTtl()
     {
         var sp = BuildProvider(o => o.DefaultCacheTtl = TimeSpan.FromMinutes(1));
 
-        var evaluator = sp.GetRequiredService<IStalenessEvaluator>();
         var options = sp.GetRequiredService<HyperwycOptions>();
 
         // The default policy carries no TTL, so it must not clobber this.
         Assert.Equal(TimeSpan.FromMinutes(1), options.DefaultCacheTtl);
-        Assert.False(IsStaleAfter(evaluator, TimeSpan.FromSeconds(30)));
-        Assert.True(IsStaleAfter(evaluator, TimeSpan.FromMinutes(2)));
     }
 
     [Fact]
@@ -276,10 +251,7 @@ public sealed class ServiceCollectionExtensionsTests
             o.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromHours(6));
         });
 
-        var evaluator = sp.GetRequiredService<IStalenessEvaluator>();
 
-        Assert.False(IsStaleAfter(evaluator, TimeSpan.FromHours(5)));
-        Assert.True(IsStaleAfter(evaluator, TimeSpan.FromHours(7)));
     }
 
     [Fact]
@@ -287,10 +259,7 @@ public sealed class ServiceCollectionExtensionsTests
     {
         var sp = BuildProvider(null);
 
-        var evaluator = sp.GetRequiredService<IStalenessEvaluator>();
 
-        Assert.False(IsStaleAfter(evaluator, TimeSpan.FromMinutes(4)));
-        Assert.True(IsStaleAfter(evaluator, TimeSpan.FromMinutes(6)));
     }
 
     [Fact]
@@ -302,11 +271,9 @@ public sealed class ServiceCollectionExtensionsTests
             o.DefaultCacheTtl = TimeSpan.FromMinutes(30);
         });
 
-        var evaluator = sp.GetRequiredService<IStalenessEvaluator>();
         var options = sp.GetRequiredService<HyperwycOptions>();
 
         Assert.Equal(TimeSpan.FromMinutes(30), options.DefaultCacheTtl);
-        Assert.True(IsStaleAfter(evaluator, TimeSpan.FromMinutes(31)));
     }
 
     // -------------------------------------------------------------------------
@@ -439,20 +406,6 @@ public sealed class ServiceCollectionExtensionsTests
     // Helper
     // -------------------------------------------------------------------------
 
-    /// <summary>
-    /// Asks <paramref name="evaluator"/> whether a response cached
-    /// <paramref name="age"/> ago is stale.
-    /// </summary>
-    private static bool IsStaleAfter(IStalenessEvaluator evaluator, TimeSpan age)
-    {
-        var now = DateTimeOffset.UtcNow;
-        var envelope = new Envelope
-        {
-            Response = new CachedResponse { CachedAt = now - age },
-        };
-
-        return evaluator.IsStale(envelope, now);
-    }
 
     private static ServiceProvider BuildProvider(Action<HyperwycOptions>? configure)
     {
@@ -509,9 +462,6 @@ public sealed class ServiceCollectionExtensionsTests
 
         public Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default) =>
             _inner.GetPendingOutboxAsync(ct);
-
-        public Task<IReadOnlyList<Envelope>> GetReadyToSendAsync(DateTimeOffset now, CancellationToken ct = default) =>
-            _inner.GetReadyToSendAsync(now, ct);
 
         public Task UpsertAsync(Envelope envelope, CancellationToken ct = default) =>
             _inner.UpsertAsync(envelope, ct);

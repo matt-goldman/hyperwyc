@@ -17,14 +17,13 @@ public class SyncOrchestratorDisposalTests
 {
     private static SyncOrchestrator BuildOrchestrator(
         InMemorySyncStore store,
-        HttpMessageHandler transport,
-        RetryOptions? retryOptions = null) =>
+        HttpMessageHandler transport) =>
         new(
             store,
-            new FakeSyncPolicy(retryOptions: retryOptions),
+            new FakeSyncPolicy(),
             new FakeConnectivityService(isConnected: true),
             new SyncEventStream(),
-            new HyperwycOptions { ConnectivityDebounceDelay = TimeSpan.Zero },
+            new HyperwycOptions(),
             transport);
 
     private static Envelope OutboxEnvelope(string url = "https://example.com/api/orders") =>
@@ -141,8 +140,7 @@ public class SyncOrchestratorDisposalTests
 
         var transport = new BlockingTransport();
         // A budget that would take minutes to exhaust if disposal waited for it.
-        var orchestrator = BuildOrchestrator(store, transport, new RetryOptions(
-            MaxRetries: 5, InitialDelay: TimeSpan.FromSeconds(30), BackoffMultiplier: 2.0));
+        var orchestrator = BuildOrchestrator(store, transport);
 
         var flush = orchestrator.FlushAsync();
         await transport.Entered;

@@ -29,7 +29,6 @@ public class RequestHeaderFidelityTests
             store ?? new InMemorySyncStore(),
             new FakeConnectivityService(isConnected: true),
             new FakeSyncPolicy(),
-            new FakeStalenessEvaluator(),
             new SyncEventStream(),
             new HyperwycOptions())
         { InnerHandler = stub };
@@ -41,7 +40,6 @@ public class RequestHeaderFidelityTests
             store,
             new FakeConnectivityService(isConnected: false),
             new FakeSyncPolicy(),
-            new FakeStalenessEvaluator(),
             new SyncEventStream(),
             new HyperwycOptions())
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
@@ -53,7 +51,7 @@ public class RequestHeaderFidelityTests
             new FakeSyncPolicy(),
             new FakeConnectivityService(isConnected: true),
             new SyncEventStream(),
-            new HyperwycOptions { ConnectivityDebounceDelay = TimeSpan.Zero },
+            new HyperwycOptions(),
             transport);
 
     // -------------------------------------------------------------------------
@@ -189,7 +187,6 @@ public class RequestHeaderFidelityTests
         await orchestrator.FlushAsync();
 
         var deferred = Assert.Single(await store.GetPendingOutboxAsync());
-        deferred.NextRetryUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
         await store.UpsertAsync(deferred);
 
         await orchestrator.FlushAsync();

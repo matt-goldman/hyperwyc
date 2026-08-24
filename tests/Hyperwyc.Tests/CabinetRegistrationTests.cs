@@ -59,14 +59,14 @@ public sealed class CabinetRegistrationTests : IDisposable
             o =>
             {
                 Connectivity(o);
-                o.OfflineResponsePolicy = OfflineResponsePolicy.Signal;
+                o.DefaultCacheTtl = TimeSpan.FromHours(3);
             },
             o => o.DirectoryPath = _tempDir);
 
         using var sp = services.BuildServiceProvider();
         var options = sp.GetRequiredService<HyperwycOptions>();
 
-        Assert.Equal(OfflineResponsePolicy.Signal, options.OfflineResponsePolicy);
+        Assert.Equal(TimeSpan.FromHours(3), options.DefaultCacheTtl);
     }
 
     [Fact]

@@ -59,7 +59,6 @@ public class HyperwycHandlerPipelineTests
             store ?? new InMemorySyncStore(),
             new FakeConnectivityService(isConnected),
             new FakeSyncPolicy(),
-            new FakeStalenessEvaluator(),
             new SyncEventStream(),
             new HyperwycOptions())
         {

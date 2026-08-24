@@ -33,8 +33,8 @@ namespace Hyperwyc.Models;
 /// </param>
 /// <param name="Outcome">
 /// What the server or network said, for events that report a delivery attempt
-/// (<see cref="SyncEventType.OnSynced"/>, <see cref="SyncEventType.OnFailed"/>,
-/// <see cref="SyncEventType.OnRetrying"/>). <see langword="null"/> on
+/// (<see cref="SyncEventType.OnSynced"/>, <see cref="SyncEventType.OnFailed"/>).
+/// <see langword="null"/> on
 /// <see cref="SyncEventType.OnQueued"/> and <see cref="SyncEventType.OnUpdated"/>, where no
 /// attempt has been made.
 /// </param>

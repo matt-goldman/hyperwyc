@@ -42,7 +42,6 @@ public sealed class HyperwycHandler : DelegatingHandler
     private readonly ISyncStore _store;
     private readonly IConnectivityService _connectivity;
     private readonly ISyncPolicy _policy;
-    private readonly IStalenessEvaluator _stalenessEvaluator;
     private readonly SyncEventStream _events;
     private readonly HyperwycOptions _options;
     private readonly string? _clientName;
@@ -53,7 +52,6 @@ public sealed class HyperwycHandler : DelegatingHandler
     /// <param name="store">Persistence for queued writes and cached responses.</param>
     /// <param name="connectivity">Reports whether the device is online.</param>
     /// <param name="policy">Cache strategy and write-invalidation rules per request.</param>
-    /// <param name="stalenessEvaluator">Decides whether a cached response is still fresh.</param>
     /// <param name="events">Stream on which sync lifecycle events are published.</param>
     /// <param name="options">Runtime configuration options.</param>
     /// <param name="clientName">
@@ -67,7 +65,6 @@ public sealed class HyperwycHandler : DelegatingHandler
         ISyncStore store,
         IConnectivityService connectivity,
         ISyncPolicy policy,
-        IStalenessEvaluator stalenessEvaluator,
         SyncEventStream events,
         HyperwycOptions options,
         string? clientName = null)
@@ -75,14 +72,12 @@ public sealed class HyperwycHandler : DelegatingHandler
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(connectivity);
         ArgumentNullException.ThrowIfNull(policy);
-        ArgumentNullException.ThrowIfNull(stalenessEvaluator);
         ArgumentNullException.ThrowIfNull(events);
         ArgumentNullException.ThrowIfNull(options);
 
         _store = store;
         _connectivity = connectivity;
         _policy = policy;
-        _stalenessEvaluator = stalenessEvaluator;
         _events = events;
         _options = options;
         _clientName = clientName;
@@ -132,7 +127,7 @@ public sealed class HyperwycHandler : DelegatingHandler
             RequestId: envelope.Id,
             RequestBody: envelope.RequestBody));
 
-        return HyperwycResponseFactory.Queued(_options.OfflineResponsePolicy, envelope.CorrelationId);
+        return HyperwycResponseFactory.Queued(envelope.CorrelationId);
     }
 
     private async Task<HttpResponseMessage> HandleOfflineReadAsync(
@@ -141,7 +136,7 @@ public sealed class HyperwycHandler : DelegatingHandler
     {
         // NetworkOnly opts out of the cache entirely, so there is nothing to serve.
         if (_policy.GetStrategy(request) == CacheStrategy.NetworkOnly)
-            return HyperwycResponseFactory.Offline(_options.OfflineResponsePolicy);
+            return HyperwycResponseFactory.Offline();
 
         var url = request.RequestUri?.ToString() ?? string.Empty;
 
@@ -150,7 +145,7 @@ public sealed class HyperwycHandler : DelegatingHandler
         if (cached is not null)
             return BuildResponseFromEnvelope(cached);
 
-        return HyperwycResponseFactory.Offline(_options.OfflineResponsePolicy);
+        return HyperwycResponseFactory.Offline();
     }
 
     // -------------------------------------------------------------------------
@@ -203,7 +198,7 @@ public sealed class HyperwycHandler : DelegatingHandler
             var cacheOnly = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
             return cacheOnly is not null
                 ? BuildResponseFromEnvelope(cacheOnly)
-                : HyperwycResponseFactory.CacheMiss(_options.OfflineResponsePolicy);
+                : HyperwycResponseFactory.CacheMiss();
         }
 
         // CacheFirst serves a fresh cached response without touching the network.
@@ -211,7 +206,7 @@ public sealed class HyperwycHandler : DelegatingHandler
         if (strategy == CacheStrategy.CacheFirst)
         {
             var cached = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
-            if (cached is not null && !_stalenessEvaluator.IsStale(cached, DateTimeOffset.UtcNow))
+            if (cached is not null && !IsStale(cached))
                 return BuildResponseFromEnvelope(cached);
         }
 
@@ -285,6 +280,20 @@ public sealed class HyperwycHandler : DelegatingHandler
 
         return response;
     }
+
+    /// <summary>
+    /// Whether a cached response has outlived <see cref="HyperwycOptions.DefaultCacheTtl"/>.
+    /// </summary>
+    /// <remarks>
+    /// A comparison, not an abstraction. This was an <c>IStalenessEvaluator</c> with a single
+    /// implementation and a single caller, which bought nothing and cost issue #29 — the
+    /// evaluator was built from a TTL that configuration had not finished setting. Honouring
+    /// <c>Cache-Control</c> (issue #41) is where per-response staleness earns an interface
+    /// back; until then it is four lines.
+    /// </remarks>
+    private bool IsStale(Envelope cached) =>
+        cached.Response is null
+        || DateTimeOffset.UtcNow - cached.Response.CachedAt > _options.DefaultCacheTtl;
 
     /// <summary>
     /// Derives the cache-invalidation prefix from the request URI.

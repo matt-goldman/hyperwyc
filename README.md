@@ -12,11 +12,11 @@ Hyperwyc is backend-agnostic, storage-pluggable, and designed for scenarios wher
 
 - ✅ **Service-worker-inspired** — transparent 200 OK responses by default; callers never branch on connectivity
 - ✅ Backend-agnostic HTTP caching and replay layer (REST/JSON over HTTP/1.x; v1.0)
-- ✅ Offline request queue with retry
+- ✅ Offline request queue, replayed when connectivity returns
 - ✅ Response cache with expiry policies
 - ✅ Write-triggered GET cache invalidation
 - ✅ Configurable offline response policy (transparent 200 or explicit 503)
-- ✅ Pluggable policies (connectivity, staleness, retry)
+- ✅ Pluggable connectivity and cache policy
 - ✅ Observables for sync lifecycle events
 - ✅ Works with any `HttpClient`, minimal blast radius
 - ✅ Sends the request your app made — no headers added, nothing required of your API
@@ -135,7 +135,7 @@ A `CacheOnly` read that finds nothing cached returns `X-Hyperwyc-Status: CacheMi
 
 The app doesn't need to know the difference. Your existing code doesn't change.
 
-> **Why "no data" instead of "no connection"?** Connectivity is an infrastructure concern, not an application one. Your code already has to handle the empty-result path (a search with no matches, a feed with no items); offline simply produces the same shape. If that mindset shift doesn't fit a particular route, set `OfflineResponsePolicy = OfflineResponsePolicy.Signal` to receive `503 Service Unavailable` instead. Per-route policies are planned for v1.0.
+> **Why "no data" instead of "no connection"?** Connectivity is an infrastructure concern, not an application one. Your code already has to handle the empty-result path (a search with no matches, a feed with no items); offline simply produces the same shape. A caller that does want to know reads the `X-Hyperwyc-Status` header — or, for a write, the `202`, which no ordinary success is.
 
 ### Designing your responses
 
@@ -170,7 +170,7 @@ route returns a collection, which is per-route knowledge it does not have — pl
 per-route policies. Until then, a null-coalesce at the call site covers it.
 
 If you would rather branch on status codes than on `null`, set
-`OfflineResponsePolicy.Signal` to receive `503 Service Unavailable` instead. And if your API
+the `X-Hyperwyc-Status` header to find out. And if your API
 already uses an envelope or result type — [`Ardalis.Result`](https://github.com/ardalis/Result)
 or a hand-rolled `ApiResponse<T>` — that keeps working, since the envelope simply deserialises
 to `null` and your existing handling takes over.
@@ -220,7 +220,7 @@ does, and can resolve failures Hyperwyc never learns about. If you already have 
 catches a `401`, refreshes the token and retries, that is exactly what happens — Hyperwyc sees
 the successful retry, not the `401`.
 
-That's deliberate. **Hyperwyc's replay retry is the last-resort retry**: it wraps the
+That's deliberate. **Hyperwyc is the last resort, not a retry layer**: it wraps the
 whole pipeline, so it only ever acts on failures your own handlers couldn't fix. It won't
 second-guess your auth, your circuit breaker or your fallbacks, and you don't need to configure
 it to stay out of their way.
@@ -254,9 +254,8 @@ hyperwyc.SyncEvents.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
 | Event | Meaning | Carries an outcome |
 |-------|---------|---|
 | `OnQueued` | Request persisted to local queue (offline) | No — nothing has been attempted |
-| `OnRetrying` | A queued request is being attempted again after an earlier failure | Yes — the previous attempt's |
 | `OnSynced` | Request successfully delivered | Yes |
-| `OnFailed` | Request dead-lettered — rejected by the server, or out of retries | Yes |
+| `OnFailed` | Request dead-lettered — the server refused it | Yes |
 | `OnUpdated` | Cached response refreshed | No |
 
 These are Hyperwyc's own events, not your app's lifecycle — see below for how the two relate.
@@ -315,8 +314,8 @@ hyperwyc.SyncEvents
         }
         else
         {
-            // We ran out of retries, or never reached the server. Worth offering a retry.
-            OfferRetry(e.CorrelationId!);
+            // Never reached the server. Still queued; nothing to do but wait.
+            ShowPending(e.CorrelationId!);
         }
     });
 ```
@@ -324,11 +323,9 @@ hyperwyc.SyncEvents
 | Member | What it tells you |
 |---|---|
 | `Kind` | `Succeeded`, `Rejected` (a 4xx — it will never work), `TransientFailure` (a 5xx/408/429), `TransportFailure` (never reached the server) |
-| `IsFinal` | Whether Hyperwyc has given up. `Rejected` + `IsFinal` is the server refusing; `TransientFailure` + `IsFinal` is the retry budget running out |
 | `StatusCode`, `ReasonPhrase`, `Headers` | As returned, or `null`/empty for a transport failure |
 | `Body`, `GetBodyAsText()`, `BodyTruncated` | The response body, up to `MaxOutcomeBodyBytes` (16 KB by default), clipped rather than dropped if longer |
 | `Error` | The transport failure message. A string rather than an exception, because this record is persisted |
-| `AttemptCount` | Attempts charged against the retry budget. Transport failures don't charge it |
 
 `OnSynced` carries an outcome too. A replayed `POST` may answer with the created resource —
 server-assigned ids, normalised values — which the caller never saw, so this is how you reconcile
@@ -653,7 +650,7 @@ Not every failure means the same thing, so Hyperwyc doesn't treat them the same 
 | Failure | What happens |
 |---|---|
 | `4xx` — the server rejected it | Dead-lettered immediately. Sending the identical request again cannot change the answer |
-| `5xx`, `408`, `429` — the server is struggling | Left queued and retried later, with a growing gap between attempts, until the retry budget runs out |
+| `5xx`, `408`, `429` — the server is struggling | Left queued, and attempted again on the next flush. There is no attempt budget: Hyperwyc keeps the write until the server takes it or you discard it |
 | Can't reach the network at all | The flush stops and nothing is held against the queued writes — the network being down says nothing about them |
 
 Hyperwyc's job is getting writes out once the network allows it, so that is the failure it
@@ -694,7 +691,7 @@ concern applies at all, depends on your API.
 If a flush is cut short — the app is backgrounded mid-replay, or the process is killed — the
 envelopes it hadn't delivered stay queued and go out on the next trigger. They are not marked
 as failed, and they are not dead-lettered. Only a request the server actually rejected, after
-its retry budget is exhausted, ends up in the dead-letter queue.
+the server refuses, ends up in the dead-letter queue.
 
 ---
 

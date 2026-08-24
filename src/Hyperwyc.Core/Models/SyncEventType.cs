@@ -9,8 +9,6 @@ public enum SyncEventType
     /// <summary>A write request has been queued in the outbox.</summary>
     OnQueued,
 
-    /// <summary>A queued request is being retried after a previous failure.</summary>
-    OnRetrying,
 
     /// <summary>A queued request was successfully synced to the server.</summary>
     OnSynced,

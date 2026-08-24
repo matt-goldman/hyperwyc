@@ -175,33 +175,8 @@ public class CabinetSyncStoreTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
-    // GetReadyToSendAsync
     // -------------------------------------------------------------------------
 
-    [Fact]
-    public async Task GetReadyToSendAsync_ReturnsEnvelopesDueBeforeNow()
-    {
-        var due = new Envelope
-        {
-            Url = "https://example.com/api/orders",
-            Method = "POST",
-            NextRetryUtc = DateTimeOffset.UtcNow.AddMinutes(-1),
-        };
-        var notDue = new Envelope
-        {
-            Url = "https://example.com/api/notes",
-            Method = "POST",
-            NextRetryUtc = DateTimeOffset.UtcNow.AddMinutes(10),
-        };
-
-        await _store.UpsertAsync(due);
-        await _store.UpsertAsync(notDue);
-
-        var results = await _store.GetReadyToSendAsync(DateTimeOffset.UtcNow);
-
-        Assert.Single(results);
-        Assert.Equal("https://example.com/api/orders", results[0].Url);
-    }
 
     // -------------------------------------------------------------------------
     // ResetAsync

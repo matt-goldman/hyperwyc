@@ -1,5 +1,7 @@
 # Issue 12 — Polly Retry Policy with Exponential Backoff and Dead-Letter
 
+> **⛔ Superseded.** The retry half of this item was removed by the [ADR 0004](../../docs/decisions/0004-default-to-removal.md) audit on 2026-08-25: retrying is not Hyperwyc's remit, and the budget, backoff and scheduling apparatus had outlived the decision in [issue 38](38-retry-classification.md). Dead-lettering on a `4xx` survives.
+
 ## Summary
 
 Implement retry logic for outbound requests that fail after the initial send. Use Polly for exponential backoff. After the retry threshold is exhausted, move the envelope to dead-letter and publish `OnFailed`.

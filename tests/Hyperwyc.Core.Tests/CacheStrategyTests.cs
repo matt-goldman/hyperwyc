@@ -24,9 +24,12 @@ public class CacheStrategyTests
             store,
             new FakeConnectivityService(isConnected),
             new FakeSyncPolicy(strategy),
-            new FakeStalenessEvaluator(cacheIsStale),
             new SyncEventStream(),
-            new HyperwycOptions())
+            // A zero TTL makes every cached entry stale; CachedEnvelope stamps CachedAt as now.
+            new HyperwycOptions
+            {
+                DefaultCacheTtl = cacheIsStale ? TimeSpan.Zero : TimeSpan.FromMinutes(5),
+            })
         { InnerHandler = inner };
 
     private static Envelope CachedEnvelope(string body = "cached")
@@ -145,7 +148,7 @@ public class CacheStrategyTests
     }
 
     [Fact]
-    public async Task CacheOnly_EmptyCache_SignalPolicy_Returns503()
+    public async Task CacheOnly_EmptyCache_ReturnsCacheMiss()
     {
         var store = new InMemorySyncStore();
         var stub = NetworkReturning();
@@ -153,15 +156,17 @@ public class CacheStrategyTests
             store,
             new FakeConnectivityService(isConnected: true),
             new FakeSyncPolicy(CacheStrategy.CacheOnly),
-            new FakeStalenessEvaluator(isStale: false),
             new SyncEventStream(),
-            new HyperwycOptions { OfflineResponsePolicy = OfflineResponsePolicy.Signal })
+            new HyperwycOptions())
         { InnerHandler = stub };
         using var client = new HttpClient(handler);
 
         var response = await client.GetAsync(Url);
 
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        // One shape for a synthetic response now that OfflineResponsePolicy is gone: a normal
+        // success the caller need not branch on, distinguished by the status header.
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("CacheMiss", response.Headers.GetValues("X-Hyperwyc-Status").Single());
     }
 
     // -------------------------------------------------------------------------

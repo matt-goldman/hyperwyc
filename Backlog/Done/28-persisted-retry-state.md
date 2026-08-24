@@ -1,5 +1,7 @@
 # Issue 28 — Retry State Is Never Persisted
 
+> **⛔ Superseded.** Superseded by the [ADR 0004](../../docs/decisions/0004-default-to-removal.md) audit on 2026-08-25. There is no retry state to persist: `Envelope.RetryCount` and `NextRetryUtc` are gone, along with the budget they served.
+
 > **Closed by [issue 38](38-retry-classification.md), which implemented it.** That item reframes retry as
 > connectivity-driven rather than time-driven, which *requires* persisting `RetryCount` and
 > `NextRetryUtc` — so this item's central question ("persist them, or delete them as dead

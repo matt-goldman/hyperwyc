@@ -16,9 +16,6 @@ namespace Hyperwyc;
 /// </example>
 public static class SyncPolicy
 {
-    private static readonly RetryOptions _defaultRetry =
-        new(MaxRetries: 5, InitialDelay: TimeSpan.FromSeconds(2), BackoffMultiplier: 2.0);
-
     /// <summary>
     /// Returns a cached response when available and fresh; falls back to the
     /// network only when the cache is empty or stale. Successful writes
@@ -78,7 +75,5 @@ public static class SyncPolicy
         public CacheStrategy GetStrategy(HttpRequestMessage request) => strategy;
 
         public bool ShouldInvalidateCacheOnWrite(HttpRequestMessage request) => shouldInvalidate;
-
-        public RetryOptions GetRetryOptions(HttpRequestMessage request) => _defaultRetry;
     }
 }

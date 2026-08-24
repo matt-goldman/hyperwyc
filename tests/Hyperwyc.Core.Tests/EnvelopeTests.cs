@@ -89,8 +89,6 @@ public class EnvelopeTests
 
         Assert.False(envelope.IsSynced);
         Assert.False(envelope.IsDeadLettered);
-        Assert.Equal(0, envelope.RetryCount);
-        Assert.Null(envelope.NextRetryUtc);
         Assert.Null(envelope.Response);
     }
 

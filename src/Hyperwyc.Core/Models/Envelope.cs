@@ -69,16 +69,7 @@ public sealed class Envelope
     /// </summary>
     public bool IsDeadLettered { get; set; }
 
-    /// <summary>
-    /// The number of times the request has been retried after an initial failure.
-    /// </summary>
-    public int RetryCount { get; set; }
 
-    /// <summary>
-    /// The UTC time at which the next retry should be attempted,
-    /// or <c>null</c> if no retry is currently scheduled.
-    /// </summary>
-    public DateTimeOffset? NextRetryUtc { get; set; }
 
     /// <summary>
     /// The UTC time at which this envelope was created.

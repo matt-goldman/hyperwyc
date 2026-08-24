@@ -8,16 +8,9 @@ namespace Hyperwyc.Tests.Fakes;
 /// </summary>
 internal sealed class FakeSyncPolicy(
     CacheStrategy strategy = CacheStrategy.CacheFirst,
-    bool shouldInvalidate = true,
-    RetryOptions? retryOptions = null) : ISyncPolicy
+    bool shouldInvalidate = true) : ISyncPolicy
 {
-    private static readonly RetryOptions DefaultRetryOptions =
-        new(MaxRetries: 3, InitialDelay: TimeSpan.FromSeconds(1), BackoffMultiplier: 2.0);
-
     public CacheStrategy GetStrategy(HttpRequestMessage request) => strategy;
 
     public bool ShouldInvalidateCacheOnWrite(HttpRequestMessage request) => shouldInvalidate;
-
-    public RetryOptions GetRetryOptions(HttpRequestMessage request) =>
-        retryOptions ?? DefaultRetryOptions;
 }

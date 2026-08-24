@@ -47,7 +47,7 @@ for applications that need explicit offline handling.
 
 | Package | Assembly | Contents |
 |---------|----------|----------|
-| `Hyperwyc.Core` | `Hyperwyc.Core.dll` | `HyperwycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `SyncEventStream`, `IHyperwyc`, `InMemorySyncStore`, `AlwaysOnlineConnectivityService`, `NetworkAvailabilityConnectivityService`, `TtlStalenessEvaluator`. Depends on `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Hosting.Abstractions` and `Microsoft.Extensions.Http`; no storage dependency. |
+| `Hyperwyc.Core` | `Hyperwyc.Core.dll` | `HyperwycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `SyncEventStream`, `IHyperwyc`, `InMemorySyncStore`, `AlwaysOnlineConnectivityService`, `NetworkAvailabilityConnectivityService`. Depends on `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Hosting.Abstractions` and `Microsoft.Extensions.Http`; no storage dependency. |
 | `Hyperwyc` | `Hyperwyc.dll` | `CabinetSyncStore` backed by [Cabinet](https://github.com/mattgoldman/cabinet), `CabinetStoreOptions`, and the batteries-included `AddHyperwyc()`. Depends on `Hyperwyc.Core` and `Cabinet`. |
 
 `Hyperwyc` is the package almost everyone installs: `AddHyperwyc()` with no arguments produces
@@ -283,8 +283,6 @@ semaphore's `AvailableWaitHandle` is never used and the invoker does not own its
 | `AlwaysOnlineConnectivityService` | Always reports connected. Opt-in only; nothing is queued or replayed under it |
 | `NetworkAvailabilityConnectivityService` | BCL-backed `IConnectivityService` over `NetworkInterface.GetIsNetworkAvailable()`. Opt-in; detects hard-offline, not an unreachable API |
 | `ISyncPolicy` | Cache strategy, write-invalidation rules, and retry configuration per request |
-| `IStalenessEvaluator` | Determines whether a cached response is still fresh |
-| `TtlStalenessEvaluator` | Default evaluator; stale once `CachedAt + TTL` has elapsed |
 | `SyncEventStream` | Reactive event publisher (`IObservable<SyncEvent>`) |
 | `HyperwycResponseFactory` | Builds the synthetic `Queued` and `Offline` responses |
 
@@ -370,7 +368,6 @@ prefer event-style consumption get it with a one-line `.Subscribe(...)`.
 | Event | Trigger | Payload beyond type/url/method/timestamp |
 |-------|---------|---|
 | `OnQueued` | Request cached to outbox (offline) | `CorrelationId`, `RequestId`, `RequestBody` |
-| `OnRetrying` | Retry attempt initiated | The above, plus the **previous** attempt's `Outcome` |
 | `OnSynced` | Outbound request successfully delivered | The above, plus this attempt's `Outcome` |
 | `OnFailed` | Request moved to dead-letter after threshold | The above, plus the final `Outcome` |
 | `OnUpdated` | Cached response refreshed from API | None — not a queued write |
@@ -434,14 +431,10 @@ below.
 |---|---|
 | `DefaultPolicy` | `SyncPolicy.CacheFirst()` — TTL taken from `DefaultCacheTtl` |
 | `Connectivity` | **No default — required.** Usually supplied by registering an `IConnectivityService` rather than by setting this; resolving throws if neither is done |
-| `StalenessEvaluator` | `null` — a `TtlStalenessEvaluator` is built at registration from the effective TTL |
 | `DefaultCacheTtl` | 5 minutes |
-| `OfflineResponsePolicy` | `Transparent` |
 | `MaxCachedResponseBodyBytes` | 524,288 (512 KB) |
 | `ReplayTransport` | `null` — a plain `HttpClientHandler` is used |
-| `ConnectivityDebounceDelay` | 2 seconds |
 | `FlushOnStartup` | `true` |
-| `DefaultRetryOptions` | 5 retries, 2s initial delay, ×2 backoff |
 
 #### Connectivity has no default
 
@@ -590,3 +583,61 @@ requests go out, responses come back, and the app never needs to know whether th
 involved. Its composable handler-based design guarantees minimal intrusion into existing app
 architecture, and its Cabinet storage foundation provides fast, dependency-free persistence
 with a flexible indexing model tailored to the HTTP envelope pattern.
+
+---
+
+## Removed in the ADR 0004 audit
+
+Recorded because absence is invisible: someone reading this document should not have to work out
+from silence that these were considered and taken out.
+
+[ADR 0004](docs/decisions/0004-default-to-removal.md) audited the surface against ADR 0001's
+scope test and removed everything the project had already decided against but was still carrying.
+
+**All retry apparatus.** `RetryOptions`, `ISyncPolicy.GetRetryOptions`,
+`HyperwycOptions.DefaultRetryOptions` and `ConnectivityDebounceDelay`, `Envelope.RetryCount` and
+`NextRetryUtc`, `ISyncStore.GetReadyToSendAsync`, exponential backoff with jitter, the follow-up
+scheduler, the connectivity debounce, `SyncEventType.OnRetrying`, and `SyncOutcome.AttemptCount`
+and `IsFinal`.
+
+[Issue 38](Backlog/Done/38-retry-classification.md) had already concluded that Hyperwyc retries
+*connectivity* failures on *connectivity change*, and
+[ADR 0002](docs/decisions/0002-replays-traverse-the-pipeline.md) established that replays
+traverse the application's pipeline — so the app's own resilience handler already covers `5xx`
+and `429`. The apparatus was serving a responsibility we had declined.
+
+What replaces it: a `4xx` dead-letters on the first attempt; anything else leaves the envelope in
+the outbox for the next flush, which happens on connectivity restored or application start. No
+budget, no curve, no timers. An envelope can wait indefinitely against a permanently broken
+endpoint, which is honest and better than destroying a write.
+
+**`IStalenessEvaluator` and `TtlStalenessEvaluator`.** One implementation, one caller, and the
+indirection caused [issue 29](Backlog/Done/29-default-ttl-propagation.md). Now a TTL comparison
+in the handler. [Issue 41](Backlog/41-honour-cacheability-directives.md) is where per-response
+staleness earns an interface back.
+
+**`OfflineResponsePolicy`.** The `Signal` mode had no users and asserted the consumer should have
+an opinion. Synthetic responses now have one shape: a normal-looking success, distinguished by
+`X-Hyperwyc-Status` and — for writes — the `202`.
+
+**`SyncOutcome.Headers`.** A full response-header dictionary captured on every outcome that
+nothing read.
+
+Nothing here is foreclosed. `Hyperwyc.Core` with a consumer-supplied `ISyncStore` is the seam
+through which any of it can be re-added by whoever actually needs it, which is what made removing
+it safe rather than reckless.
+
+---
+
+## TODO: the "sync" vocabulary is wrong
+
+`ISyncStore`, `SyncOrchestrator`, `SyncEvent`, `SyncPolicy`, `SyncOutcome`, `SyncEvents` — the
+prefix is everywhere, and it names something Hyperwyc explicitly is not.
+
+"Sync" implies bidirectional synchronisation with conflict resolution: Realm, CommunityToolkit
+Datasync, the category Hyperwyc positions itself *against* in "What It Doesn't Do". Hyperwyc
+caches responses and replays queued writes in one direction, and takes no position on conflicts.
+The ubiquitous language should say so.
+
+Not scheduled, and deliberately not a backlog item — captured here so it is not rediscovered a
+third time. Worth settling before v1, since renaming public types is free now and breaking later.

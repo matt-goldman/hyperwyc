@@ -21,7 +21,6 @@ public class HyperwycHandlerOfflinePathTests
             store,
             new FakeConnectivityService(isConnected: false),
             new FakeSyncPolicy(),
-            new FakeStalenessEvaluator(),
             events ?? new SyncEventStream(),
             options ?? new HyperwycOptions())
         {
@@ -104,19 +103,6 @@ public class HyperwycHandlerOfflinePathTests
         Assert.Equal("Queued", values!.First());
     }
 
-    [Fact]
-    public async Task OfflineWrite_SignalPolicy_Returns503()
-    {
-        var store = new InMemorySyncStore();
-        var options = new HyperwycOptions { OfflineResponsePolicy = OfflineResponsePolicy.Signal };
-        using var client = new HttpClient(BuildOfflineHandler(store, options: options));
-
-        var response = await client.PostAsync("https://example.com/api/orders", content: null);
-
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-        Assert.True(response.Headers.TryGetValues(HyperwycResponseFactory.StatusHeader, out var values));
-        Assert.Equal("Queued", values!.First());
-    }
 
     [Theory]
     [InlineData("POST")]
@@ -172,14 +158,14 @@ public class HyperwycHandlerOfflinePathTests
         var store = new InMemorySyncStore();
         await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", "stale-data"));
 
-        // Even a strictly-stale evaluator should not prevent cache serving when offline.
+        // Staleness must not prevent cache serving when offline — stale data beats none.
         var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: false),
             new FakeSyncPolicy(),
-            new FakeStalenessEvaluator(isStale: true),   // would be stale online
             new SyncEventStream(),
-            new HyperwycOptions())
+            // Zero TTL: every cached entry is stale. Offline, that must not matter.
+            new HyperwycOptions { DefaultCacheTtl = TimeSpan.Zero })
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
         using var client = new HttpClient(handler);
 
@@ -207,19 +193,6 @@ public class HyperwycHandlerOfflinePathTests
         Assert.Equal("Offline", values!.First());
     }
 
-    [Fact]
-    public async Task OfflineRead_NoCacheAvailable_SignalPolicy_Returns503()
-    {
-        var store = new InMemorySyncStore();
-        var options = new HyperwycOptions { OfflineResponsePolicy = OfflineResponsePolicy.Signal };
-        using var client = new HttpClient(BuildOfflineHandler(store, options: options));
-
-        var response = await client.GetAsync("https://example.com/api/items");
-
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-        Assert.True(response.Headers.TryGetValues(HyperwycResponseFactory.StatusHeader, out var values));
-        Assert.Equal("Offline", values!.First());
-    }
 
     [Fact]
     public async Task OfflineRead_NoCacheAvailable_DoesNotAddToOutbox()

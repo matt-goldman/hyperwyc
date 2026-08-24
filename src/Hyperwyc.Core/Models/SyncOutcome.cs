@@ -18,24 +18,17 @@ namespace Hyperwyc.Models;
 /// It follows that everything here has to survive serialisation, which is why there is no
 /// <see cref="Exception"/> — see <see cref="Error"/>.
 /// </para>
+/// <para>
+/// <see cref="Kind"/> alone says whether Hyperwyc is finished with the envelope:
+/// <see cref="SyncOutcomeKind.Succeeded"/> and <see cref="SyncOutcomeKind.Rejected"/> are final,
+/// the other two mean it stays in the outbox for the next flush.
+/// </para>
 /// </remarks>
 public sealed record SyncOutcome
 {
     /// <summary>What happened on the attempt.</summary>
     public SyncOutcomeKind Kind { get; init; }
 
-    /// <summary>
-    /// Whether Hyperwyc has finished with this envelope. <see langword="true"/> means no
-    /// further attempt will be made without the application asking for one.
-    /// </summary>
-    /// <remarks>
-    /// Read with <see cref="Kind"/>, this separates the two ways a write can end up in the
-    /// dead-letter queue: <see cref="SyncOutcomeKind.Rejected"/> is the server refusing it,
-    /// while <see cref="SyncOutcomeKind.TransientFailure"/> with <see cref="IsFinal"/> set is
-    /// the retry budget running out. The distinction matters to a consumer deciding whether
-    /// to offer a "try again" affordance.
-    /// </remarks>
-    public bool IsFinal { get; init; }
 
     /// <summary>
     /// The HTTP status code, or <see langword="null"/> for a
@@ -46,8 +39,6 @@ public sealed record SyncOutcome
     /// <summary>The reason phrase accompanying <see cref="StatusCode"/>, if the server sent one.</summary>
     public string? ReasonPhrase { get; init; }
 
-    /// <summary>The response headers, flattened. Empty when no response arrived.</summary>
-    public Dictionary<string, string> Headers { get; init; } = [];
 
     /// <summary>
     /// The response body, up to <see cref="HyperwycOptions.MaxOutcomeBodyBytes"/>.
@@ -81,16 +72,6 @@ public sealed record SyncOutcome
     /// </remarks>
     public string? Error { get; init; }
 
-    /// <summary>
-    /// How many delivery attempts have been charged against the retry budget, including this
-    /// one.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="SyncOutcomeKind.TransportFailure"/> does not consume the budget, so a run of
-    /// unreachable-network attempts leaves this unchanged. It counts attempts the server
-    /// actually answered, which is what the budget is about.
-    /// </remarks>
-    public int AttemptCount { get; init; }
 
     /// <summary>When the attempt completed, in UTC.</summary>
     public DateTimeOffset OccurredUtc { get; init; }
@@ -100,8 +81,7 @@ public sealed record SyncOutcome
     /// </summary>
     /// <remarks>
     /// Assumes UTF-8 rather than consulting the response's charset. That covers essentially
-    /// every JSON API, and a caller that needs something else has <see cref="Body"/> and the
-    /// <c>Content-Type</c> in <see cref="Headers"/>.
+    /// every JSON API, and a caller that needs something else has the raw <see cref="Body"/>.
     /// </remarks>
     public string? GetBodyAsText() => Body is null ? null : Encoding.UTF8.GetString(Body);
 }

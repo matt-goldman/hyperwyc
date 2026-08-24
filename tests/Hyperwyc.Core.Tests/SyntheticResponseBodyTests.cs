@@ -23,15 +23,13 @@ public class SyntheticResponseBodyTests
     private static HyperwycHandler BuildHandler(
         InMemorySyncStore? store = null,
         bool isConnected = false,
-        CacheStrategy strategy = CacheStrategy.CacheFirst,
-        OfflineResponsePolicy policy = OfflineResponsePolicy.Transparent) =>
+        CacheStrategy strategy = CacheStrategy.CacheFirst) =>
         new(
             store ?? new InMemorySyncStore(),
             new FakeConnectivityService(isConnected),
             new FakeSyncPolicy(strategy),
-            new FakeStalenessEvaluator(),
             new SyncEventStream(),
-            new HyperwycOptions { OfflineResponsePolicy = policy })
+            new HyperwycOptions())
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
 
     // -------------------------------------------------------------------------
@@ -117,19 +115,6 @@ public class SyntheticResponseBodyTests
         Assert.Equal("Offline", response.Headers.GetValues("X-Hyperwyc-Status").Single());
     }
 
-    [Fact]
-    public async Task SignalPolicy_StillReturns503()
-    {
-        using var client = new HttpClient(
-            BuildHandler(policy: OfflineResponsePolicy.Signal));
-
-        var response = await client.GetAsync("https://example.com/api/products");
-
-        // Adding a body must not disturb the explicit-signalling mode: callers branch on
-        // the status, and GetFromJsonAsync would throw on the status before ever reaching
-        // the body.
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-    }
 
     [Fact]
     public async Task CachedResponse_IsUnaffected()

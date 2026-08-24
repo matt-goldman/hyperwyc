@@ -4,63 +4,6 @@ using Xunit;
 
 namespace Hyperwyc.Tests;
 
-public class TtlStalenessEvaluatorTests
-{
-    private static Envelope EnvelopeWithCachedAt(DateTimeOffset cachedAt) =>
-        new()
-        {
-            Url = "https://example.com/api/items",
-            Method = "GET",
-            Response = new CachedResponse { StatusCode = 200, CachedAt = cachedAt },
-        };
-
-    [Fact]
-    public void NotStale_WhenNowIsBeforeExpiry()
-    {
-        var evaluator = new TtlStalenessEvaluator(TimeSpan.FromMinutes(5));
-        var cachedAt = DateTimeOffset.UtcNow.AddMinutes(-3);
-
-        Assert.False(evaluator.IsStale(EnvelopeWithCachedAt(cachedAt), DateTimeOffset.UtcNow));
-    }
-
-    [Fact]
-    public void Stale_WhenNowIsAfterExpiry()
-    {
-        var evaluator = new TtlStalenessEvaluator(TimeSpan.FromMinutes(5));
-        var cachedAt = DateTimeOffset.UtcNow.AddMinutes(-6);
-
-        Assert.True(evaluator.IsStale(EnvelopeWithCachedAt(cachedAt), DateTimeOffset.UtcNow));
-    }
-
-    [Fact]
-    public void Stale_AtExactExpiryInstant()
-    {
-        var evaluator = new TtlStalenessEvaluator(TimeSpan.FromMinutes(5));
-        var cachedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
-
-        Assert.True(evaluator.IsStale(EnvelopeWithCachedAt(cachedAt), cachedAt.AddMinutes(5)));
-    }
-
-    [Fact]
-    public void Stale_WhenEnvelopeHasNoResponse()
-    {
-        var evaluator = new TtlStalenessEvaluator(TimeSpan.FromMinutes(5));
-        var envelope = new Envelope { Url = "https://example.com", Method = "GET" };
-
-        Assert.True(evaluator.IsStale(envelope, DateTimeOffset.UtcNow));
-    }
-
-    [Fact]
-    public void UsesDefaultCacheTtlFromOptions()
-    {
-        var options = new HyperwycOptions { DefaultCacheTtl = TimeSpan.FromSeconds(10) };
-        var evaluator = new TtlStalenessEvaluator(options);
-        var cachedAt = DateTimeOffset.UtcNow.AddSeconds(-5);
-
-        Assert.False(evaluator.IsStale(EnvelopeWithCachedAt(cachedAt), DateTimeOffset.UtcNow));
-    }
-}
-
 public class ResponseCacheReadTests
 {
     // -------------------------------------------------------------------------
@@ -73,12 +16,18 @@ public class ResponseCacheReadTests
         bool cacheIsStale,
         int maxBodyBytes = 512 * 1024)
     {
-        var options = new HyperwycOptions { MaxCachedResponseBodyBytes = maxBodyBytes };
+        // Staleness is a TTL comparison against CachedAt now that IStalenessEvaluator is gone
+        // (ADR 0004). A zero TTL makes every cached entry stale; the default keeps them fresh,
+        // since FreshCachedEnvelope stamps CachedAt as "now".
+        var options = new HyperwycOptions
+        {
+            MaxCachedResponseBodyBytes = maxBodyBytes,
+            DefaultCacheTtl = cacheIsStale ? TimeSpan.Zero : TimeSpan.FromMinutes(5),
+        };
         return new HyperwycHandler(
             store,
             new Fakes.FakeConnectivityService(isConnected: true),
             new Fakes.FakeSyncPolicy(),
-            new FakeStalenessEvaluatorFromBool(cacheIsStale),
             new SyncEventStream(),
             options)
         { InnerHandler = inner };
@@ -175,12 +124,12 @@ public class ResponseCacheReadTests
         SyncEvent? received = null;
         events.Subscribe(new DelegateObserver<SyncEvent>(e => received = e));
 
-        var options = new HyperwycOptions();
+        // Zero TTL: the entry cached a moment ago is already stale.
+        var options = new HyperwycOptions { DefaultCacheTtl = TimeSpan.Zero };
         var handler = new HyperwycHandler(
             store,
             new Fakes.FakeConnectivityService(),
             new Fakes.FakeSyncPolicy(),
-            new FakeStalenessEvaluatorFromBool(isStale: true),
             events,
             options)
         {
@@ -271,11 +220,6 @@ public class ResponseCacheReadTests
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
-
-    private sealed class FakeStalenessEvaluatorFromBool(bool isStale) : Interfaces.IStalenessEvaluator
-    {
-        public bool IsStale(Models.Envelope e, DateTimeOffset now) => isStale;
-    }
 
     private sealed class DelegateObserver<T>(Action<T> onNext) : IObserver<T>
     {

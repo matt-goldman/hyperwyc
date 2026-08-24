@@ -49,22 +49,6 @@ public sealed class InMemorySyncStore : ISyncStore
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<Envelope>> GetReadyToSendAsync(DateTimeOffset now, CancellationToken ct = default)
-    {
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            return [.. _store.Values
-                .Where(e => !e.IsSynced && !e.IsDeadLettered && (e.NextRetryUtc is null || e.NextRetryUtc <= now))
-                .OrderBy(e => e.CreatedUtc)];
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-
-    /// <inheritdoc/>
     public async Task UpsertAsync(Envelope envelope, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(envelope);

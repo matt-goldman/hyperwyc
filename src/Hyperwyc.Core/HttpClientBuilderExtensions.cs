@@ -45,7 +45,6 @@ public static class HttpClientBuilderExtensions
             sp.GetRequiredService<ISyncStore>(),
             sp.GetRequiredService<IConnectivityService>(),
             sp.GetRequiredService<ISyncPolicy>(),
-            sp.GetRequiredService<IStalenessEvaluator>(),
             sp.GetRequiredService<SyncEventStream>(),
             sp.GetRequiredService<HyperwycOptions>(),
             clientName));
