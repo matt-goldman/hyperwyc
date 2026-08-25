@@ -442,16 +442,35 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         // the marker cannot be assumed to carry over.
         request.Options.Set(HyperwycHandler.ReplayMarker, true);
 
+        // Content first. The header loop below falls back to the content headers for anything
+        // the request headers reject — Content-Type above all — and that fallback is silently
+        // a no-op while Content is still null. Setting the body afterwards is what dropped the
+        // media type on every replay, so a queued application/json write went back out as
+        // text/plain and the server answered 415.
+        if (envelope.RequestBody is not null)
+        {
+            var content = new StringContent(envelope.RequestBody);
+
+            // StringContent stamps "text/plain; charset=utf-8" of its own accord. The captured
+            // headers are the truth, and TryAddWithoutValidation appends rather than replaces,
+            // so this has to be cleared or the replay carries both.
+            content.Headers.ContentType = null;
+            request.Content = content;
+        }
+
         // Replayed verbatim, including anything the application set for its own
         // duplicate suppression. Hyperwyc adds nothing of its own.
         foreach (var (key, value) in envelope.RequestHeaders)
         {
+            // Content-Length describes the body being sent, not the caller's intent, and
+            // HttpClient computes it. Replaying a captured value risks contradicting the
+            // content actually attached.
+            if (string.Equals(key, "Content-Length", StringComparison.OrdinalIgnoreCase))
+                continue;
+
             if (!request.Headers.TryAddWithoutValidation(key, value))
                 request.Content?.Headers.TryAddWithoutValidation(key, value);
         }
-
-        if (envelope.RequestBody is not null)
-            request.Content = new StringContent(envelope.RequestBody);
 
         return request;
     }

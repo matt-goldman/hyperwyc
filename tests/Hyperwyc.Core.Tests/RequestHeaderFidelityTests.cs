@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text;
 using Hyperwyc.Models;
 using Hyperwyc.Tests.Fakes;
@@ -53,6 +54,134 @@ public class RequestHeaderFidelityTests
             new SyncEventStream(),
             new HyperwycOptions(),
             transport);
+
+    // -------------------------------------------------------------------------
+    // Content headers survive the round trip
+    //
+    // The fidelity obligation in ADR 0001 covers every header the caller set, and
+    // Content-Type is one the caller almost never sets by hand — PostAsJsonAsync and
+    // JsonContent set it for them. It was still dropped on replay: BuildRequest applied
+    // headers before attaching the body, so the content-header fallback ran against a null
+    // Content and silently did nothing. Every queued JSON write went back out as
+    // text/plain and the server answered 415.
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task QueuedWrite_CapturesTheContentType()
+    {
+        var store = new InMemorySyncStore();
+        using var client = new HttpClient(BuildOfflineHandler(store));
+
+        await client.PostAsJsonAsync("https://example.com/api/sales", new { quantity = 3 });
+
+        var queued = Assert.Single(await store.GetPendingOutboxAsync());
+        Assert.Contains(queued.RequestHeaders, h =>
+            h.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)
+            && h.Value.Contains("application/json"));
+    }
+
+    [Fact]
+    public async Task ReplayedWrite_KeepsTheContentType()
+    {
+        var store = new InMemorySyncStore();
+        using (var client = new HttpClient(BuildOfflineHandler(store)))
+            await client.PostAsJsonAsync("https://example.com/api/sales", new { quantity = 3 });
+
+        var transport = new CapturingTransport();
+        await using var orchestrator = BuildOrchestrator(store, transport);
+        await orchestrator.FlushAsync();
+
+        var replayed = Assert.Single(transport.Requests);
+        Assert.Equal("application/json", replayed.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task ReplayedWrite_DoesNotCarryTwoContentTypes()
+    {
+        // StringContent stamps text/plain of its own accord, and TryAddWithoutValidation
+        // appends rather than replaces — so without clearing it the replay would send
+        // "text/plain; charset=utf-8, application/json", which is not a media type.
+        var store = new InMemorySyncStore();
+        using (var client = new HttpClient(BuildOfflineHandler(store)))
+            await client.PostAsJsonAsync("https://example.com/api/sales", new { quantity = 3 });
+
+        var transport = new CapturingTransport();
+        await using var orchestrator = BuildOrchestrator(store, transport);
+        await orchestrator.FlushAsync();
+
+        var replayed = Assert.Single(transport.Requests);
+        Assert.Single(replayed.ContentHeaders!.GetValues("Content-Type"));
+        Assert.DoesNotContain("text/plain", replayed.ContentType!.ToString());
+    }
+
+    [Fact]
+    public async Task ReplayedWrite_SendsAContentLengthMatchingItsBody()
+    {
+        // Content-Length is computed from the body actually attached, not replayed from
+        // capture, so it cannot contradict what is being sent.
+        var store = new InMemorySyncStore();
+        using (var client = new HttpClient(BuildOfflineHandler(store)))
+            await client.PostAsJsonAsync("https://example.com/api/sales", new { quantity = 3 });
+
+        var transport = new CapturingTransport();
+        await using var orchestrator = BuildOrchestrator(store, transport);
+        await orchestrator.FlushAsync();
+
+        var replayed = Assert.Single(transport.Requests);
+        Assert.Single(replayed.ContentHeaders!.GetValues("Content-Length"));
+        Assert.Equal(
+            Encoding.UTF8.GetByteCount(replayed.Body!),
+            replayed.ContentHeaders.ContentLength);
+    }
+
+    [Fact]
+    public async Task ReplayedWrite_KeepsACustomContentHeader()
+    {
+        // Not just Content-Type: the fallback covers every content header the caller set.
+        var store = new InMemorySyncStore();
+        using (var client = new HttpClient(BuildOfflineHandler(store)))
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api/sales")
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/vnd.acme.sale+json"),
+            };
+            request.Content.Headers.ContentLanguage.Add("en-AU");
+            await client.SendAsync(request);
+        }
+
+        var transport = new CapturingTransport();
+        await using var orchestrator = BuildOrchestrator(store, transport);
+        await orchestrator.FlushAsync();
+
+        var replayed = Assert.Single(transport.Requests);
+        Assert.Equal("application/vnd.acme.sale+json", replayed.ContentType?.MediaType);
+        Assert.Contains("en-AU", replayed.ContentHeaders!.ContentLanguage);
+    }
+
+    /// <summary>
+    /// Records what actually reached the wire. The request message is disposed once the
+    /// flush unwinds, so everything asserted on has to be read out here.
+    /// </summary>
+    private sealed class CapturingTransport : HttpMessageHandler
+    {
+        public List<(System.Net.Http.Headers.MediaTypeHeaderValue? ContentType,
+                     System.Net.Http.Headers.HttpContentHeaders? ContentHeaders,
+                     string? Body)> Requests { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var body = request.Content is null
+                ? null
+                : await request.Content.ReadAsStringAsync(cancellationToken);
+
+            Requests.Add((request.Content?.Headers.ContentType,
+                          request.Content?.Headers,
+                          body));
+
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }
+    }
 
     // -------------------------------------------------------------------------
     // Nothing is added
