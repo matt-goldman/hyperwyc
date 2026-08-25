@@ -45,8 +45,8 @@ Retargeted from the original notes domain to products and sales, matching
 - [x] `MauiConnectivityService` wired as `HyperwycOptions.Connectivity` (issue #13).
 - [x] Both API clients registered with `AddHyperwycHandler()` ahead of the auth handler.
 - [x] **Catalogue reads served from cache with the device offline, across an app restart.**
-- [ ] Recording a sale offline queues it and surfaces as pending.
-- [ ] Queued sales replay when connectivity returns.
+- [x] Recording a sale offline queues it and surfaces as pending.
+- [x] Queued sales replay when connectivity returns.
 - [ ] Per-sale sync state — blocked on [issue 40](Done/40-surface-deferred-outcomes.md), since an
       event cannot currently be attributed to a specific sale.
 - [ ] Live event log subscribed to `IHyperwyc.SyncEvents`.
