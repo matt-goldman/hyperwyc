@@ -47,7 +47,7 @@
                                            FontFamily="OpenSansSemibold"
                                            Text="Sold at" />
 
-                                    <Label Text="{Binding SoldAt, StringFormat='0:dd MMM yyyy'}" />
+                                    <Label Text="{Binding SoldAt, StringFormat='{0:dd MMM yyyy'}" />
                                 </VerticalStackLayout>
                             </Grid>
                         </Border>
