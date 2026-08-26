@@ -6,7 +6,7 @@ Allow dead-lettered requests to be manually requeued or dismissed, and expose th
 
 ## Background
 
-After the retry budget is exhausted (issue #12), an envelope moves to dead-letter and `OnFailed` is published. Without a management API, these envelopes are stuck permanently until `ResetStoreAsync()` wipes everything. This issue adds surgical control: requeue individual items for another retry attempt, or dismiss them permanently.
+An envelope the server refuses — a `4xx` other than 408 or 429 — moves to dead-letter and `OnFailed` is published. (Until the [ADR 0004](../docs/decisions/0004-default-to-removal.md) audit this also happened when a retry budget ran out; there is no budget now, so a server refusal is the only route in.) Without a management API, these envelopes are stuck permanently until `ResetStoreAsync()` wipes everything. This issue adds surgical control: requeue individual items — which now means "the reason it was refused has been dealt with, try again" rather than "give it more attempts" — or dismiss them permanently.
 
 ## `IHyperwyc` Extensions
 

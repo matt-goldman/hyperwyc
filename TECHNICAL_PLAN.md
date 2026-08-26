@@ -392,9 +392,9 @@ application is not running, so an outcome delivered only as an event is one nobo
 Consequently everything on it must serialise, which is why transport failures carry
 `string? Error` rather than an `Exception`.
 
-`Kind` describes what happened (`Succeeded`, `Rejected`, `TransientFailure`, `TransportFailure`);
-`IsFinal` describes what Hyperwyc will do next. Together they separate a server rejection from an
-exhausted retry budget. Response bodies are captured as `byte[]` up to
+`Kind` describes what happened, and says on its own whether Hyperwyc is finished:
+`Succeeded` and `Rejected` are final, `TransientFailure` and `TransportFailure` leave the
+envelope in the outbox for the next flush. Response bodies are captured as `byte[]` up to
 `MaxOutcomeBodyBytes` (16 KB default), clipped with `BodyTruncated` rather than dropped, read
 from the stream so an oversized body is never fully buffered.
 
