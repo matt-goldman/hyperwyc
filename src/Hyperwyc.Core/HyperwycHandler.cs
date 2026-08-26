@@ -270,7 +270,11 @@ public sealed class HyperwycHandler : DelegatingHandler
         var response = new HttpResponseMessage((System.Net.HttpStatusCode)cached.StatusCode);
 
         if (cached.Body is not null)
-            response.Content = new StringContent(cached.Body);
+        {
+            // ByteArrayContent adds no Content-Type of its own, so the captured response
+            // headers below are the only source — which is what keeps an image an image.
+            response.Content = new ByteArrayContent(cached.Body);
+        }
 
         foreach (var (key, value) in cached.Headers)
         {

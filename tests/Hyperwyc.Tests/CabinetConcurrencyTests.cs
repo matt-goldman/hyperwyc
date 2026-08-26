@@ -37,7 +37,7 @@ public sealed class CabinetConcurrencyTests : IDisposable
         Response = new CachedResponse
         {
             StatusCode = 200,
-            Body = "[]",
+            Body = "[]"u8.ToArray(),
             CachedAt = DateTimeOffset.UtcNow,
         },
     };

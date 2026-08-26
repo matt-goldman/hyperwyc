@@ -53,11 +53,11 @@ public class CabinetSyncStoreTests : IDisposable
         await _store.UpsertAsync(envelope);
 
         // Replace the response and upsert again.
-        envelope.Response = new CachedResponse { StatusCode = 200, Body = "updated", CachedAt = DateTimeOffset.UtcNow };
+        envelope.Response = new CachedResponse { StatusCode = 200, Body = "updated"u8.ToArray(), CachedAt = DateTimeOffset.UtcNow };
         await _store.UpsertAsync(envelope);
 
         var result = await _store.GetCachedResponseAsync("https://example.com/api/items");
-        Assert.Equal("updated", result!.Response!.Body);
+        Assert.Equal("updated", result!.Response!.GetBodyAsText());
     }
 
     [Fact]
@@ -210,8 +210,54 @@ public class CabinetSyncStoreTests : IDisposable
             Response = new CachedResponse
             {
                 StatusCode = 200,
-                Body = "{}",
+                Body = "{}"u8.ToArray(),
                 CachedAt = DateTimeOffset.UtcNow,
             },
         };
+
+    // -------------------------------------------------------------------------
+    // Binary bodies (issue #25)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task BinaryRequestBody_SurvivesTheStore()
+    {
+        // Cabinet serialises through System.Text.Json, which encodes byte[] as base64 — but
+        // that is worth pinning rather than assuming, since it is the layer between an
+        // in-memory byte[] and the bytes actually going back on the wire.
+        byte[] payload = [0x89, 0x50, 0x4E, 0x47, 0x00, 0x80, 0x81, 0xFF, 0xFE, 0x00, 0x01];
+
+        var envelope = new Envelope
+        {
+            Url = "https://example.com/api/assets",
+            Method = "POST",
+            RequestBody = payload,
+        };
+        await _store.UpsertAsync(envelope);
+
+        var restored = Assert.Single(await _store.GetPendingOutboxAsync());
+        Assert.Equal(payload, restored.RequestBody);
+    }
+
+    [Fact]
+    public async Task BinaryResponseBody_SurvivesTheStore()
+    {
+        byte[] payload = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x80, 0x00, 0xFD];
+
+        var envelope = new Envelope { Url = "https://example.com/api/logo", Method = "GET" };
+        envelope.IsSynced = true;
+        envelope.Response = new CachedResponse
+        {
+            StatusCode = 200,
+            Headers = new Dictionary<string, string> { ["Content-Type"] = "image/jpeg" },
+            Body = payload,
+            CachedAt = DateTimeOffset.UtcNow,
+        };
+        await _store.UpsertAsync(envelope);
+
+        var restored = await _store.GetCachedResponseAsync("https://example.com/api/logo");
+
+        Assert.Equal(payload, restored!.Response!.Body);
+        Assert.Equal("image/jpeg", restored.Response.Headers["Content-Type"]);
+    }
 }

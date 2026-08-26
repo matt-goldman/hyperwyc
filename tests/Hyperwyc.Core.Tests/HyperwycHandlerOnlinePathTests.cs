@@ -44,7 +44,7 @@ public class HyperwycHandlerOnlinePathTests
         envelope.Response = new CachedResponse
         {
             StatusCode = statusCode,
-            Body = body,
+            Body = System.Text.Encoding.UTF8.GetBytes(body),
             CachedAt = DateTimeOffset.UtcNow,
         };
         envelope.IsSynced = true; // cached responses are already synced

@@ -52,10 +52,15 @@ public sealed class Envelope
     public Dictionary<string, string> RequestHeaders { get; init; }
 
     /// <summary>
-    /// The serialised request body, or <c>null</c> for bodyless requests.
-    /// Binary bodies are out of scope for v0.1; string representation only.
+    /// The request body as raw bytes, or <see langword="null"/> for bodyless requests.
     /// </summary>
-    public string? RequestBody { get; init; }
+    /// <remarks>
+    /// Bytes rather than a string because a body is not necessarily text. Reading through
+    /// <c>ReadAsStringAsync</c> decodes as UTF-8 and re-encodes on replay, which silently
+    /// corrupts anything that is not valid UTF-8 text — a PNG upload, protobuf, a gzip-encoded
+    /// payload. <see cref="GetRequestBodyAsText"/> covers the common case. See issue #25.
+    /// </remarks>
+    public byte[]? RequestBody { get; init; }
 
     /// <summary>
     /// Indicates whether the request has been successfully synchronised
@@ -124,10 +129,10 @@ public sealed class Envelope
 
         var headers = FlattenHeaders(request.Headers);
 
-        string? body = null;
+        byte[]? body = null;
         if (request.Content is not null)
         {
-            body = request.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            body = request.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
             foreach (var (key, value) in FlattenHeaders(request.Content.Headers))
                 headers[key] = value;
         }
@@ -178,10 +183,10 @@ public sealed class Envelope
 
         var responseHeaders = FlattenHeaders(response.Headers);
 
-        string? responseBody = null;
+        byte[]? responseBody = null;
         if (response.Content is not null)
         {
-            responseBody = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            responseBody = response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
             foreach (var (key, value) in FlattenHeaders(response.Content.Headers))
                 responseHeaders[key] = value;
         }
@@ -197,6 +202,17 @@ public sealed class Envelope
 
         return envelope;
     }
+
+    /// <summary>
+    /// <see cref="RequestBody"/> decoded as UTF-8, or <see langword="null"/> if there is no body.
+    /// </summary>
+    /// <remarks>
+    /// For diagnostics and for callers who know the route is textual. Assumes UTF-8 rather than
+    /// consulting the captured <c>Content-Type</c>; a caller needing anything else has the raw
+    /// bytes.
+    /// </remarks>
+    public string? GetRequestBodyAsText() =>
+        RequestBody is null ? null : System.Text.Encoding.UTF8.GetString(RequestBody);
 
     private static Dictionary<string, string> FlattenHeaders(HttpHeaders headers) =>
         headers.ToDictionary(

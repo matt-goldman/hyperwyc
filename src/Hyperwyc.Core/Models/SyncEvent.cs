@@ -28,8 +28,10 @@ namespace Hyperwyc.Models;
 /// Applications correlating against their own records want <paramref name="CorrelationId"/>.
 /// </param>
 /// <param name="RequestBody">
-/// The body of the queued request, so a consumer can deserialise its own payload back out
-/// without having kept a copy. <see langword="null"/> for bodyless requests.
+/// The body of the queued request as raw bytes, so a consumer can deserialise its own payload
+/// back out without having kept a copy. <see langword="null"/> for bodyless requests. Bytes
+/// rather than a string for the same reason as <see cref="Envelope.RequestBody"/> — a body is
+/// not necessarily text.
 /// </param>
 /// <param name="Outcome">
 /// What the server or network said, for events that report a delivery attempt
@@ -45,5 +47,17 @@ public record SyncEvent(
     DateTimeOffset Timestamp,
     string? CorrelationId = null,
     string? RequestId = null,
-    string? RequestBody = null,
-    SyncOutcome? Outcome = null);
+    byte[]? RequestBody = null,
+    SyncOutcome? Outcome = null)
+{
+    /// <summary>
+    /// <see cref="RequestBody"/> decoded as UTF-8, or <see langword="null"/> if there is no body.
+    /// </summary>
+    /// <remarks>
+    /// The convenience for a textual route, matching <see cref="Envelope.GetRequestBodyAsText"/>,
+    /// <see cref="CachedResponse.GetBodyAsText"/> and <see cref="SyncOutcome.GetBodyAsText"/>.
+    /// A caller whose payload is not text has the raw bytes.
+    /// </remarks>
+    public string? GetRequestBodyAsText() =>
+        RequestBody is null ? null : System.Text.Encoding.UTF8.GetString(RequestBody);
+}

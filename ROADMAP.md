@@ -54,7 +54,7 @@ to its backlog item where one exists.
 
 Everything else on the backlog can be worked around by a consumer. These two cannot.
 
-- [ ] Binary request and response bodies ([25](Backlog/25-binary-request-response-bodies.md)) — bodies round-trip through `ReadAsStringAsync`, so file uploads, image downloads and protobuf are silently corrupted. Also a breaking change to the persisted shape, so it must land before there are users
+- [x] Binary request and response bodies ([25](Backlog/Done/25-binary-request-response-bodies.md)) — bodies are `byte[]` end to end, so file uploads, image downloads, protobuf and gzip round-trip byte for byte instead of being silently corrupted by a UTF-8 decode
 - [ ] Fine-grained per-route policies ([22](Backlog/22-v1-per-route-policies.md)) — a single global policy cannot express "cache the catalogue for a day, never cache payments", which the README already promises
 
 ---
@@ -115,5 +115,5 @@ Explored in earlier planning and intentionally excluded from Hyperwyc's scope:
 | Conflict resolution (`IConflictResolver`) | Hyperwyc is designed for low-conflict scenarios; resolution is the responsibility of the backend or the consuming application |
 | Entity/table synchronisation | Hyperwyc operates at the transport layer, not the data model layer |
 | Auth / token management | Auth is the responsibility of a separate `DelegatingHandler` in the pipeline |
-| Streaming request/response bodies | Buffered byte arrays only; chunked and indeterminate-length payloads are a follow-up if demand emerges (see [25](Backlog/25-binary-request-response-bodies.md)) |
+| Streaming request/response bodies | Buffered byte arrays only; chunked and indeterminate-length payloads are a follow-up if demand emerges (see [25](Backlog/Done/25-binary-request-response-bodies.md)) |
 | Runtime type inference for offline response shaping | Reflection over caller types is brittle, AOT-hostile and a layering violation (see [26](Backlog/26-v2-typed-response-shaping.md)) |

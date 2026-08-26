@@ -85,7 +85,7 @@ and is called out below rather than solved here.
 ## Notes
 
 - Found while auditing Hyperwyc against Service Worker and Workbox for gaps.
-- Best landed with [issue 25](25-binary-request-response-bodies.md), which already changes the
+- Best landed with [issue 25](Done/25-binary-request-response-bodies.md), which already changes the
   persisted shape. Doing them together is still worth it — one pass over the storage code rather
   than two — but not for migration reasons: nothing is released, so changing the shape is free.
 - This is a foot-gun rather than a defect in shipped behaviour: nothing is wrong until a consumer

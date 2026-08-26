@@ -338,14 +338,31 @@ Each request/response pair is persisted as a single document:
 
 #### Body Handling and Size Limits
 
-Request and response bodies are stored as **strings**. Binary payloads — file uploads, image
-downloads, protobuf — are read through `ReadAsStringAsync` and will not round-trip correctly;
-this is the headline limitation of the current release, tracked in
-[issue 25](Backlog/25-binary-request-response-bodies.md).
+Request and response bodies are stored as **`byte[]`** — `Envelope.RequestBody` and
+`CachedResponse.Body` — read through `ReadAsByteArrayAsync` and rehydrated as `ByteArrayContent`.
+File uploads, image downloads, protobuf and gzip-encoded payloads round-trip byte for byte
+([issue 25](Backlog/Done/25-binary-request-response-bodies.md)).
 
-`HyperwycOptions.MaxCachedResponseBodyBytes` (default 524,288 — 512 KB) caps response
-caching. Responses exceeding the limit are returned to the caller but not stored. Outbound
-requests are queued regardless of body size.
+`ByteArrayContent` is deliberate on both paths: unlike `StringContent` it stamps no
+`Content-Type` of its own, so the captured headers are the single source of truth for the media
+type. A `StringContent` default was what made every replayed JSON write go out as `text/plain`.
+
+For textual routes, `GetRequestBodyAsText()` on `Envelope`, `GetBodyAsText()` on
+`CachedResponse` and `SyncOutcome`, and `GetRequestBodyAsText()` on `SyncEvent` decode as UTF-8.
+They are conveniences for diagnostics and for callers who know their route is text; nothing
+inside Hyperwyc uses them, because nothing inside Hyperwyc is entitled to assume a body is text.
+
+**Streaming is out of scope.** Bodies are buffered in full before being stored, so an
+indeterminate-length upload or a very large download is materialised in memory. That bound is
+what `MaxCachedResponseBodyBytes` exists for on the read path; there is no equivalent cap on
+queued writes.
+
+`HyperwycOptions.MaxCachedResponseBodyBytes` (default 524,288 — 512 KB) caps response caching.
+Responses exceeding the limit are returned to the caller but not stored. The default was
+reconsidered when bodies became binary and deliberately left alone: binary payloads are larger,
+but raising the cap invites unbounded store growth while cache eviction
+([issue 42](Backlog/42-cache-eviction.md)) does not exist, and a consumer who wants to cache
+large binaries can raise it themselves. Outbound requests are queued regardless of body size.
 
 ---
 

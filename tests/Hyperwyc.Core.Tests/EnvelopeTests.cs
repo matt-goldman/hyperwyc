@@ -67,7 +67,7 @@ public class EnvelopeTests
 
         var envelope = Envelope.ForRequest(request);
 
-        Assert.Equal(json, envelope.RequestBody);
+        Assert.Equal(json, envelope.GetRequestBodyAsText());
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public class EnvelopeTests
 
         Assert.NotNull(envelope.Response);
         Assert.Equal(200, envelope.Response.StatusCode);
-        Assert.Equal("""{"id":1}""", envelope.Response.Body);
+        Assert.Equal("""{"id":1}""", envelope.Response.GetBodyAsText());
         Assert.True(DateTimeOffset.UtcNow - envelope.Response.CachedAt < TimeSpan.FromSeconds(5));
     }
 

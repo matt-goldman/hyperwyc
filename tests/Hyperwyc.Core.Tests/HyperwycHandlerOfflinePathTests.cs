@@ -36,7 +36,7 @@ public class HyperwycHandlerOfflinePathTests
         envelope.Response = new CachedResponse
         {
             StatusCode = 200,
-            Body = body,
+            Body = System.Text.Encoding.UTF8.GetBytes(body),
             CachedAt = DateTimeOffset.UtcNow,
         };
         envelope.IsSynced = true; // cached responses are already synced; must not show in outbox

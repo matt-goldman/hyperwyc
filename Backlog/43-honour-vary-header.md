@@ -27,7 +27,7 @@ one.
 `Accept` is the other common trigger — an endpoint serving both JSON and CSV, or versioned media
 types like `application/vnd.example.v2+json`, which is a widespread API-versioning convention.
 `Accept-Encoding` matters too once bodies are stored as bytes
-([issue 25](25-binary-request-response-bodies.md)), since a gzip-encoded body served to a client
+([issue 25](Done/25-binary-request-response-bodies.md)), since a gzip-encoded body served to a client
 that did not ask for gzip is not merely wrong, it is unreadable.
 
 ## Prior art
@@ -84,5 +84,5 @@ would now be clearing several variants at once — which happens to be correct.
 - Found while auditing Hyperwyc against Service Worker and Workbox for gaps.
 - The failure mode is silent and looks like a server fault, which is what makes it worth fixing
   before there are users rather than after a confusing bug report.
-- Best sequenced with [issue 25](25-binary-request-response-bodies.md): both change how a cached
+- Best sequenced with [issue 25](Done/25-binary-request-response-bodies.md): both change how a cached
   entry is keyed and stored, and both touch every `ISyncStore` implementation.

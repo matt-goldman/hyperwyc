@@ -447,16 +447,11 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         // a no-op while Content is still null. Setting the body afterwards is what dropped the
         // media type on every replay, so a queued application/json write went back out as
         // text/plain and the server answered 415.
+        // ByteArrayContent, so the bytes go back out exactly as they came in, and — unlike
+        // StringContent — it stamps no Content-Type of its own, leaving the captured headers
+        // below as the single source of truth.
         if (envelope.RequestBody is not null)
-        {
-            var content = new StringContent(envelope.RequestBody);
-
-            // StringContent stamps "text/plain; charset=utf-8" of its own accord. The captured
-            // headers are the truth, and TryAddWithoutValidation appends rather than replaces,
-            // so this has to be cleared or the replay carries both.
-            content.Headers.ContentType = null;
-            request.Content = content;
-        }
+            request.Content = new ByteArrayContent(envelope.RequestBody);
 
         // Replayed verbatim, including anything the application set for its own
         // duplicate suppression. Hyperwyc adds nothing of its own.

@@ -42,7 +42,7 @@ public class ResponseCacheReadTests
         envelope.Response = new CachedResponse
         {
             StatusCode = 200,
-            Body = body,
+            Body = System.Text.Encoding.UTF8.GetBytes(body),
             Headers = headers,
             CachedAt = DateTimeOffset.UtcNow,
         };
@@ -160,7 +160,7 @@ public class ResponseCacheReadTests
 
         var cached = await store.GetCachedResponseAsync("https://example.com/api/items/1");
         Assert.NotNull(cached);
-        Assert.Equal("{\"id\":1}", cached!.Response!.Body);
+        Assert.Equal("{\"id\":1}", cached!.Response!.GetBodyAsText());
     }
 
     // Non-2xx: not cached

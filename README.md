@@ -177,7 +177,7 @@ to `null` and your existing handling takes over.
 
 ### Current limitations
 
-- **Text bodies only.** v0.1 handles string request and response bodies. Binary payloads (file uploads, image downloads, protobuf, etc.) are on the roadmap.
+- **Buffered bodies only.** Request and response bodies are read into memory in full before being queued or cached. Binary payloads round-trip byte for byte — file uploads, image downloads, protobuf, gzip — but streaming uploads and downloads of indeterminate length are not supported.
 
 ---
 

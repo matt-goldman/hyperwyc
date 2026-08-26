@@ -88,7 +88,7 @@ public class DeferredOutcomeTests
 
         var queued = Assert.Single(events, e => e.Type == SyncEventType.OnQueued);
         Assert.Equal("sale-42", queued.CorrelationId);
-        Assert.Equal("""{"quantity":60}""", queued.RequestBody);
+        Assert.Equal("""{"quantity":60}""", queued.GetRequestBodyAsText());
         Assert.NotNull(queued.RequestId);
         Assert.Null(queued.Outcome);
     }
@@ -355,7 +355,7 @@ public class DeferredOutcomeTests
             Url = Url,
             Method = "POST",
             CorrelationId = correlationId,
-            RequestBody = body,
+            RequestBody = body is null ? null : System.Text.Encoding.UTF8.GetBytes(body),
         };
 
     private static HttpRequestMessage PostTo(string url, string? correlationId, string body = "{}")

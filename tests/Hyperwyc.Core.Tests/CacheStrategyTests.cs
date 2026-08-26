@@ -38,7 +38,7 @@ public class CacheStrategyTests
         envelope.Response = new CachedResponse
         {
             StatusCode = 200,
-            Body = body,
+            Body = System.Text.Encoding.UTF8.GetBytes(body),
             CachedAt = DateTimeOffset.UtcNow,
         };
         envelope.IsSynced = true;
@@ -221,7 +221,7 @@ public class CacheStrategyTests
 
         var cached = await store.GetCachedResponseAsync(Url);
         Assert.NotNull(cached);
-        Assert.Equal("network", cached!.Response!.Body);
+        Assert.Equal("network", cached!.Response!.GetBodyAsText());
     }
 
     // -------------------------------------------------------------------------

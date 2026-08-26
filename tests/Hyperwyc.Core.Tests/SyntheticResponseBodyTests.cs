@@ -124,7 +124,7 @@ public class SyntheticResponseBodyTests
         envelope.Response = new CachedResponse
         {
             StatusCode = 200,
-            Body = """[{"id":1,"name":"Bucket Tooth"}]""",
+            Body = """[{"id":1,"name":"Bucket Tooth"}]"""u8.ToArray(),
             CachedAt = DateTimeOffset.UtcNow,
         };
         envelope.IsSynced = true;

@@ -205,7 +205,7 @@ keeps its place, so no lifecycle transition has occurred and no existing event t
 persisted outcome is what lets a diagnostics view explain an outbox that will not drain. It does
 not charge the retry budget, per issue 38, so `AttemptCount` is unchanged by it.
 
-**The outcome body is `byte[]` ahead of [issue 25](../25-binary-request-response-bodies.md).**
+**The outcome body is `byte[]` ahead of [issue 25](25-binary-request-response-bodies.md).**
 Envelope bodies are still strings until 25 lands, so this is briefly inconsistent — but it is the
 direction everything moves in, and it is one declaration now against a second migration later.
 `GetBodyAsText()` covers the common case. 25 was considered for promotion ahead of this and
@@ -263,7 +263,7 @@ correlation), one assumption checked and found to be ahead of the model. Worth t
 ## Still open
 
 - **Binary bodies.** `Envelope.RequestBody` and `CachedResponse.Body` remain strings until
-  [issue 25](../25-binary-request-response-bodies.md). `SyncOutcome.Body` is already `byte[]`.
+  [issue 25](25-binary-request-response-bodies.md). `SyncOutcome.Body` is already `byte[]`.
 - **No read path for dead-lettered envelopes.** The failure detail is persisted and correct, but
   nothing can enumerate it yet; that is [issue 23](../23-v1-diagnostics-view.md), which should now
   surface `LastOutcome` on its `DeadLetteredItem`.
@@ -289,6 +289,6 @@ rather than an argument — Hyperwyc does not require anyone to model their UI a
 - P0 rather than v1.0: this is a completeness gap in the core proposition rather than an
   enhancement. A library that accepts responsibility for delivering a write later, and then
   cannot tell you it did not, is incomplete regardless of how narrow its scope is.
-- Interacts with [issue 25](../25-binary-request-response-bodies.md): response bodies are strings
+- Interacts with [issue 25](25-binary-request-response-bodies.md): response bodies are strings
   today, so a binary error body would be mangled here in the same way. Worth landing 25 first, or
   at least designing the outcome type against `byte[]` from the start.
