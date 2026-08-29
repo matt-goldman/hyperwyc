@@ -19,7 +19,8 @@
             <CollectionView ItemsSource="{Binding Products}"
                             SelectionMode="Single"
                             SelectionChangedCommand="{Binding SellProductCommand}"
-                            SelectedItem="{Binding SelectedProduct}">
+                            SelectedItem="{Binding SelectedProduct}"
+                            VerticalOptions="Fill">
                 <CollectionView.ItemTemplate>
                     <DataTemplate>
                         <Border StrokeShape="RoundRectangle 20"

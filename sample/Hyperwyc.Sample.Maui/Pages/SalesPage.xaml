@@ -17,7 +17,8 @@
                    HorizontalTextAlignment="Center"
                    Margin="20"/>
 
-            <CollectionView ItemsSource="{Binding Sales}">
+            <CollectionView ItemsSource="{Binding Sales}"
+                            VerticalOptions="Fill">
                 <CollectionView.ItemTemplate>
                     <DataTemplate>
                         <Border StrokeShape="RoundRectangle 20"

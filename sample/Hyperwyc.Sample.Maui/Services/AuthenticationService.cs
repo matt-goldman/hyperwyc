@@ -28,6 +28,13 @@ public class AuthenticationService(
         public required string RefreshToken { get; set; }
     }
 
+    public class LoginStateEventArgs : EventArgs
+    {
+        public bool IsLoggedIn { get; set; }
+    }
+
+    public EventHandler<LoginStateEventArgs>? LoginStateChanged;
+
     public async Task RegisterAsync(string email, string password)
     {
         var result = await client.PostAsJsonAsync("/register", new { email, password });
@@ -52,6 +59,8 @@ public class AuthenticationService(
         var storedTokenJson = JsonSerializer.Serialize(storedToken);
 
         await SecureStorage.Default.SetAsync("token", storedTokenJson);
+
+        LoginStateChanged?.Invoke(this, new LoginStateEventArgs { IsLoggedIn = true });
     }
 
     public async Task<string?> GetTokenAsync()
@@ -88,6 +97,9 @@ public class AuthenticationService(
         await hyperwyc.ResetStoreAsync();
 
         SecureStorage.Default.Remove("token");
+
+        LoginStateChanged?.Invoke(this, new LoginStateEventArgs { IsLoggedIn = false });
+        await Application.Current!.Windows[0]!.Page!.DisplayAlertAsync("Logout", "You have been logged out.", "OK");
     }
 
     private async Task RefreshTokenAsync()

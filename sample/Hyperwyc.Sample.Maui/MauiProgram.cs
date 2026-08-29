@@ -1,4 +1,5 @@
-﻿using Hyperwyc.Interfaces;
+﻿using CommunityToolkit.Maui;
+using Hyperwyc.Interfaces;
 using Hyperwyc.Sample.Maui.Pages;
 using Hyperwyc.Sample.Maui.Services;
 using Hyperwyc.Sample.Maui.ViewModels;
@@ -20,7 +21,8 @@ public static class MauiProgram
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
                 fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
             })
-            .UseSmartNavigation();
+            .UseSmartNavigation()
+            .UseMauiCommunityToolkit();
 
         builder.AddServiceDefaults();
 
@@ -70,11 +72,15 @@ public static class MauiProgram
         builder.Services.AddSingleton<LoginViewModel>();
         builder.Services.AddSingleton<NewSaleViewModel>();
         builder.Services.AddSingleton<SalesViewModel>();
+        builder.Services.AddSingleton<LiveEventsViewModel>();
 
         builder.Services.AddSingleton<CataloguePage>();
         builder.Services.AddSingleton<LoginPage>();
         builder.Services.AddSingleton<NewSalePage>();
         builder.Services.AddSingleton<SalesPage>();
+        builder.Services.AddSingleton<LiveEventsPage>();
+
+        builder.Services.AddSingleton<AppShell>();
 
 #if DEBUG
         builder.Logging.AddDebug();

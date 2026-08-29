@@ -66,9 +66,10 @@
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="CommunityToolkit.Maui" Version="15.0.1" />
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-        <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.80" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.100" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.11" />
         <PackageReference Include="Plugin.Maui.SmartNavigation" Version="3.0.7" />
     </ItemGroup>
 

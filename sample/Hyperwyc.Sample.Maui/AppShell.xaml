@@ -18,7 +18,14 @@
             Route="Sales" />
     </FlyoutItem>
 
+    <FlyoutItem Title="Admin">
+        <ShellContent Title="Live Events"
+                      ContentTemplate="{DataTemplate pages:LiveEventsPage}"
+                      Route="Live"/>
+    </FlyoutItem>
+
     <MenuItem Text="Login"
-              Clicked="LoginMenuItem_OnClicked"/>
+              Clicked="LoginMenuItem_OnClicked"
+              x:Name="LoginMenuItem"/>
 
 </Shell>
