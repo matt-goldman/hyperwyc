@@ -14,6 +14,33 @@ to an empty store, and stop there. Do not throw, do not delete, do not attempt r
 ⬜ Open. Filed 2026-08-23. The question predates
 [issue 48](48-exclude-store-from-os-backup.md); 48 only supplied a likely trigger.
 
+## It has already happened once, for real
+
+Recorded because this item was written about decryption and the first real instance was not.
+
+[Issue 25](Done/25-binary-request-response-bodies.md) changed `CachedResponse.Body` from `string`
+to `byte[]`. The sample, running against a store written by the previous build, threw on its
+first read:
+
+```
+JsonException: The JSON value could not be converted to System.Byte[]. Path: $[0].Response.Body
+  ---> FormatException: Cannot decode JSON text that is not encoded as valid Base64 to bytes.
+```
+
+That surfaced out of `GetFromJsonAsync`, so it read as an HTTP bug and the change was rolled
+back before the cause was found. Under this item's decision it would have been a non-event: log
+it, degrade to an empty store, refetch, carry on — and the store would have rewritten itself in
+the new shape.
+
+Two consequences for the design here:
+
+- **The catch is not `CryptographicException`.** It is "the store could not be read", which
+  includes `JsonException` from a shape change and whatever a future store implementation
+  throws. Catching only the crypto case would have missed this entirely.
+- **The `ResetAsync` criterion is not hypothetical.** `CabinetSyncStore.ResetAsync` enumerates
+  through `GetAllAsync`, so it deserialises before it deletes. On this failure the remedy this
+  item recommends is broken by the same thing that broke the app.
+
 ## What happens today
 
 Nothing catches it. `CabinetSyncStore` calls `RecordSet<Envelope>.GetAllAsync`, Cabinet decrypts

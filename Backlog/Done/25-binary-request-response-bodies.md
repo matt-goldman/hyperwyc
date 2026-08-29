@@ -56,6 +56,42 @@ It stays at 512 KB. Raising it invites unbounded store growth while cache evicti
 binaries can raise it themselves. Adding headroom nobody asked for, against a store that has no
 eviction, is the move [ADR 0004](../../docs/decisions/0004-default-to-removal.md) exists to stop.
 
+## Cabinet attachments were considered, and cannot be used yet
+
+Bytes land in the record as base64, which System.Text.Json does automatically for `byte[]`. That
+is 33% bloat on a store where every write rewrites the whole record set
+([issue 52](../52-store-rewrites-whole-set-per-write.md)) — a 500 KB image becomes 667 KB
+rewritten on every cache write. Cabinet has an attachments feature that would fix exactly this,
+storing the body as a separate encrypted file instead. It was investigated and rejected for now.
+
+There are two attachment patterns and neither works for this:
+
+**`SaveAsync(id, data, attachments)`** writes encrypted files to `attachments/`, but Cabinet has
+no way to read one back. `IOfflineStore` exposes `SaveAsync`, `LoadAsync<T>`, `DeleteAsync` and
+`FindAsync`, and nothing in the library opens that directory except `DeleteAsync`'s cleanup.
+Cabinet's own `SaveAsync_WithAttachments_ShouldSaveAttachmentFiles` asserts the file exists on
+disk and that its bytes are encrypted; it never reads one back through the library.
+
+**`FileAttachment` as a record property** — the pattern Cabinet's demo documents as "Cabinet
+handles it automatically" — throws on serialisation, before any round-trip question arises:
+
+```
+InvalidOperationException: Timeouts are not supported on this stream.
+```
+
+`FileAttachment` wraps a `Stream` with no converter and no `[JsonIgnore]`, so System.Text.Json
+walks the stream's public properties and `ReadTimeout` throws on a `MemoryStream`.
+
+Both are Cabinet bugs on their own terms rather than gaps created by Hyperwyc's needs, and are
+worth raising there. A third piece — per-record attachments with lifecycle cleanup through
+`RecordSet` — genuinely would be reshaping Cabinet to suit Hyperwyc: `RecordSet` saves the whole
+set as one document keyed on the type name, and `RemoveAsync` only re-saves the set, so a
+per-envelope attachment would orphan on delete. That one should wait for a second consumer to
+want it.
+
+Revisit when Cabinet can read an attachment back. Until then this is a storage-location
+optimisation, not a correctness gap — the bytes are already right.
+
 ## Notes
 
 - This changes the persisted shape of `Envelope` and `CachedResponse`, and that costs nothing:
@@ -63,4 +99,17 @@ eviction, is the move [ADR 0004](../../docs/decisions/0004-default-to-removal.md
   tests. No migration, no documented reset, no compatibility shim. Change the shape and move on.
 - Consider whether to offer a convenience string view (e.g. `Envelope.GetRequestBodyAsString()`) for callers/diagnostics that previously relied on string content.
 - Streaming uploads/downloads (chunked, indeterminate length) are explicitly out of scope for this issue — buffered byte arrays only. Streaming can be a follow-up if demand emerges.
+- **A stale store on a developer device is not the same as "no consumers".** This change was
+  written, rolled back and restored. The rollback was triggered by
+  `JsonException: The JSON value could not be converted to System.Byte[]. Path: $[0].Response.Body`
+  with an inner `FormatException: Cannot decode JSON text that is not encoded as valid Base64`
+  — which is not an HTTP failure at all. It is Cabinet deserialising a store written by the
+  *previous* build, where `Body` was a JSON string rather than base64. The fix is to delete and
+  reinstall the app.
+
+  The reasoning that migration was unnecessary because nothing is released was right about other
+  consumers and wrong about the one consumer that exists: the developer, with a live store,
+  mid-debug. Any future change to the persisted shape — [22](../22-v1-per-route-policies.md) will
+  be one — needs the same reinstall, until
+  [issue 49](../49-unreadable-store-recovery.md) makes an unreadable store self-healing.
 - **Decision:** Migration and breaking-change mitigation are NOT required. Current version is v <1, and this is in scope for v1. As this library is preview, breaking changes are to be expected and support is not required.

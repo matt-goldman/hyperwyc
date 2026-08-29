@@ -148,13 +148,13 @@ public sealed class Envelope
 
         return new Envelope
         {
-            Id = id,
-            CorrelationId = correlationId,
-            Url = request.RequestUri?.ToString() ?? string.Empty,
-            Method = request.Method.Method,
-            ClientName = clientName,
-            RequestHeaders = headers,
-            RequestBody = body,
+            Id              = id,
+            CorrelationId   = correlationId,
+            Url             = request.RequestUri?.ToString() ?? string.Empty,
+            Method          = request.Method.Method,
+            ClientName      = clientName,
+            RequestHeaders  = headers,
+            RequestBody     = body,
         };
     }
 
@@ -183,21 +183,18 @@ public sealed class Envelope
 
         var responseHeaders = FlattenHeaders(response.Headers);
 
-        byte[]? responseBody = null;
-        if (response.Content is not null)
-        {
-            responseBody = response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
-            foreach (var (key, value) in FlattenHeaders(response.Content.Headers))
-                responseHeaders[key] = value;
-        }
+        var responseBody = response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+
+        foreach (var (key, value) in FlattenHeaders(response.Content.Headers))
+            responseHeaders[key] = value;
 
         envelope.IsSynced = true;
         envelope.Response = new CachedResponse
         {
-            StatusCode = (int)response.StatusCode,
-            Headers = responseHeaders,
-            Body = responseBody,
-            CachedAt = DateTimeOffset.UtcNow,
+            StatusCode  = (int)response.StatusCode,
+            Headers     = responseHeaders,
+            Body        = responseBody,
+            CachedAt    = DateTimeOffset.UtcNow,
         };
 
         return envelope;

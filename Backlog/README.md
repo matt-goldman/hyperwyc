@@ -129,10 +129,14 @@ request grouping / bulk sync, and GraphQL support.
   before filing a feature.
 - **Public surface: start internal, widen on demand.** Pre-1.0 anything can be made public
   later; nothing can be taken back. See [36](Done/36-public-surface.md).
-- **Persisted-format changes are free, for now.** Nothing is published and the only consumers are
-  the sample and the tests, so no item needs a migration, a compatibility shim or a documented
-  reset-on-upgrade. Revisit this line the day the first package ships; until then, treat any item
-  proposing migration work as over-scoped.
+- **Persisted-format changes are free, for now — but delete and reinstall the sample app.**
+  Nothing is published, so no item needs a migration, a compatibility shim or a
+  reset-on-upgrade. What that reasoning missed once already
+  ([25](Done/25-binary-request-response-bodies.md)) is that a developer device *is* a consumer
+  with a live store: a shape change makes the old store undeserialisable and the app throws on
+  its first read, which looks like an unrelated HTTP bug. Reinstall after any shape change until
+  [49](49-unreadable-store-recovery.md) makes that self-healing. Revisit the whole line the day
+  the first package ships.
 - **The ADR 0004 audit (2026-08-25) removed all retry apparatus, `IStalenessEvaluator`,
   `OfflineResponsePolicy` and `SyncOutcome.Headers`.** No backlog item: the decision is in
   [ADR 0004](../docs/decisions/0004-default-to-removal.md), the detail is in TECHNICAL_PLAN, and
