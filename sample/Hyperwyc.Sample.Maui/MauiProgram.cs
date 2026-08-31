@@ -63,10 +63,12 @@ public static class MauiProgram
         .AddHyperwycHandler()
         .AddHttpMessageHandler<AuthHandler>();
 
-        builder.Services.AddHttpClient<AuthenticationService>(client =>
+        builder.Services.AddHttpClient(nameof(AuthenticationService), client =>
         {
             client.BaseAddress = new Uri(apiAddress);
         });
+
+        builder.Services.AddSingleton<AuthenticationService>();
 
         builder.Services.AddSingleton<CatalogueViewModel>();
         builder.Services.AddSingleton<LoginViewModel>();
@@ -79,8 +81,6 @@ public static class MauiProgram
         builder.Services.AddSingleton<NewSalePage>();
         builder.Services.AddSingleton<SalesPage>();
         builder.Services.AddSingleton<LiveEventsPage>();
-
-        builder.Services.AddSingleton<AppShell>();
 
 #if DEBUG
         builder.Logging.AddDebug();

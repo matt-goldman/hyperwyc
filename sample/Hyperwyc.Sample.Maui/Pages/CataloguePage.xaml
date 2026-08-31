@@ -45,7 +45,7 @@
                                            HorizontalTextAlignment="Center"
                                            Text="Price" />
 
-                                    <Label Text="{Binding Price, StringFormat='0:C'}"
+                                    <Label Text="{Binding Price, StringFormat='{0:C}'}"
                                            HorizontalOptions="Center"
                                            HorizontalTextAlignment="Center"/>
                                 </VerticalStackLayout>

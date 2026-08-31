@@ -1,11 +1,12 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Hyperwyc.Interfaces;
 using Hyperwyc.Sample.Maui.Services;
 using Shared;
 
 namespace Hyperwyc.Sample.Maui.ViewModels;
 
-public partial class NewSaleViewModel(SalesApiClient client, IConnectivity connectivity) : ObservableObject, IQueryAttributable
+public partial class NewSaleViewModel(SalesApiClient client, IConnectivityService connectivity) : ObservableObject, IQueryAttributable
 {
     [ObservableProperty]
     public partial bool IsLoading { get; set; }
@@ -52,7 +53,7 @@ public partial class NewSaleViewModel(SalesApiClient client, IConnectivity conne
             //       Need to update sync event response to alert when a sale failed after
             //       connectivity was restored.
 
-            var isValid = connectivity.NetworkAccess != NetworkAccess.Internet || ValidateSale(sale, result);
+            var isValid = !connectivity.IsConnected || ValidateSale(sale, result);
 
             var title = isValid ? "Sale Recorded" : "Sale Failed";
 

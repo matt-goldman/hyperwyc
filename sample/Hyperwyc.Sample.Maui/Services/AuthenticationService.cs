@@ -6,9 +6,11 @@ using Hyperwyc.Interfaces;
 namespace Hyperwyc.Sample.Maui.Services;
 
 public class AuthenticationService(
-    HttpClient client,
+    IHttpClientFactory clientFactory,
     IHyperwyc hyperwyc)
 {
+    private readonly HttpClient _client = clientFactory.CreateClient(nameof(AuthenticationService));
+
     private class LoginResponse
     {
         [JsonPropertyName("tokenType")]
@@ -33,17 +35,17 @@ public class AuthenticationService(
         public bool IsLoggedIn { get; set; }
     }
 
-    public EventHandler<LoginStateEventArgs>? LoginStateChanged;
+    public event EventHandler<LoginStateEventArgs>? LoginStateChanged;
 
     public async Task RegisterAsync(string email, string password)
     {
-        var result = await client.PostAsJsonAsync("/register", new { email, password });
+        var result = await _client.PostAsJsonAsync("/register", new { email, password });
         result.EnsureSuccessStatusCode();
     }
 
     public async Task LoginAsync(string email, string password)
     {
-        var result = await client.PostAsJsonAsync("/login", new { email, password });
+        var result = await _client.PostAsJsonAsync("/login", new { email, password });
 
         result.EnsureSuccessStatusCode();
 
@@ -111,7 +113,7 @@ public class AuthenticationService(
             return;
         }
 
-        var refreshResult = await client.PostAsJsonAsync("/refresh", new { refreshToken = storedToken.RefreshToken });
+        var refreshResult = await _client.PostAsJsonAsync("/refresh", new { refreshToken = storedToken.RefreshToken });
 
         refreshResult.EnsureSuccessStatusCode();
 
