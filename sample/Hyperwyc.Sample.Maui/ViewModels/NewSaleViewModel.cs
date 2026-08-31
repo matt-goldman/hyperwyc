@@ -5,7 +5,7 @@ using Shared;
 
 namespace Hyperwyc.Sample.Maui.ViewModels;
 
-public partial class NewSaleViewModel(SalesApiClient client) : ObservableObject, IQueryAttributable
+public partial class NewSaleViewModel(SalesApiClient client, IConnectivity connectivity) : ObservableObject, IQueryAttributable
 {
     [ObservableProperty]
     public partial bool IsLoading { get; set; }
@@ -45,13 +45,16 @@ public partial class NewSaleViewModel(SalesApiClient client) : ObservableObject,
 
             var result = await client.RecordSaleAsync(sale);
 
-            var isValid = ValidateSale(sale, result);
-
-            var title = isValid ? "Sale Recorded" : "Sale Failed";
-
             // TODO: this is wrong. Evaluate against created (api) vs accepted (hyperwyc).
             //       The API already returns the proper form as well as the object so we
             //       could keep this validation for created only. TBD.
+            //       For now branch on connectivity status.
+            //       Need to update sync event response to alert when a sale failed after
+            //       connectivity was restored.
+
+            var isValid = connectivity.NetworkAccess != NetworkAccess.Internet || ValidateSale(sale, result);
+
+            var title = isValid ? "Sale Recorded" : "Sale Failed";
 
             var message = isValid
                 ? $"Sale of {sale.Quantity} x {Product.Name} successfully recorded"

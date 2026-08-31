@@ -4,7 +4,8 @@
              xmlns:vm="clr-namespace:Hyperwyc.Sample.Maui.ViewModels"
              x:DataType="vm:LiveEventsViewModel"
              x:Class="Hyperwyc.Sample.Maui.Pages.LiveEventsPage">
- <VerticalStackLayout HorizontalOptions="Fill">
+ <VerticalStackLayout HorizontalOptions="Fill"
+                      Margin="10,50">
         <Label Text="Live Events Stream"
                FontSize="24"
                VerticalOptions="Center"
@@ -44,6 +45,7 @@
 
                             <Label Grid.Row="1"
                                    Grid.Column="1"
+                                   Grid.ColumnSpan="2"
                                    Text="{Binding Url}"/>
 
                             <Label Grid.Row="2"
