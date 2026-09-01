@@ -336,6 +336,24 @@ Each request/response pair is persisted as a single document:
 }
 ```
 
+#### Cache Entry Identity
+
+A cache envelope's `Id` is derived from the URL (`cache:{url}`), not generated. `ISyncStore.UpsertAsync`
+keys on `Id`, so a refetch **replaces** the stored response rather than adding a second envelope
+beside it.
+
+This was a defect until 2026-08-27. Cache envelopes were created with a fresh `Guid` like any
+other, so every refetch inserted, and `GetCachedResponseAsync`'s `FirstOrDefault` returned
+whichever the store enumerated first — in practice the oldest. The cache froze at the first
+response ever stored and never updated, however many times the application refetched, while the
+store grew by an unreadable envelope per refetch. Found in the sample: a sale recorded online
+updated the quantities on screen, then going offline showed the original ones again.
+
+The prefix keeps cache entries from colliding with queued writes, whose ids remain random. The
+key is the URL alone, matching what `GetCachedResponseAsync` looks up by; honouring `Vary`
+([issue 43](Backlog/43-honour-vary-header.md)) or a cache generation
+([issue 44](Backlog/44-cache-generation.md)) would extend it in that one place.
+
 #### Body Handling and Size Limits
 
 Request and response bodies are stored as **`byte[]`** — `Envelope.RequestBody` and

@@ -123,7 +123,10 @@ public sealed class Envelope
     /// The named client the request was made on, so a replay can return through the
     /// same pipeline.
     /// </param>
-    public static Envelope ForRequest(HttpRequestMessage request, string? clientName = null)
+    public static Envelope ForRequest(HttpRequestMessage request, string? clientName = null) =>
+        ForRequest(request, Guid.NewGuid().ToString(), clientName);
+
+    private static Envelope ForRequest(HttpRequestMessage request, string id, string? clientName)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -136,8 +139,6 @@ public sealed class Envelope
             foreach (var (key, value) in FlattenHeaders(request.Content.Headers))
                 headers[key] = value;
         }
-
-        var id = Guid.NewGuid().ToString();
 
         // The caller's own key if they set one, so they need no mapping table; otherwise
         // Hyperwyc's id, which the synthetic 202 hands back.
@@ -179,7 +180,7 @@ public sealed class Envelope
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(response);
 
-        var envelope = ForRequest(request, clientName);
+        var envelope = ForRequest(request, CacheId(request.RequestUri), clientName);
 
         var responseHeaders = FlattenHeaders(response.Headers);
 
@@ -199,6 +200,34 @@ public sealed class Envelope
 
         return envelope;
     }
+
+    /// <summary>
+    /// The identity of the cache entry for <paramref name="url"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A cache entry is identified by what it caches, so its id is derived rather than
+    /// generated. That is what makes <c>ISyncStore.UpsertAsync</c> — which keys on
+    /// <see cref="Id"/> — <em>replace</em> the previous response for a URL instead of adding
+    /// a second one beside it.
+    /// </para>
+    /// <para>
+    /// It did add one beside it, and the consequences were worse than a stale read.
+    /// <c>GetCachedResponseAsync</c> returns the first envelope matching the URL, which is
+    /// whichever the store happens to enumerate first — in practice the oldest — so the cache
+    /// froze at the first response ever stored and never updated again, however many times the
+    /// application refetched. Every refetch also left another envelope behind that nothing
+    /// would ever read, growing the store without bound and multiplying the cost of
+    /// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/Backlog/52-store-rewrites-whole-set-per-write.md">issue 52</see>,
+    /// where a single write rewrites the entire record set.
+    /// </para>
+    /// <para>
+    /// The prefix keeps cache entries from ever colliding with queued writes, whose ids stay
+    /// random. Keyed on URL alone, matching what <c>GetCachedResponseAsync</c> looks up by;
+    /// honouring <c>Vary</c> or a cache generation would extend the key here, in one place.
+    /// </para>
+    /// </remarks>
+    private static string CacheId(Uri? url) => $"cache:{url}";
 
     /// <summary>
     /// <see cref="RequestBody"/> decoded as UTF-8, or <see langword="null"/> if there is no body.
