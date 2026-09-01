@@ -1,3 +1,4 @@
+using CommunityToolkit.Maui.Alerts;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Hyperwyc.Interfaces;
@@ -61,7 +62,9 @@ public partial class NewSaleViewModel(SalesApiClient client, IConnectivityServic
                 ? $"Sale of {sale.Quantity} x {Product.Name} successfully recorded"
                 : "Something went wrong and the sale could not be recorded";
 
-            await Application.Current!.Windows[0].Page!.DisplayAlertAsync(title, message, "Ok");
+            //await Application.Current!.Windows[0].Page!.DisplayAlertAsync(title, message, "Ok");
+            var toast = Toast.Make(message);
+            await toast.Show();
 
             if (isValid)
             {

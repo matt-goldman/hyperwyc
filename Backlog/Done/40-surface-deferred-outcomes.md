@@ -283,7 +283,7 @@ rather than an argument — Hyperwyc does not require anyone to model their UI a
 
 ## Notes
 
-- Raised while building the sample MAUI app ([issue 19](../19-poc-maui-app.md)), whose specification
+- Raised while building the sample MAUI app ([issue 19](../Done/19-poc-maui-app.md)), whose specification
   includes a per-sale "Failed" badge — not currently implementable, since an event cannot be
   attributed to a specific sale.
 - P0 rather than v1.0: this is a completeness gap in the core proposition rather than an

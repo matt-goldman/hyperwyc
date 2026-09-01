@@ -134,7 +134,7 @@ and is pure managed code, a smaller footprint than the Polly reference the core 
 ## Decided
 
 - **Default store location:** `Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)`.
-  **Since confirmed on a real Android device** by the sample ([issue 19](../19-poc-maui-app.md)):
+  **Since confirmed on a real Android device** by the sample ([issue 19](../Done/19-poc-maui-app.md)):
   a catalogue cached before the app was killed was still readable after a restart with the
   network disabled, which requires the path to be both writable and stable across process
   lifetimes — and incidentally proves the path-derived encryption key round-trips too. iOS

@@ -8,7 +8,8 @@
              x:Class="Hyperwyc.Sample.Maui.Pages.CataloguePage">
     <RefreshView Command="{Binding LoadProductsCommand}"
                  IsRefreshing="{Binding IsLoading}">
-        <VerticalStackLayout HorizontalOptions="Fill">
+        <VerticalStackLayout HorizontalOptions="Fill"
+                             VerticalOptions="Fill">
             <Label Text="Product Catalogue"
                    FontSize="24"
                    VerticalOptions="Center"

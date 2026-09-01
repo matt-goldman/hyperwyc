@@ -36,4 +36,15 @@ public partial class AppShell : Shell
 
         LoginMenuItem.Text = e.IsLoggedIn ? "Logout" : "Login";
     }
+
+    protected override void OnAppearing()
+    {
+        base.OnAppearing();
+        MainThread.BeginInvokeOnMainThread(async () =>
+        {
+            var isLoggedIn = await _authService.GetIsLoggedInAsync();
+            _isLoggedIn = isLoggedIn;
+            LoginMenuItem.Text = isLoggedIn ? "Logout" : "Login";
+        });
+    }
 }

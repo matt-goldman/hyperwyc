@@ -34,7 +34,16 @@ public partial class LiveEventsViewModel : ObservableObject, IDisposable, IObser
         await toast.Show(CancellationToken.None);
     }
 
-    public void OnNext(SyncEvent value) => LiveEvents.Add(new EventViewModel(value));
+    public void OnNext(SyncEvent value)
+    {
+        LiveEvents.Add(new EventViewModel(value));
+
+        //if (value.Outcome?.Kind is null or SyncOutcomeKind.Succeeded) return;
+
+        var message = $"A {value.Method} call to {value.Url} has failed: {value.Outcome?.Kind}";
+        var toast = Toast.Make(message);
+        toast.Show();
+    }
 }
 
 
@@ -67,6 +76,6 @@ public class EventViewModel
         EventType = syncEvent.Type.ToString();
         Method = syncEvent.Method;
 
-        Title = IsSuccess ? "Succeeded" : syncEvent.Outcome?.ReasonPhrase ?? "Unknown";
+        Title = IsSuccess ? "Succeeded" : syncEvent.Outcome?.ReasonPhrase ?? syncEvent.Outcome?.Kind.ToString() ?? "Unknown";
     }
 }

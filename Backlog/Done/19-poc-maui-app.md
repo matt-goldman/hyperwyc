@@ -47,10 +47,10 @@ Retargeted from the original notes domain to products and sales, matching
 - [x] **Catalogue reads served from cache with the device offline, across an app restart.**
 - [x] Recording a sale offline queues it and surfaces as pending.
 - [x] Queued sales replay when connectivity returns.
-- [ ] Live event log subscribed to `IHyperwyc.SyncEvents`.
-- [ ] "Sync now" calls `IHyperwyc.FlushAsync()`.
+- [x] Live event log subscribed to `IHyperwyc.SyncEvents`.
+- [x] "Sync now" calls `IHyperwyc.FlushAsync()`.
 - [x] "Clear data" calls `IHyperwyc.ResetStoreAsync()`.
-- [ ] A sale the server refuses surfaces as dead-lettered, with the server's reason shown.
+- [x] A sale the server refuses surfaces as dead-lettered, with the server's reason shown.
       Ordering more than the catalogue has in stock is the easiest way in: the write queues
       offline, replays, and comes back `409` with "Only N left in stock" — the scenario
       [issue 40](Done/40-surface-deferred-outcomes.md) was written around. Part of per-sale
