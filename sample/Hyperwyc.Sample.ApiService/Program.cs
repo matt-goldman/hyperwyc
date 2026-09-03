@@ -117,6 +117,48 @@ app.MapPost("/sales", async (
 .WithName("RecordSale")
 .RequireAuthorization();
 
+app.MapPost("/sales/{id:guid}/receipt", async (
+        Guid id,
+        HttpRequest request,
+        CancellationToken token) =>
+    {
+        // don't bother checking the DB, it's just a demo
+        if (!request.HasFormContentType)
+            return Results.BadRequest("Expected multipart/form-data.");
+
+        var form = await request.ReadFormAsync(token);
+        var file = form.Files.GetFile("file");
+
+        if (file is null)
+            return Results.BadRequest("No file provided.");
+
+        var filePath = Path.Combine(Directory.GetCurrentDirectory(), $"{id}.pdf");
+
+        await using var fileStream = new FileStream(filePath, FileMode.Create);
+        await file.CopyToAsync(fileStream,  token);
+
+        return Results.Ok();
+    })
+    .WithName("StoreReceipt")
+    .RequireAuthorization();
+
+app.MapGet("/sales/{id:guid}/receipt", async (Guid id, CancellationToken token) =>
+    {
+        // don't bother checking the DB, it's just a demo
+
+        var filePath = Path.Combine(Directory.GetCurrentDirectory(), $"{id}.pdf");
+
+        if (!File.Exists(filePath))
+        {
+            return Results.NotFound($"No receipt for {id} was found.");
+        }
+
+        await using var fileStream = new FileStream(filePath, FileMode.Open);
+        return Results.File(fileStream, "application/pdf");
+    })
+    .WithName("GetReceipt")
+    .RequireAuthorization();
+
 app.MapDefaultEndpoints();
 
 // run migrations
