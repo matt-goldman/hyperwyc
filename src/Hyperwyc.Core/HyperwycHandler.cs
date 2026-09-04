@@ -41,7 +41,6 @@ public sealed class HyperwycHandler : DelegatingHandler
 
     private readonly ISyncStore _store;
     private readonly IConnectivityService _connectivity;
-    private readonly ISyncPolicy _policy;
     private readonly SyncEventStream _events;
     private readonly HyperwycOptions _options;
     private readonly string? _clientName;
@@ -51,7 +50,6 @@ public sealed class HyperwycHandler : DelegatingHandler
     /// </summary>
     /// <param name="store">Persistence for queued writes and cached responses.</param>
     /// <param name="connectivity">Reports whether the device is online.</param>
-    /// <param name="policy">Cache strategy and write-invalidation rules per request.</param>
     /// <param name="events">Stream on which sync lifecycle events are published.</param>
     /// <param name="options">Runtime configuration options.</param>
     /// <param name="clientName">
@@ -64,20 +62,17 @@ public sealed class HyperwycHandler : DelegatingHandler
     public HyperwycHandler(
         ISyncStore store,
         IConnectivityService connectivity,
-        ISyncPolicy policy,
         SyncEventStream events,
         HyperwycOptions options,
         string? clientName = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(connectivity);
-        ArgumentNullException.ThrowIfNull(policy);
         ArgumentNullException.ThrowIfNull(events);
         ArgumentNullException.ThrowIfNull(options);
 
         _store = store;
         _connectivity = connectivity;
-        _policy = policy;
         _events = events;
         _options = options;
         _clientName = clientName;
@@ -111,6 +106,14 @@ public sealed class HyperwycHandler : DelegatingHandler
         HttpRequestMessage request,
         CancellationToken ct)
     {
+        // NetworkOnly is the one strategy that governs writes: the route has declared that a
+        // deferred write is the wrong answer, so Hyperwyc does not take custody of it. The
+        // request goes to the transport and fails as it would without Hyperwyc installed,
+        // which is the truth — accepting it with a 202 would be a promise we were told not to
+        // make.
+        if (Policy(request).Strategy == CacheStrategy.NetworkOnly)
+            return await base.SendAsync(request, ct).ConfigureAwait(false);
+
         // Buffer content before the synchronous read inside Envelope.ForRequest.
         if (request.Content is not null)
             await request.Content.LoadIntoBufferAsync(ct).ConfigureAwait(false);
@@ -135,7 +138,7 @@ public sealed class HyperwycHandler : DelegatingHandler
         CancellationToken ct)
     {
         // NetworkOnly opts out of the cache entirely, so there is nothing to serve.
-        if (_policy.GetStrategy(request) == CacheStrategy.NetworkOnly)
+        if (Policy(request).Strategy == CacheStrategy.NetworkOnly)
             return HyperwycResponseFactory.Offline();
 
         var url = request.RequestUri?.ToString() ?? string.Empty;
@@ -167,7 +170,7 @@ public sealed class HyperwycHandler : DelegatingHandler
         {
             var url = request.RequestUri?.ToString() ?? string.Empty;
 
-            if (_policy.ShouldInvalidateCacheOnWrite(request))
+            if (Policy(request).InvalidateCacheOnWrite)
             {
                 var prefix = DeriveInvalidationPrefix(request.RequestUri);
                 await _store.InvalidateCacheForPrefixAsync(prefix, ct).ConfigureAwait(false);
@@ -184,7 +187,8 @@ public sealed class HyperwycHandler : DelegatingHandler
         HttpRequestMessage request,
         CancellationToken ct)
     {
-        var strategy = _policy.GetStrategy(request);
+        var policy = Policy(request);
+        var strategy = policy.Strategy;
         var url = request.RequestUri?.ToString() ?? string.Empty;
 
         // NetworkOnly neither reads nor writes the cache.
@@ -202,11 +206,11 @@ public sealed class HyperwycHandler : DelegatingHandler
         }
 
         // CacheFirst serves a fresh cached response without touching the network.
-        // ApiFirst always goes to the network, and consults the cache only on failure.
+        // NetworkFirst always goes to the network, and consults the cache only on failure.
         if (strategy == CacheStrategy.CacheFirst)
         {
             var cached = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
-            if (cached is not null && !IsStale(cached))
+            if (cached is not null && !IsStale(cached, policy.Ttl))
                 return BuildResponseFromEnvelope(cached);
         }
 
@@ -215,7 +219,7 @@ public sealed class HyperwycHandler : DelegatingHandler
         {
             response = await base.SendAsync(request, ct).ConfigureAwait(false);
         }
-        catch (HttpRequestException) when (strategy == CacheStrategy.ApiFirst)
+        catch (HttpRequestException) when (strategy == CacheStrategy.NetworkFirst)
         {
             // Reachable when IConnectivityService reports online but the API is not
             // actually reachable — a captive portal, DNS failure or transient outage.
@@ -285,19 +289,21 @@ public sealed class HyperwycHandler : DelegatingHandler
         return response;
     }
 
-    /// <summary>
-    /// Whether a cached response has outlived <see cref="HyperwycOptions.DefaultCacheTtl"/>.
-    /// </summary>
+    /// <summary>The policy for this request, resolved from the route map.</summary>
+    private RoutePolicy Policy(HttpRequestMessage request) =>
+        _options.Routes.Resolve(request.RequestUri);
+
+    /// <summary>Whether a cached response has outlived its route's TTL.</summary>
     /// <remarks>
     /// A comparison, not an abstraction. This was an <c>IStalenessEvaluator</c> with a single
     /// implementation and a single caller, which bought nothing and cost issue #29 — the
     /// evaluator was built from a TTL that configuration had not finished setting. Honouring
     /// <c>Cache-Control</c> (issue #41) is where per-response staleness earns an interface
-    /// back; until then it is four lines.
+    /// back; until then it is two lines.
     /// </remarks>
-    private bool IsStale(Envelope cached) =>
+    private static bool IsStale(Envelope cached, TimeSpan ttl) =>
         cached.Response is null
-        || DateTimeOffset.UtcNow - cached.Response.CachedAt > _options.DefaultCacheTtl;
+        || DateTimeOffset.UtcNow - cached.Response.CachedAt > ttl;
 
     /// <summary>
     /// Derives the cache-invalidation prefix from the request URI.

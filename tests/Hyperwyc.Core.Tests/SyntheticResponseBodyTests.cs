@@ -27,9 +27,8 @@ public class SyntheticResponseBodyTests
         new(
             store ?? new InMemorySyncStore(),
             new FakeConnectivityService(isConnected),
-            new FakeSyncPolicy(strategy),
             new SyncEventStream(),
-            new HyperwycOptions())
+            OptionsFor(strategy))
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
 
     // -------------------------------------------------------------------------
@@ -136,5 +135,12 @@ public class SyntheticResponseBodyTests
 
         Assert.NotNull(products);
         Assert.Equal("Bucket Tooth", Assert.Single(products!).Name);
+    }
+
+    private static HyperwycOptions OptionsFor(CacheStrategy strategy)
+    {
+        var options = new HyperwycOptions();
+        options.Routes.Default = new Models.RoutePolicy { Strategy = strategy };
+        return options;
     }
 }

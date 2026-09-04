@@ -42,9 +42,8 @@ public class CacheRefreshTests
         ISyncStore store, HttpMessageHandler inner, bool connected = true) =>
         new(store,
             new FakeConnectivityService(connected),
-            new FakeSyncPolicy(),
             new SyncEventStream(),
-            new HyperwycOptions { DefaultCacheTtl = TimeSpan.Zero })
+            TestOptions.WithTtl(TimeSpan.Zero))
         { InnerHandler = inner };
 
     [Fact]

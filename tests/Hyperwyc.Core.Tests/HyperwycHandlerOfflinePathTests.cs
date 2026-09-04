@@ -20,7 +20,6 @@ public class HyperwycHandlerOfflinePathTests
         var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: false),
-            new FakeSyncPolicy(),
             events ?? new SyncEventStream(),
             options ?? new HyperwycOptions())
         {
@@ -162,10 +161,9 @@ public class HyperwycHandlerOfflinePathTests
         var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: false),
-            new FakeSyncPolicy(),
             new SyncEventStream(),
             // Zero TTL: every cached entry is stale. Offline, that must not matter.
-            new HyperwycOptions { DefaultCacheTtl = TimeSpan.Zero })
+            TestOptions.WithTtl(TimeSpan.Zero))
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
         using var client = new HttpClient(handler);
 

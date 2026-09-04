@@ -44,7 +44,6 @@ public static class HttpClientBuilderExtensions
         return builder.AddHttpMessageHandler(sp => new HyperwycHandler(
             sp.GetRequiredService<ISyncStore>(),
             sp.GetRequiredService<IConnectivityService>(),
-            sp.GetRequiredService<ISyncPolicy>(),
             sp.GetRequiredService<SyncEventStream>(),
             sp.GetRequiredService<HyperwycOptions>(),
             clientName));

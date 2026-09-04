@@ -22,7 +22,6 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     /// attempt absurdly far out — or overflow the arithmetic getting there.
     /// </summary>
     private readonly ISyncStore _store;
-    private readonly Interfaces.ISyncPolicy _policy;
     private readonly IConnectivityService _connectivity;
     private readonly SyncEventStream _events;
     private readonly HyperwycOptions _options;
@@ -44,7 +43,6 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     /// Initialises a new <see cref="SyncOrchestrator"/>.
     /// </summary>
     /// <param name="store">The sync store backing the outbox.</param>
-    /// <param name="policy">The sync policy used for retry configuration and cache-invalidation rules.</param>
     /// <param name="connectivity">The connectivity service to subscribe to.</param>
     /// <param name="events">The event stream to publish lifecycle events on.</param>
     /// <param name="options">Runtime configuration options.</param>
@@ -61,7 +59,6 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     /// </param>
     public SyncOrchestrator(
         ISyncStore store,
-        Interfaces.ISyncPolicy policy,
         IConnectivityService connectivity,
         SyncEventStream events,
         HyperwycOptions options,
@@ -69,14 +66,12 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         IHttpClientFactory? httpClientFactory = null)
     {
         ArgumentNullException.ThrowIfNull(store);
-        ArgumentNullException.ThrowIfNull(policy);
         ArgumentNullException.ThrowIfNull(connectivity);
         ArgumentNullException.ThrowIfNull(events);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(transport);
 
         _store = store;
-        _policy = policy;
         _connectivity = connectivity;
         _events = events;
         _options = options;
@@ -386,7 +381,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         _events.Publish(EventFor(SyncEventType.OnSynced, envelope, outcome));
 
         using var request = BuildRequest(envelope);
-        if (_policy.ShouldInvalidateCacheOnWrite(request))
+        if (_options.Routes.Resolve(request.RequestUri).InvalidateCacheOnWrite)
         {
             var prefix = HyperwycHandler.DeriveInvalidationPrefix(request.RequestUri);
             await _store.InvalidateCacheForPrefixAsync(prefix, ct).ConfigureAwait(false);

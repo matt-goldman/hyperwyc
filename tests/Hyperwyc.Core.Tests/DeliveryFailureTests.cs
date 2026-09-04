@@ -22,7 +22,6 @@ public class DeliveryFailureTests
         SyncEventStream? events = null) =>
         new(
             store,
-            new FakeSyncPolicy(),
             new FakeConnectivityService(isConnected: true),
             events ?? new SyncEventStream(),
             new HyperwycOptions(),

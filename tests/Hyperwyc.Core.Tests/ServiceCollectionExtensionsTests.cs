@@ -87,16 +87,6 @@ public sealed class ServiceCollectionExtensionsTests
         Assert.Same(options.Connectivity, connectivity);
     }
 
-    [Fact]
-    public void AddHyperwycCore_Defaults_RegistersISyncPolicyFromOptionsInstance()
-    {
-        var sp = BuildProvider(null);
-
-        var options = sp.GetRequiredService<HyperwycOptions>();
-        var policy = sp.GetRequiredService<ISyncPolicy>();
-
-        Assert.Same(options.DefaultPolicy, policy);
-    }
 
 
 
@@ -214,66 +204,38 @@ public sealed class ServiceCollectionExtensionsTests
     }
 
     // -------------------------------------------------------------------------
-    // Effective TTL
+    // Route policy
     //
-    // These assert the TTL the resolved evaluator actually applies, not just the
-    // value left on the options object. Issue #29 was precisely a case where the
-    // property was correct and the evaluator was not.
+    // The "effective TTL" tests that lived here are gone with the ambiguity they guarded:
+    // a TTL used to come from either DefaultCacheTtl or the policy, resolved at registration,
+    // which is what issue #29 was. A resolved RoutePolicy now carries its own concrete TTL and
+    // there is nothing to reconcile. Matching itself is covered by RoutePolicyMapTests.
     // -------------------------------------------------------------------------
-
-    [Fact]
-    public void AddHyperwycCore_CacheFirstPolicyTtl_ResolvesTheEffectiveTtl()
-    {
-        var sp = BuildProvider(o => o.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromDays(1)));
-
-        var options = sp.GetRequiredService<HyperwycOptions>();
-
-        Assert.Equal(TimeSpan.FromDays(1), options.DefaultCacheTtl);
-    }
-
-    [Fact]
-    public void AddHyperwycCore_ExplicitDefaultCacheTtl_ResolvesTheEffectiveTtl()
-    {
-        var sp = BuildProvider(o => o.DefaultCacheTtl = TimeSpan.FromMinutes(1));
-
-        var options = sp.GetRequiredService<HyperwycOptions>();
-
-        // The default policy carries no TTL, so it must not clobber this.
-        Assert.Equal(TimeSpan.FromMinutes(1), options.DefaultCacheTtl);
-    }
-
-    [Fact]
-    public void AddHyperwycCore_PolicyTtl_WinsOverDefaultCacheTtl()
-    {
-        var sp = BuildProvider(o =>
-        {
-            o.DefaultCacheTtl = TimeSpan.FromMinutes(1);
-            o.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromHours(6));
-        });
-
-
-    }
 
     [Fact]
     public void AddHyperwycCore_Defaults_ApplyFiveMinuteTtl()
     {
         var sp = BuildProvider(null);
 
+        var options = sp.GetRequiredService<HyperwycOptions>();
 
+        Assert.Equal(TimeSpan.FromMinutes(5), options.Routes.Default.Ttl);
+        Assert.Equal(CacheStrategy.CacheFirst, options.Routes.Default.Strategy);
     }
 
     [Fact]
-    public void AddHyperwycCore_TtllessPolicy_FallsBackToDefaultCacheTtl()
+    public void AddHyperwycCore_RouteRegistrationsSurviveRegistration()
     {
-        var sp = BuildProvider(o =>
-        {
-            o.DefaultPolicy = SyncPolicy.ApiFirst();
-            o.DefaultCacheTtl = TimeSpan.FromMinutes(30);
-        });
+        var sp = BuildProvider(o => o.Routes
+            .For("/api/*", RoutePolicy.CacheFirst(TimeSpan.FromHours(1)))
+            .For("/api/payments/*", RoutePolicy.NetworkOnly()));
 
-        var options = sp.GetRequiredService<HyperwycOptions>();
+        var routes = sp.GetRequiredService<HyperwycOptions>().Routes;
 
-        Assert.Equal(TimeSpan.FromMinutes(30), options.DefaultCacheTtl);
+        Assert.Equal(CacheStrategy.NetworkOnly,
+            routes.Resolve(new Uri("https://example.com/api/payments/charge")).Strategy);
+        Assert.Equal(TimeSpan.FromHours(1),
+            routes.Resolve(new Uri("https://example.com/api/products")).Ttl);
     }
 
     // -------------------------------------------------------------------------

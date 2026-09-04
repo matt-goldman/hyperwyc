@@ -373,10 +373,8 @@ public class DeferredOutcomeTests
         ISyncStore store,
         StubHttpMessageHandler transport,
         SyncEventStream events,
-        FakeSyncPolicy? policy = null,
         HyperwycOptions? options = null) =>
         new(store,
-            policy ?? new FakeSyncPolicy(),
             new FakeConnectivityService(isConnected: true),
             events,
             options ?? new HyperwycOptions(),

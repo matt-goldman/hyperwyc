@@ -1,5 +1,6 @@
 using System.Net;
 using Hyperwyc.Models;
+using Hyperwyc.Tests.Fakes;
 using Xunit;
 
 namespace Hyperwyc.Tests;
@@ -19,15 +20,13 @@ public class ResponseCacheReadTests
         // Staleness is a TTL comparison against CachedAt now that IStalenessEvaluator is gone
         // (ADR 0004). A zero TTL makes every cached entry stale; the default keeps them fresh,
         // since FreshCachedEnvelope stamps CachedAt as "now".
-        var options = new HyperwycOptions
-        {
-            MaxCachedResponseBodyBytes = maxBodyBytes,
-            DefaultCacheTtl = cacheIsStale ? TimeSpan.Zero : TimeSpan.FromMinutes(5),
-        };
+        var options = new HyperwycOptions { MaxCachedResponseBodyBytes = maxBodyBytes };
+        options.Routes.Default = Models.RoutePolicy.CacheFirst(
+            cacheIsStale ? TimeSpan.Zero : TimeSpan.FromMinutes(5));
+
         return new HyperwycHandler(
             store,
             new Fakes.FakeConnectivityService(isConnected: true),
-            new Fakes.FakeSyncPolicy(),
             new SyncEventStream(),
             options)
         { InnerHandler = inner };
@@ -125,11 +124,10 @@ public class ResponseCacheReadTests
         events.Subscribe(new DelegateObserver<SyncEvent>(e => received = e));
 
         // Zero TTL: the entry cached a moment ago is already stale.
-        var options = new HyperwycOptions { DefaultCacheTtl = TimeSpan.Zero };
+        var options = TestOptions.WithTtl(TimeSpan.Zero);
         var handler = new HyperwycHandler(
             store,
             new Fakes.FakeConnectivityService(),
-            new Fakes.FakeSyncPolicy(),
             events,
             options)
         {

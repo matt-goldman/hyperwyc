@@ -20,13 +20,8 @@ public class HyperwycHandlerOnlinePathTests
         var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: true),
-            new FakeSyncPolicy(shouldInvalidate: shouldInvalidate),
             new SyncEventStream(),
-            // Staleness is a TTL comparison now: zero makes everything stale.
-            new HyperwycOptions
-            {
-                DefaultCacheTtl = cacheIsStale ? TimeSpan.Zero : TimeSpan.FromMinutes(5),
-            })
+            Options(shouldInvalidate, cacheIsStale))
         {
             InnerHandler = inner,
         };
@@ -82,7 +77,6 @@ public class HyperwycHandlerOnlinePathTests
         var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(),
-            new FakeSyncPolicy(),
             events,
             new HyperwycOptions())
         { InnerHandler = stub };
@@ -212,7 +206,6 @@ public class HyperwycHandlerOnlinePathTests
         var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(),
-            new FakeSyncPolicy(),
             events,
             new HyperwycOptions())
         { InnerHandler = stub };
@@ -325,7 +318,6 @@ public class HyperwycHandlerOnlinePathTests
         var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(),
-            new FakeSyncPolicy(),
             events,
             new HyperwycOptions())
         { InnerHandler = stub };
@@ -359,5 +351,20 @@ public class HyperwycHandlerOnlinePathTests
         public void OnNext(T value) => onNext(value);
         public void OnCompleted() { }
         public void OnError(Exception error) { }
+    }
+
+    /// <summary>
+    /// Strategy, TTL and invalidate-on-write all come from the resolved route policy now.
+    /// A zero TTL makes every cached entry stale.
+    /// </summary>
+    private static HyperwycOptions Options(bool shouldInvalidate, bool cacheIsStale)
+    {
+        var options = new HyperwycOptions();
+        options.Routes.Default = new RoutePolicy
+        {
+            Ttl = cacheIsStale ? TimeSpan.Zero : TimeSpan.FromMinutes(5),
+            InvalidateCacheOnWrite = shouldInvalidate,
+        };
+        return options;
     }
 }

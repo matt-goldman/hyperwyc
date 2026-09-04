@@ -35,7 +35,7 @@ to its backlog item where one exists.
 - [x] Flush trigger model documented — no app lifecycle wiring required ([34](Backlog/Done/34-app-lifecycle-integration.md))
 - [x] Sample product/sales API ([18](Backlog/Done/18-poc-web-api.md))
 - [x] No headers added to outbound requests — idempotency left to the application and its API ([39](Backlog/Done/39-reconsider-idempotency.md), superseding [08](Backlog/Done/08-idempotency-key-injection.md))
-- [x] Synthetic responses carry the `null` literal with no asserted media type, so `GetFromJsonAsync<T>` returns `null` rather than throwing ([26](Backlog/26-v2-typed-response-shaping.md), layer 0)
+- [x] Synthetic responses carry the `null` literal with no asserted media type, so `GetFromJsonAsync<T>` returns `null` rather than throwing ([26](Backlog/Done/26-v2-typed-response-shaping.md), layer 0)
 - [x] Package structure: `Hyperwyc` (batteries included) over `Hyperwyc.Core` ([31](Backlog/Done/31-package-structure.md)) — `AddHyperwyc()` gives a durable, encrypted store with no decision to make
 - [x] Connectivity is required, and a BCL implementation ships ([47](Backlog/Done/47-connectivity-is-required.md)) — `NetworkAvailabilityConnectivityService` for non-MAUI consumers; register an `IConnectivityService` in the container (either side of `AddHyperwyc`) or set the option, rather than silently assuming always-online
 
@@ -101,7 +101,7 @@ No backlog items written yet — these are direction, not commitments.
 - [ ] Smart paging support — cache-aware handling of paginated responses
 - [ ] Request grouping and bulk sync — batch multiple queued writes into a single operation
 - [ ] GraphQL support — read-intent POST disambiguation
-- [ ] **Under consideration:** Typed-response shaping for offline reads ([26](Backlog/26-v2-typed-response-shaping.md)) — revised down to three layers, the first of which is simply returning `null` rather than an empty body, since an empty body throws for objects as well as collections
+- [ ] **Under consideration:** Typed-response shaping for offline reads ([26](Backlog/Done/26-v2-typed-response-shaping.md)) — revised down to three layers, the first of which is simply returning `null` rather than an empty body, since an empty body throws for objects as well as collections
 
 ---
 - [ ] "Designing resilient applications with Hyperwyc" ([50](Backlog/50-resilient-applications-guide.md)) — the application-owned-store pattern, for consumers who need delivery guarantees Hyperwyc deliberately does not provide
@@ -116,4 +116,4 @@ Explored in earlier planning and intentionally excluded from Hyperwyc's scope:
 | Entity/table synchronisation | Hyperwyc operates at the transport layer, not the data model layer |
 | Auth / token management | Auth is the responsibility of a separate `DelegatingHandler` in the pipeline |
 | Streaming request/response bodies | Buffered byte arrays only; chunked and indeterminate-length payloads are a follow-up if demand emerges (see [25](Backlog/Done/25-binary-request-response-bodies.md)) |
-| Runtime type inference for offline response shaping | Reflection over caller types is brittle, AOT-hostile and a layering violation (see [26](Backlog/26-v2-typed-response-shaping.md)) |
+| Runtime type inference for offline response shaping | Reflection over caller types is brittle, AOT-hostile and a layering violation (see [26](Backlog/Done/26-v2-typed-response-shaping.md)) |

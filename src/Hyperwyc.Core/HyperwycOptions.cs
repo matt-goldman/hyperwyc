@@ -25,17 +25,15 @@ public sealed class HyperwycOptions
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// The default caching and sync policy applied to all requests. Defaults to
-    /// <see cref="SyncPolicy.CacheFirst()"/>, which takes its freshness window
-    /// from <see cref="DefaultCacheTtl"/>.
+    /// Per-route policies, matched first-registered-wins, plus the default for routes matching
+    /// nothing.
     /// </summary>
     /// <remarks>
-    /// Assigning <see cref="SyncPolicy.CacheFirst(TimeSpan)"/> states the TTL on
-    /// the policy, which takes precedence over <see cref="DefaultCacheTtl"/>. The
-    /// default policy deliberately carries no TTL of its own, so that setting
-    /// <see cref="DefaultCacheTtl"/> alone is honoured.
+    /// Register most specific first — see <see cref="RoutePolicyMap"/>. The matched policy is
+    /// the single source of cache strategy, TTL and write-invalidation; there is no second
+    /// place a TTL can come from, which is what caused issue #29.
     /// </remarks>
-    public ISyncPolicy DefaultPolicy { get; set; } = SyncPolicy.CacheFirst();
+    public RoutePolicyMap Routes { get; } = new();
 
     /// <summary>
     /// Reports whether the device can reach the network. <b>Required</b>, though most
@@ -105,15 +103,6 @@ public sealed class HyperwycOptions
     // Cache settings
     // -------------------------------------------------------------------------
 
-    /// <summary>
-    /// How long a cached response is considered fresh. Defaults to 5 minutes.
-    /// </summary>
-    /// <remarks>
-    /// A TTL supplied to <see cref="SyncPolicy.CacheFirst(TimeSpan)"/> wins over
-    /// this value. After registration this property holds the effective TTL,
-    /// whichever source it came from.
-    /// </remarks>
-    public TimeSpan DefaultCacheTtl { get; set; } = TimeSpan.FromMinutes(5);
 
 
     /// <summary>

@@ -23,13 +23,9 @@ public class CacheStrategyTests
         new(
             store,
             new FakeConnectivityService(isConnected),
-            new FakeSyncPolicy(strategy),
             new SyncEventStream(),
             // A zero TTL makes every cached entry stale; CachedEnvelope stamps CachedAt as now.
-            new HyperwycOptions
-            {
-                DefaultCacheTtl = cacheIsStale ? TimeSpan.Zero : TimeSpan.FromMinutes(5),
-            })
+            OptionsFor(strategy, cacheIsStale))
         { InnerHandler = inner };
 
     private static Envelope CachedEnvelope(string body = "cached")
@@ -155,9 +151,8 @@ public class CacheStrategyTests
         var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: true),
-            new FakeSyncPolicy(CacheStrategy.CacheOnly),
             new SyncEventStream(),
-            new HyperwycOptions())
+            OptionsFor(CacheStrategy.CacheOnly, cacheIsStale: false))
         { InnerHandler = stub };
         using var client = new HttpClient(handler);
 
@@ -170,16 +165,16 @@ public class CacheStrategyTests
     }
 
     // -------------------------------------------------------------------------
-    // ApiFirst — network first, cache only as a failure fallback
+    // NetworkFirst — network first, cache only as a failure fallback
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task ApiFirst_CallsNetwork_EvenWhenCacheIsFresh()
+    public async Task NetworkFirst_CallsNetwork_EvenWhenCacheIsFresh()
     {
         var store = new InMemorySyncStore();
         await store.UpsertAsync(CachedEnvelope());
         var stub = NetworkReturning();
-        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.ApiFirst));
+        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.NetworkFirst));
 
         var response = await client.GetAsync(Url);
 
@@ -188,12 +183,12 @@ public class CacheStrategyTests
     }
 
     [Fact]
-    public async Task ApiFirst_FallsBackToCache_WhenNetworkThrows()
+    public async Task NetworkFirst_FallsBackToCache_WhenNetworkThrows()
     {
         var store = new InMemorySyncStore();
         await store.UpsertAsync(CachedEnvelope());
         var stub = NetworkFailing();
-        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.ApiFirst));
+        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.NetworkFirst));
 
         var response = await client.GetAsync(Url);
 
@@ -201,21 +196,21 @@ public class CacheStrategyTests
     }
 
     [Fact]
-    public async Task ApiFirst_NetworkThrowsAndNoCache_PropagatesException()
+    public async Task NetworkFirst_NetworkThrowsAndNoCache_PropagatesException()
     {
         var store = new InMemorySyncStore();
         var stub = NetworkFailing();
-        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.ApiFirst));
+        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.NetworkFirst));
 
         await Assert.ThrowsAsync<HttpRequestException>(() => client.GetAsync(Url));
     }
 
     [Fact]
-    public async Task ApiFirst_PopulatesCache_SoTheFallbackHasSomethingToServe()
+    public async Task NetworkFirst_PopulatesCache_SoTheFallbackHasSomethingToServe()
     {
         var store = new InMemorySyncStore();
         var stub = NetworkReturning();
-        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.ApiFirst));
+        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.NetworkFirst));
 
         await client.GetAsync(Url);
 
@@ -266,8 +261,23 @@ public class CacheStrategyTests
         using var client = new HttpClient(
             BuildHandler(store, stub, CacheStrategy.CacheFirst, cacheIsStale: true));
 
-        // Fallback-on-failure is ApiFirst's contract, not CacheFirst's. CacheFirst
+        // Fallback-on-failure is NetworkFirst's contract, not CacheFirst's. CacheFirst
         // already had its chance to serve the cache and judged it stale.
         await Assert.ThrowsAsync<HttpRequestException>(() => client.GetAsync(Url));
+    }
+
+    /// <summary>
+    /// Strategy and TTL now both come from the resolved <see cref="RoutePolicy"/>, so a test
+    /// that wants a strategy sets the route map's default rather than passing a policy object.
+    /// </summary>
+    private static HyperwycOptions OptionsFor(CacheStrategy strategy, bool cacheIsStale)
+    {
+        var options = new HyperwycOptions();
+        options.Routes.Default = new RoutePolicy
+        {
+            Strategy = strategy,
+            Ttl = cacheIsStale ? TimeSpan.Zero : TimeSpan.FromMinutes(5),
+        };
+        return options;
     }
 }

@@ -217,7 +217,6 @@ public class BinaryBodyTests
         var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: true),
-            new FakeSyncPolicy(),
             new SyncEventStream(),
             new HyperwycOptions { MaxCachedResponseBodyBytes = 1024 })
         { InnerHandler = stub };
@@ -235,7 +234,6 @@ public class BinaryBodyTests
     private static HyperwycHandler OfflineHandler(InMemorySyncStore store) =>
         new(store,
             new FakeConnectivityService(isConnected: false),
-            new FakeSyncPolicy(),
             new SyncEventStream(),
             new HyperwycOptions())
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
@@ -243,14 +241,12 @@ public class BinaryBodyTests
     private static HyperwycHandler OnlineHandler(InMemorySyncStore store, HttpMessageHandler inner) =>
         new(store,
             new FakeConnectivityService(isConnected: true),
-            new FakeSyncPolicy(),
             new SyncEventStream(),
             new HyperwycOptions())
         { InnerHandler = inner };
 
     private static SyncOrchestrator Orchestrator(InMemorySyncStore store, HttpMessageHandler transport) =>
         new(store,
-            new FakeSyncPolicy(),
             new FakeConnectivityService(isConnected: true),
             new SyncEventStream(),
             new HyperwycOptions(),

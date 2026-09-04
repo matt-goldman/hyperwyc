@@ -20,7 +20,6 @@ public class SyncOrchestratorDisposalTests
         HttpMessageHandler transport) =>
         new(
             store,
-            new FakeSyncPolicy(),
             new FakeConnectivityService(isConnected: true),
             new SyncEventStream(),
             new HyperwycOptions(),

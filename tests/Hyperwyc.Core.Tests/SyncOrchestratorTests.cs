@@ -15,12 +15,10 @@ public class SyncOrchestratorTests
         InMemorySyncStore store,
         StubHttpMessageHandler transport,
         SyncEventStream? events = null,
-        bool connected = true,
-        FakeSyncPolicy? policy = null)
+        bool connected = true)
     {
         return new SyncOrchestrator(
             store,
-            policy ?? new FakeSyncPolicy(),
             new FakeConnectivityService(connected),
             events ?? new SyncEventStream(),
             new HyperwycOptions(),

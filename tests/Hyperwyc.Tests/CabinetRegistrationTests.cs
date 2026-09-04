@@ -59,14 +59,14 @@ public sealed class CabinetRegistrationTests : IDisposable
             o =>
             {
                 Connectivity(o);
-                o.DefaultCacheTtl = TimeSpan.FromHours(3);
+                o.Routes.Default = Models.RoutePolicy.CacheFirst(TimeSpan.FromHours(3));
             },
             o => o.DirectoryPath = _tempDir);
 
         using var sp = services.BuildServiceProvider();
         var options = sp.GetRequiredService<HyperwycOptions>();
 
-        Assert.Equal(TimeSpan.FromHours(3), options.DefaultCacheTtl);
+        Assert.Equal(TimeSpan.FromHours(3), options.Routes.Default.Ttl);
     }
 
     [Fact]

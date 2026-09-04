@@ -58,7 +58,6 @@ public class HyperwycHandlerPipelineTests
         var hyperwyc = new HyperwycHandler(
             store ?? new InMemorySyncStore(),
             new FakeConnectivityService(isConnected),
-            new FakeSyncPolicy(),
             new SyncEventStream(),
             new HyperwycOptions())
         {

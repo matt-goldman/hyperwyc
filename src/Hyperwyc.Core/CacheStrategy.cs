@@ -16,7 +16,7 @@ public enum CacheStrategy
     /// Always call the API first; fall back to cache only when the network is
     /// unavailable.
     /// </summary>
-    ApiFirst,
+    NetworkFirst,
 
     /// <summary>
     /// Only ever return a cached response. Never make a network request.
@@ -24,7 +24,13 @@ public enum CacheStrategy
     CacheOnly,
 
     /// <summary>
-    /// Always call the API. Never read from or write to the cache.
+    /// Never involve Hyperwyc's store, in either direction. Reads are neither served from it
+    /// nor written to it, and <b>writes are not queued when offline</b> — they go to the
+    /// transport and fail as they would without Hyperwyc installed.
     /// </summary>
+    /// <remarks>
+    /// The only strategy that governs writes as well as reads. The others leave writes at the
+    /// default of queueing when offline.
+    /// </remarks>
     NetworkOnly,
 }

@@ -29,7 +29,6 @@ public class RequestHeaderFidelityTests
         var handler = new HyperwycHandler(
             store ?? new InMemorySyncStore(),
             new FakeConnectivityService(isConnected: true),
-            new FakeSyncPolicy(),
             new SyncEventStream(),
             new HyperwycOptions())
         { InnerHandler = stub };
@@ -40,7 +39,6 @@ public class RequestHeaderFidelityTests
         new(
             store,
             new FakeConnectivityService(isConnected: false),
-            new FakeSyncPolicy(),
             new SyncEventStream(),
             new HyperwycOptions())
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
@@ -49,7 +47,6 @@ public class RequestHeaderFidelityTests
         InMemorySyncStore store, HttpMessageHandler transport) =>
         new(
             store,
-            new FakeSyncPolicy(),
             new FakeConnectivityService(isConnected: true),
             new SyncEventStream(),
             new HyperwycOptions(),

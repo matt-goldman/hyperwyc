@@ -95,12 +95,9 @@ public static class ServiceCollectionExtensions
         var options = new HyperwycOptions();
         configure?.Invoke(options);
 
-        // Resolve the effective TTL now that the caller has finished configuring.
-        // A TTL stated on the policy wins; otherwise DefaultCacheTtl supplies it.
-        // The default policy carries no TTL, so setting DefaultCacheTtl alone is
-        // honoured rather than being overwritten by a default nobody chose.
-        if (options.DefaultPolicy is SyncPolicy.PresetSyncPolicy { Ttl: { } policyTtl })
-            options.DefaultCacheTtl = policyTtl;
+        // No TTL reconciliation. A resolved RoutePolicy carries its own concrete TTL, so
+        // there is nothing to reconcile at registration — which is what issue #29 was: two
+        // sources for one value, resolved in the wrong order.
 
         // Register the options object itself as a singleton so HyperwycHandler
         // and SyncOrchestrator can receive it via constructor injection.
@@ -121,8 +118,6 @@ public static class ServiceCollectionExtensions
             services.TryAddSingleton<IConnectivityService>(
                 _ => throw new InvalidOperationException(NoConnectivityMessage));
 
-        services.TryAddSingleton<ISyncPolicy>(_ => options.DefaultPolicy);
-
         // Core singletons.
         services.TryAddSingleton<SyncEventStream>();
 
@@ -135,7 +130,6 @@ public static class ServiceCollectionExtensions
         // envelopes with no client name — see issue #37.
         services.TryAddSingleton<SyncOrchestrator>(sp => new SyncOrchestrator(
             sp.GetRequiredService<ISyncStore>(),
-            sp.GetRequiredService<ISyncPolicy>(),
             sp.GetRequiredService<IConnectivityService>(),
             sp.GetRequiredService<SyncEventStream>(),
             sp.GetRequiredService<HyperwycOptions>(),
