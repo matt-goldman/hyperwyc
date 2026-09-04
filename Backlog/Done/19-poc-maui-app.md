@@ -37,7 +37,7 @@ builder.Services.AddHyperwyc(options =>
 ## Acceptance Criteria
 
 Retargeted from the original notes domain to products and sales, matching
-[issue 18](Done/18-poc-web-api.md).
+[issue 18](18-poc-web-api.md).
 
 - [x] `Hyperwyc.Sample.Maui` project created, targeting `net10.0-android` plus iOS, MacCatalyst
       and Windows where the host supports them.
@@ -53,10 +53,10 @@ Retargeted from the original notes domain to products and sales, matching
 - [x] A sale the server refuses surfaces as dead-lettered, with the server's reason shown.
       Ordering more than the catalogue has in stock is the easiest way in: the write queues
       offline, replays, and comes back `409` with "Only N left in stock" — the scenario
-      [issue 40](Done/40-surface-deferred-outcomes.md) was written around. Part of per-sale
+      [issue 40](40-surface-deferred-outcomes.md) was written around. Part of per-sale
       state above rather than separate work.
 - [x] `POC.md` documents prerequisites and run steps.
-- [-] ~~Per-sale sync state — blocked on [issue 40](Done/40-surface-deferred-outcomes.md), since an event cannot currently be attributed to a specific sale.~~ Deprecated.
+- [-] ~~Per-sale sync state — blocked on [issue 40](40-surface-deferred-outcomes.md), since an event cannot currently be attributed to a specific sale.~~ Deprecated.
 
 ## Proven so far
 
@@ -69,3 +69,22 @@ The restart is what makes it significant. Serving from cache while running would
 - UI does not need to be polished — this is a developer reference, not a shipping app.
 - The same `NoteDto` shared project from issue #18 is used here.
 - The dead-letter state ("Failed" badge) can be triggered by stopping the API server after queueing notes.
+
+## It is a proof of concept, not a demo
+
+Recorded 2026-08-28. The sales domain was chosen for convenience and turned out to be a poor
+showcase: stock level is a shared mutable resource, so an offline sale is conflict-prone by
+construction and the `409` is routine rather than illustrative. It has done its job — it proved
+offline reads, offline writes, replay on reconnect, and binary bodies on a real device — and
+that job is validation, not demonstration.
+
+Two follow-ups, neither urgent:
+
+- **Rename it to reflect what it is.** `Hyperwyc.Sample.Maui` is really `Hyperwyc.Poc.Maui`.
+- **A demo worth showing needs a different domain** — append-only, one writer per record. The
+  inspection app sketched in [issue 50](../50-resilient-applications-guide.md) is the candidate,
+  and it comes from real client work rather than being invented to suit the library.
+
+Remaining UI polish is deliberately parked until per-route policies
+([22](../22-v1-per-route-policies.md)) land, since interplay between routes may dissolve some of
+it.

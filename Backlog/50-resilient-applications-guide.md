@@ -32,6 +32,45 @@ will end up at anyway, and nothing currently describes it.
 Getting that written down is also what allows Hyperwyc to keep saying no. "Not our remit" is a
 much stronger position when it is followed by a page explaining what to do instead.
 
+## The fit test, and why it belongs at the front
+
+Worked out 2026-08-28 while the sample kept fighting the tool, and it turned out to explain why.
+
+**Hyperwyc is a transport-layer tool, not a replacement for a local database.** It caches
+responses and replays queued writes. It does not hold your application's state, and an
+application that needs its state to survive and be queried offline needs its own store — with
+Hyperwyc as the delivery mechanism alongside it, not instead of it.
+
+That leads to a test for whether an application is a good fit, which is sharper than "does it
+need to work offline":
+
+| Shape | Fit | Why |
+|---|---|---|
+| **Append-only, one writer per record** — a social post, an inspection report, a timesheet entry | Good | Nobody else is editing your record, so there is nothing to resolve. Queue it, replay it, done |
+| **Shared mutable resource** — stock levels, seat reservations, an account balance | Poor | Many actors mutate one value, so an offline write is conflict-prone by construction. The rejection is the normal case, not an edge case, and no transport-layer tool can help because the conflict is real |
+
+The current sample is the second kind, which is why recording a sale offline produces a `409` as
+routine behaviour rather than as a demonstration of anything. Facebook's original
+service-worker showcase was the first kind: post offline, it goes when you reconnect, and no
+other user is editing your post.
+
+### The worked example to write this around
+
+An inspection app, from a real client project:
+
+1. **Fetch the inspection configuration** from the server. It changes daily; serve from cache
+   when offline. A read Hyperwyc handles entirely.
+2. **Record a vehicle inspection.** It goes to the application's own local database *and* is
+   POSTed to the API. The local store is what the UI reads; Hyperwyc is what eventually delivers.
+3. **Flag it unsynced** from the synthetic `202`, and mark it synced from the `SyncEvent` stream.
+   That is the whole integration, and it is small.
+4. **Conflicts do not arise**, because inspectors do not edit each other's reports. Where they
+   genuinely do — adding notes to a shared report — the answer is an established backend pattern
+   (event sourcing being the default), not something Hyperwyc should have an opinion about.
+
+This is the application-owned-store pattern that the rest of this document is about, so it
+should be the running example rather than an appendix.
+
 ## Rough contents
 
 Not a specification — a list of what has accumulated and would belong here.

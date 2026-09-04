@@ -103,6 +103,25 @@ Losing that key means losing access to everything already stored.
 - Doesn't replace your local database
 - Doesn't resolve data conflicts — it's designed for scenarios where conflicts are rare or handled server-side
 
+### Is your app a good fit?
+
+The useful question isn't "does it need to work offline" — it's **who else writes to the same
+record**.
+
+**Append-only, one writer per record** — a social post, an inspection report, a timesheet entry.
+Good fit. Nobody else is editing your record, so there's nothing to resolve: queue it, replay it,
+done.
+
+**A shared mutable resource** — stock levels, seat reservations, an account balance. Poor fit.
+Many actors mutate one value, so an offline write is conflict-prone by construction and rejection
+on replay is the normal case rather than an edge case. No transport-layer tool can help with that,
+because the conflict is real. You want conflict resolution at the origin — event sourcing, or
+whatever your domain calls for — and Hyperwyc has no opinion about it.
+
+Hyperwyc is a **transport-layer tool**. If your application's state needs to survive and be
+queried offline, it needs its own store, with Hyperwyc delivering alongside it rather than
+instead of it.
+
 ---
 
 ## How It Works
