@@ -132,7 +132,14 @@ app.MapPost("/sales/{id:guid}/receipt", async (
         if (file is null)
             return Results.BadRequest("No file provided.");
 
-        var filePath = Path.Combine(Directory.GetCurrentDirectory(), $"{id}.pdf");
+        var directoryPath = Path.Combine(Directory.GetCurrentDirectory(), "receipts");
+
+        if (!Directory.Exists(directoryPath))
+        {
+            Directory.CreateDirectory(directoryPath);
+        }
+
+        var filePath = Path.Combine(directoryPath, $"{id}.pdf");
 
         await using var fileStream = new FileStream(filePath, FileMode.Create);
         await file.CopyToAsync(fileStream,  token);
@@ -146,7 +153,7 @@ app.MapGet("/sales/{id:guid}/receipt", async (Guid id, CancellationToken token) 
     {
         // don't bother checking the DB, it's just a demo
 
-        var filePath = Path.Combine(Directory.GetCurrentDirectory(), $"{id}.pdf");
+        var filePath = Path.Combine(Directory.GetCurrentDirectory(), "receipts", $"{id}.pdf");
 
         if (!File.Exists(filePath))
         {
