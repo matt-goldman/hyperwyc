@@ -102,7 +102,7 @@ Not a specification — a list of what has accumulated and would belong here.
   handle the injected headers and respond to events when you need guaranteed delivery. Which
   typically means an application owned store in addition to what Hyperwyc caches for you."
 - **Deliberately unscheduled.** It should be written once the surface has stopped moving —
-  per-route policies ([22](22-v1-per-route-policies.md)) and binary bodies
+  per-route policies ([22](Done/22-v1-per-route-policies.md)) and binary bodies
   ([25](Done/25-binary-request-response-bodies.md)) both change what advice is correct. Writing it
   early means rewriting it.
 - Belongs in `docs/`, not the README. The README answers "how do I use it"; this answers "how do

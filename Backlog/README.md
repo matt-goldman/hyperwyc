@@ -65,15 +65,14 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 
 ## v1.0 — release candidate
 
-Deliberately short. Everything else on this list can be worked around by a consumer; these
-cannot. **25 is done**, which was the prerequisite: every later item that touches storage is
-cheaper now bodies are already bytes.
+Deliberately short, and **both are done**. Everything else on the backlog can be worked around by
+a consumer; these could not.
 
 | # | Item | Status | Notes |
 |---|---|---|---|
 | 25 | [Binary request/response bodies](Done/25-binary-request-response-bodies.md) | ✅ Done | Bodies are `byte[]` end to end — `ReadAsByteArrayAsync` in, `ByteArrayContent` out. Round-trip tests cover PNG, gzip and JSON; four of them fail against the old string path. `ByteArrayContent` also stamps no `Content-Type` of its own, which removes the trap that made replayed JSON writes go out as `text/plain`. Cap left at 512 KB, deliberately |
 | 49 | [Unreadable store recovery](49-unreadable-store-recovery.md) | ⬜ Open | **Proposed for v1.0, not yet agreed.** A key mismatch throws a raw `CryptographicException` from wherever the store is first touched, including out of the consumer's `HttpClient.SendAsync`. Policy: log, publish an event, degrade to an empty store, stop there — no throw, no delete, no recovery. `ResetStoreAsync` is already the application's remedy. Sequence after [32](32-default-encryption-key.md) |
-| 22 | [Per-route policies](22-v1-per-route-policies.md) | ⬜ Open | Last RC blocker. A single global policy cannot express "cache the catalogue for a day, never cache payments", which the README already promises. **Rewritten post-audit**: `OfflineResponsePolicy` and the staleness evaluator no longer exist, so what varies per route is strategy, TTL and invalidate-on-write. Removes `ISyncPolicy` — every member takes a request that no implementation uses — rather than adding a map beside it. Also renames `ApiFirst` to `NetworkFirst` |
+| 22 | [Per-route policies](Done/22-v1-per-route-policies.md) | ✅ Done | **Net removal**: `ISyncPolicy`, `SyncPolicy`, `PresetSyncPolicy`, `DefaultPolicy` and `DefaultCacheTtl` out; `RoutePolicy` and `RoutePolicyMap` in, with options down to six members. Registration order decides, written general to specific — each rule refines the ones before it, as `.gitignore` and the CSS cascade do. `NetworkOnly` now governs writes too, so an offline write to such a route is declined rather than queued. `ApiFirst` renamed `NetworkFirst` |
 
 ## v1.2 — ergonomics and operational visibility
 
@@ -108,7 +107,7 @@ then **46 before 45**, since cheap revalidation is what makes stale-while-revali
 
 | # | Item | Status | Notes |
 |---|---|---|---|
-| 50 | ["Designing resilient applications with Hyperwyc"](50-resilient-applications-guide.md) | ⬜ Open | Guidance doc, deliberately unscheduled. Collects the scattered "not our remit" caveats into one place and describes the application-owned-store pattern for consumers who need guaranteed delivery. Write it once [22](22-v1-per-route-policies.md) and [25](Done/25-binary-request-response-bodies.md) have stopped moving the surface |
+| 50 | ["Designing resilient applications with Hyperwyc"](50-resilient-applications-guide.md) | ⬜ Open | Guidance doc, deliberately unscheduled. Collects the scattered "not our remit" caveats into one place and describes the application-owned-store pattern for consumers who need guaranteed delivery. Write it once [22](Done/22-v1-per-route-policies.md) and [25](Done/25-binary-request-response-bodies.md) have stopped moving the surface |
 | 26 | [Typed response shaping for offline reads](Done/26-v2-typed-response-shaping.md) | ⛔ Superseded | Closed unbuilt. Layer 0 — return `null` rather than an empty body — shipped separately and removed the sharp edge. Layer 1 (`ReturnsCollection`) is a config knob for a null check the consumer writes anyway, and asks Hyperwyc to know a route returns a collection. Layer 2 depended on Layer 1 |
 
 ## Unfiled roadmap items
@@ -203,6 +202,12 @@ request grouping / bulk sync, and GraphQL support.
   documentation only → documentation with connectivity required and no default. Each pass
   removed something from the package. Worth remembering when the next "we should ship a helper
   for this" arrives.
+- **Item 22 is the clearest case for the ADR 0004 default.** Adding the last release-candidate
+  feature took three public types and two options members *out*. `ISyncPolicy`'s members both
+  took an `HttpRequestMessage` no implementation ever read, so ruling per-request configuration
+  out of scope did not just settle the design question — it condemned the existing interface. A
+  decision to not do something removes the justification for code that already exists, and
+  nothing goes back to collect it unless someone looks.
 - **Item 40 is where checking the prior art paid and where it didn't.** Service Worker's
   client-messaging pattern — persist the outcome, let the next launch read it — set the design
   order (persisted record first, event derived from it), and Workbox's caller-supplied queue

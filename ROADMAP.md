@@ -55,7 +55,7 @@ to its backlog item where one exists.
 Everything else on the backlog can be worked around by a consumer. These two cannot.
 
 - [x] Binary request and response bodies ([25](Backlog/Done/25-binary-request-response-bodies.md)) — bodies are `byte[]` end to end, so file uploads, image downloads, protobuf and gzip round-trip byte for byte instead of being silently corrupted by a UTF-8 decode
-- [ ] Fine-grained per-route policies ([22](Backlog/22-v1-per-route-policies.md)) — a single global policy cannot express "cache the catalogue for a day, never cache payments", which the README already promises
+- [x] Per-route policies ([22](Backlog/Done/22-v1-per-route-policies.md)) — `RoutePolicy` and `RoutePolicyMap`, registered general to specific with each rule refining the ones before it. Removed `ISyncPolicy` rather than adding a map beside it
 
 ---
 

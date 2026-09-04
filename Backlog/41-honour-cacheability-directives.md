@@ -36,7 +36,7 @@ opted in, route by route, with `registerRoute`.** The developer named the thing,
 opinion is secondary to an explicit local decision.
 
 Hyperwyc caches *every* GET by default. It inherited the stance without the precondition that
-justified it. Per-route policies ([issue 22](22-v1-per-route-policies.md)) would let a developer
+justified it. Per-route policies ([issue 22](Done/22-v1-per-route-policies.md)) would let a developer
 opt a route out, but that is not the same as respecting an instruction the server already sent.
 
 Against [the scope test](../docs/decisions/README.md#the-standing-scope-test):

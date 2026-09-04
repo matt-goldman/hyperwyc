@@ -106,7 +106,7 @@ ordinary deserialisation does not throw.
 than it was: the sharp edge is gone, and what is left is the convenience of `[]` over `null` for
 collections.
 
-Layer 1 folds naturally into per-route policies ([issue 22](../22-v1-per-route-policies.md)) as a
+Layer 1 folds naturally into per-route policies ([issue 22](22-v1-per-route-policies.md)) as a
 boolean rather than the free-form `EmptyOfflineBody` that item currently anticipates.
 
 ## Candidate Approaches

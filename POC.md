@@ -216,7 +216,7 @@ Worth knowing before you conclude something is broken:
   URL prefix, so `POST /sales` invalidates cached reads under `/sales`, not `/products` — even
   though the sale changed stock levels. Use a short TTL on the catalogue, an explicit refresh,
   or `SyncPolicy.ApiFirst()` for that route. Per-route policies
-  ([issue 22](Backlog/22-v1-per-route-policies.md)) would let this be expressed properly.
+  ([issue 22](Backlog/Done/22-v1-per-route-policies.md)) would let this be expressed properly.
 
 ---
 

@@ -52,7 +52,7 @@ Everything else has a working default, and is there when you want it:
 ```csharp
 services.AddHyperwyc(options =>
 {
-    options.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromDays(1));
+    options.Routes.Default = RoutePolicy.CacheFirst(TimeSpan.FromDays(1));
 });
 ```
 
@@ -135,17 +135,60 @@ Hyperwyc sits in your `HttpClient` pipeline as a `DelegatingHandler` — the sam
 
 ### Caching strategies
 
-The default is cache-first. Set `options.DefaultPolicy` to choose a different one:
+| Strategy | Online | Offline |
+|---|---|---|
+| `RoutePolicy.CacheFirst()` | Serve a fresh cached response; otherwise fetch | Serve the cached response even if stale |
+| `RoutePolicy.CacheFirst(ttl)` | As above, with the freshness window stated | As above |
+| `RoutePolicy.NetworkFirst()` | Always fetch; fall back to the cache only if the request fails | Serve the cached response even if stale |
+| `RoutePolicy.CacheOnly()` | Serve from cache regardless of age; never touch the network | Same |
+| `RoutePolicy.NetworkOnly()` | Always fetch; never read or write the store | **Writes are not queued** — see below |
 
-| Policy | Behaviour |
-|---|---|
-| `SyncPolicy.CacheFirst()` | Serve a fresh cached response; otherwise fetch. Uses `DefaultCacheTtl` |
-| `SyncPolicy.CacheFirst(ttl)` | As above, with the freshness window stated on the policy |
-| `SyncPolicy.ApiFirst()` | Always fetch; fall back to the cache only if the request fails |
-| `SyncPolicy.CacheOnly()` | Serve from cache regardless of age; never touch the network |
-| `SyncPolicy.NetworkOnly()` | Always fetch; never read or write the cache |
+### Per-route policies
 
-Offline, `CacheFirst` and `ApiFirst` both serve stale cached data rather than nothing, and
+The default applies to everything. Override it per route, **registering from general to
+specific — each rule refines the ones before it**:
+
+```csharp
+services.AddHyperwyc(options =>
+{
+    options.Routes
+        .For("/api/*",           RoutePolicy.CacheFirst(TimeSpan.FromHours(1)))
+        .For("/api/sales/*",     RoutePolicy.NetworkFirst(TimeSpan.FromSeconds(30)))
+        .For("/api/payments/*",  RoutePolicy.NetworkOnly());
+});
+```
+
+Written out that forms a pyramid, widest at the top — the order you think in, and a shape you
+can check at a glance. It's the same model as `.gitignore` and the CSS cascade: state the
+general rule, then carve out the exceptions. Where two patterns both match, the one registered
+later applies, so a broad rule placed *after* a narrow one will override it.
+
+Patterns match on the URL **path** only — scheme, host, port and query string are ignored, so a
+pattern works whatever your `BaseAddress` is. `/api/sales/*` covers `/api/sales` and everything
+beneath it; `*` matches everything; matching is case-insensitive.
+
+A policy carries three things:
+
+| Member | Default | |
+|---|---|---|
+| `Strategy` | `CacheFirst` | How reads are served |
+| `Ttl` | 5 minutes | How long a stored response stays fresh |
+| `InvalidateCacheOnWrite` | `true` | Whether a successful write clears stored responses under the same path prefix |
+
+Compose with `with` for anything the factories don't cover:
+
+```csharp
+.For("/api/audit/*", RoutePolicy.CacheFirst(TimeSpan.FromDays(7)) with { InvalidateCacheOnWrite = false })
+```
+
+> **`NetworkOnly` governs writes as well as reads.** It's the one strategy that does. An offline
+> write to a `NetworkOnly` route is **not queued** — it goes to the transport and fails as it
+> would without Hyperwyc installed. Use it where deferring a write is the wrong answer even
+> though deferring a read would be fine: a payment, a seat reservation, anything contending for a
+> shared mutable resource. Declining to take custody is more honest than a `202` Hyperwyc might
+> honour hours later.
+
+Offline, `CacheFirst` and `NetworkFirst` both serve stale cached data rather than nothing, and
 `CacheOnly` behaves the same as it does online. `NetworkOnly` opts out of the cache entirely,
 so it has nothing to offer offline.
 
@@ -185,8 +228,9 @@ if (products is null)
 ```
 
 **A collection comes back as `null`, not empty.** Returning `[]` would need Hyperwyc to know the
-route returns a collection, which is per-route knowledge it does not have — planned as part of
-per-route policies. Until then, a null-coalesce at the call site covers it.
+route returns a collection, which is knowledge it does not have. A null-coalesce at the call
+site covers it — and you need one for the online path anyway, since a server returning an empty
+response or a `204` produces the same shape.
 
 If you would rather branch on status codes than on `null`, set
 the `X-Hyperwyc-Status` header to find out. And if your API

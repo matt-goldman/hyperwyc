@@ -86,5 +86,5 @@ Two follow-ups, neither urgent:
   and it comes from real client work rather than being invented to suit the library.
 
 Remaining UI polish is deliberately parked until per-route policies
-([22](../22-v1-per-route-policies.md)) land, since interplay between routes may dissolve some of
+([22](22-v1-per-route-policies.md)) land, since interplay between routes may dissolve some of
 it.

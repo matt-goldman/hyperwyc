@@ -109,7 +109,7 @@ optimisation, not a correctness gap — the bytes are already right.
 
   The reasoning that migration was unnecessary because nothing is released was right about other
   consumers and wrong about the one consumer that exists: the developer, with a live store,
-  mid-debug. Any future change to the persisted shape — [22](../22-v1-per-route-policies.md) will
+  mid-debug. Any future change to the persisted shape — [22](22-v1-per-route-policies.md) will
   be one — needs the same reinstall, until
   [issue 49](../49-unreadable-store-recovery.md) makes an unreadable store self-healing.
 - **Decision:** Migration and breaking-change mitigation are NOT required. Current version is v <1, and this is in scope for v1. As this library is preview, breaking changes are to be expected and support is not required.

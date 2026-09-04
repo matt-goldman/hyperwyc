@@ -47,7 +47,7 @@ for applications that need explicit offline handling.
 
 | Package | Assembly | Contents |
 |---------|----------|----------|
-| `Hyperwyc.Core` | `Hyperwyc.Core.dll` | `HyperwycHandler`, all interfaces (`ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`), `SyncEventStream`, `IHyperwyc`, `InMemorySyncStore`, `AlwaysOnlineConnectivityService`, `NetworkAvailabilityConnectivityService`. Depends on `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Hosting.Abstractions` and `Microsoft.Extensions.Http`; no storage dependency. |
+| `Hyperwyc.Core` | `Hyperwyc.Core.dll` | `HyperwycHandler`, the interfaces (`ISyncStore`, `IConnectivityService`, `IHyperwyc`), `RoutePolicy`, `RoutePolicyMap`, `SyncEventStream`, `InMemorySyncStore`, `AlwaysOnlineConnectivityService`, `NetworkAvailabilityConnectivityService`. Depends on `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Hosting.Abstractions` and `Microsoft.Extensions.Http`; no storage dependency. |
 | `Hyperwyc` | `Hyperwyc.dll` | `CabinetSyncStore` backed by [Cabinet](https://github.com/mattgoldman/cabinet), `CabinetStoreOptions`, and the batteries-included `AddHyperwyc()`. Depends on `Hyperwyc.Core` and `Cabinet`. |
 
 `Hyperwyc` is the package almost everyone installs: `AddHyperwyc()` with no arguments produces
@@ -129,7 +129,7 @@ The handler branches first on connectivity, then on whether the method is mutati
 3. If **online**:
    - Sends the request immediately.
    - On success, invalidates cached GETs sharing the URL prefix (configurable via
-     `ISyncPolicy.ShouldInvalidateCacheOnWrite`), and publishes `OnSynced`.
+     the route policy's `InvalidateCacheOnWrite`), and publishes `OnSynced`.
 
 Online writes are not persisted to the outbox — they either succeed against the origin or
 their failure status is returned to the caller unchanged. Only offline writes are queued.
@@ -150,19 +150,19 @@ bookkeeping and is never sent.
 #### Incoming Responses (Read Operations)
 
 Read handling for `GET`, `HEAD` and `OPTIONS` is governed by the `CacheStrategy` that
-`ISyncPolicy.GetStrategy(request)` returns for the request:
+the route policy resolved for the request specifies:
 
 | Strategy | Online | Offline |
 |---|---|---|
 | `CacheFirst` (default) | Serves a fresh cached response; otherwise fetches, caches and returns | Serves the cached response even if stale; otherwise a synthetic offline response |
-| `ApiFirst` | Always fetches; falls back to the cache only if the request throws | Serves the cached response even if stale; otherwise a synthetic offline response |
+| `NetworkFirst` | Always fetches; falls back to the cache only if the request throws | Serves the cached response even if stale; otherwise a synthetic offline response |
 | `CacheOnly` | Serves the cached response regardless of staleness; never sends | Same as online — the network is never consulted either way |
 | `NetworkOnly` | Always sends; never reads or writes the cache | Synthetic offline response; the cache is not consulted |
 
 Successful responses are cached subject to the body size cap, and publish `OnUpdated`. Cached
 responses are reconstructed with their original status code and headers.
 
-`ApiFirst`'s fallback triggers on `HttpRequestException` — the case where
+`NetworkFirst`'s fallback triggers on `HttpRequestException` — the case where
 `IConnectivityService` reports online but the API is not actually reachable (captive portal,
 DNS failure, transient outage). `CacheFirst` deliberately does *not* fall back this way: it has
 already considered the cache and judged it stale.
@@ -175,7 +175,7 @@ request was withheld by policy rather than by connectivity.
 for a queued write. An empty body is not JSON, so `GetFromJsonAsync<T>` throws on it — for a
 single object as much as for a collection. `null` deserialises cleanly to a case application
 code already has to handle. A collection still arrives as `null` rather than `[]`; emitting `[]`
-needs per-route knowledge, tracked in [issue 26](Backlog/Done/26-v2-typed-response-shaping.md).
+needs knowledge Hyperwyc does not have; [issue 26](Backlog/Done/26-v2-typed-response-shaping.md) closed unbuilt.
 
 #### Cache Invalidation Prefix
 
@@ -282,7 +282,8 @@ semaphore's `AvailableWaitHandle` is never used and the invoker does not own its
 | `IConnectivityService` | Reports online/offline state and raises change events |
 | `AlwaysOnlineConnectivityService` | Always reports connected. Opt-in only; nothing is queued or replayed under it |
 | `NetworkAvailabilityConnectivityService` | BCL-backed `IConnectivityService` over `NetworkInterface.GetIsNetworkAvailable()`. Opt-in; detects hard-offline, not an unreachable API |
-| `ISyncPolicy` | Cache strategy, write-invalidation rules, and retry configuration per request |
+| `RoutePolicy` | Cache strategy, TTL and write-invalidation for one route |
+| `RoutePolicyMap` | Pattern-to-policy map; later registrations refine earlier ones |
 | `SyncEventStream` | Reactive event publisher (`IObservable<SyncEvent>`) |
 | `HyperwycResponseFactory` | Builds the synthetic `Queued` and `Offline` responses |
 
@@ -335,6 +336,34 @@ Each request/response pair is persisted as a single document:
   }
 }
 ```
+
+#### Route Policies
+
+`RoutePolicyMap` maps URL patterns to `RoutePolicy` values. Both the handler and
+`SyncOrchestrator` resolve through the same map, so a replayed write honours its route's
+invalidation decision rather than a global one.
+
+**Later registrations refine earlier ones**, so a map is written general to specific. That is
+`.gitignore`'s model and the CSS cascade's, and it matches how the configuration is composed:
+state the general rule, then carve out exceptions.
+
+Resolution by computed specificity was rejected. With this pattern language — exact paths, or a
+prefix ending `/*` — any two patterns that both match a path necessarily nest, so "more specific"
+and "registered later" always agree. Computing specificity would be an invisible rule producing
+the same answer as a visible one.
+
+Matching is on `AbsolutePath`, case-insensitive, ignoring scheme, host, port and query string, so
+a pattern is independent of the client's `BaseAddress`. `/api/sales/*` matches `/api/sales` as
+well as everything beneath it.
+
+`RoutePolicy` carries `Strategy`, `Ttl` and `InvalidateCacheOnWrite`. It is a value, not a
+function of a request: deciding per request is not a policy but a handler, which is why this
+replaced `ISyncPolicy`, whose two members both took an `HttpRequestMessage` that no shipped
+implementation ever read.
+
+`CacheStrategy.NetworkOnly` is the only strategy that governs writes as well as reads — an
+offline write to such a route is not queued, and passes through to the transport to fail as it
+would without Hyperwyc installed.
 
 #### Cache Entry Identity
 
@@ -458,15 +487,14 @@ services.AddHyperwyc();
 
 `AddHyperwyc` builds a `HyperwycOptions` instance, applies the caller's delegate, and
 registers the resolved services as singletons — except `HyperwycHandler`, which is transient.
-Unset options fall back to `TtlStalenessEvaluator` and `SyncPolicy.CacheFirst(1 day)`.
+Unset routes fall back to `Routes.Default`.
 Neither the store nor connectivity has a default; see Registration above and Connectivity
 below.
 
 | Option | Default |
 |---|---|
-| `DefaultPolicy` | `SyncPolicy.CacheFirst()` — TTL taken from `DefaultCacheTtl` |
+| `Routes` | An empty `RoutePolicyMap` whose `Default` is `RoutePolicy.CacheFirst()` — CacheFirst, 5-minute TTL, invalidate on write |
 | `Connectivity` | **No default — required.** Usually supplied by registering an `IConnectivityService` rather than by setting this; resolving throws if neither is done |
-| `DefaultCacheTtl` | 5 minutes |
 | `MaxCachedResponseBodyBytes` | 524,288 (512 KB) |
 | `ReplayTransport` | `null` — a plain `HttpClientHandler` is used |
 | `FlushOnStartup` | `true` |
@@ -519,11 +547,10 @@ storage-specific settings — `DirectoryPath` (default `{LocalApplicationData}/H
 `EncryptionKey` (default: derived from the path). These deliberately live outside
 `HyperwycOptions`, which stays free of concepts that apply to only one store.
 
-**Effective TTL** resolves at registration, after the caller's configuration has run: a TTL
-given to `SyncPolicy.CacheFirst(ttl)` wins, otherwise `DefaultCacheTtl` supplies it. The default
-policy deliberately carries no TTL of its own, so setting `DefaultCacheTtl` alone is honoured
-rather than being overwritten by a default nobody chose. The default staleness evaluator is
-constructed only once that resolution is complete.
+**There is no effective-TTL resolution.** A resolved `RoutePolicy` carries one concrete TTL, so
+nothing is reconciled at registration. Two sources for one value, resolved in the wrong order, is
+exactly what [issue 29](Backlog/Done/29-default-ttl-propagation.md) was; the ambiguity is deleted
+rather than fixed.
 
 ---
 
@@ -531,7 +558,7 @@ constructed only once that resolution is complete.
 
 - **Retry strategy:** one attempt per flush. A transiently failed envelope is deferred to a
   scheduled later attempt with exponential backoff and jitter, rather than retried in place.
-  Configured via `ISyncPolicy.GetRetryOptions(request)`, which receives the request and can
+  Configured via the route policy, which
   therefore vary per endpoint. Backoff is clamped to one hour so a generous budget cannot
   schedule an attempt absurdly far out.
 - **No resilience-library dependency.** Retry was previously a Polly pipeline inside each
