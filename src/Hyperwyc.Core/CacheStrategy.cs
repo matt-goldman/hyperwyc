@@ -18,10 +18,6 @@ public enum CacheStrategy
     /// </summary>
     NetworkFirst,
 
-    /// <summary>
-    /// Only ever return a cached response. Never make a network request.
-    /// </summary>
-    CacheOnly,
 
     /// <summary>
     /// Never involve Hyperwyc's store, in either direction. Reads are neither served from it

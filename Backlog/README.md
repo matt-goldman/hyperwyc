@@ -82,7 +82,8 @@ a consumer; these could not.
 | 48 | [Exclude the store from OS backup](48-exclude-store-from-os-backup.md) | ⬜ Open | Documentation. The store sits where iOS and Android back it up by default; a **restored outbox replays writes that already happened**, and Hyperwyc has no duplicate suppression by design. Android's 25 MB backup quota is the secondary argument. Path-level exclusion works on both platforms |
 | 52 | [Every cache write rewrites the whole store](52-store-rewrites-whole-set-per-write.md) | ⬜ Open | Cabinet's `RecordSet` calls `SaveAllAsync` for a single-record change, so one cached response costs O(total records) to store and filling a cache costs O(n²). Widens every concurrency window as the store grows, which is the leading explanation for [51](Done/51-cabinet-store-not-thread-safe.md)'s never-to-always failure rate. Partly an upstream Cabinet question |
 | 53 | [Not AOT-safe: no `JsonSerializerContext`](53-aot-json-serialization.md) | ⬜ Open | `CabinetSyncStore` passes `null` where Cabinet accepts `JsonSerializerOptions`, so serialisation falls back to reflection — in a library whose primary audience ships iOS release builds with AOT on by default. Structurally unfixable by the consumer. **Proposed for v1.0** |
-| 21 | [`Date` header rewriting](21-v1-date-header-rewriting.md) | ⬜ Open | Plus the `X-Hyperwyc-Cached-At` header |
+| 21 | [`Date` header rewriting](21-v1-date-header-rewriting.md) | ⬜ Open | Plus the `X-Hyperwyc-Cached-At` header, which may dissolve [54](54-ttl-as-a-validity-bound.md) |
+| 54 | [TTL is a refetch trigger, not a validity bound](54-ttl-as-a-validity-bound.md) | ⬜ Open | TTL is ignored offline, so `CacheFirst(5 min)` means "refetch after five minutes when you can", not "never serve anything older". A route where stale data is worse than none cannot say so. Sequence behind [21](21-v1-date-header-rewriting.md); HTTP expresses this as `must-revalidate` rather than as a strategy |
 | 23 | [Diagnostics view](23-v1-diagnostics-view.md) | ⬜ Open | Read-only outbox and dead-letter queries on `IHyperwyc`. [40](Done/40-surface-deferred-outcomes.md) persisted the failure detail; this is the read path that makes it observable — and the only place a transport failure, which publishes no event, can be seen |
 | 24 | [Dead-letter management](24-v1-dead-letter-management.md) | ⬜ Open | Requeue and dismiss. Depends on 23 for the UI surface |
 | 20 | [Configurable body cache cap](20-v1-configurable-body-cache-cap.md) | 🟡 Partial | The option is already public and honoured. Remaining: argument validation and README documentation |
@@ -202,6 +203,12 @@ request grouping / bulk sync, and GraphQL support.
   documentation only → documentation with connectivity required and no default. Each pass
   removed something from the package. Worth remembering when the next "we should ship a helper
   for this" arrives.
+- **`CacheOnly` shipped unusable and was removed on 2026-09-05.** It returned early before the
+  caching step, so a route configured with it could never populate its own cache and missed on
+  every call forever. Workbox's version works because precaching fills the store at install
+  time — our prefetch-on-boot, still unbuilt. We shipped the consumer half of a two-part
+  mechanism and nothing caught it, because every test seeded the cache by hand. Worth
+  remembering: a feature whose only sensible use depends on an unbuilt feature is not a feature.
 - **Item 22 is the clearest case for the ADR 0004 default.** Adding the last release-candidate
   feature took three public types and two options members *out*. `ISyncPolicy`'s members both
   took an `HttpRequestMessage` no implementation ever read, so ruling per-request configuration

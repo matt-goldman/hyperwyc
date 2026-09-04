@@ -57,9 +57,6 @@ public sealed record RoutePolicy
     public static RoutePolicy NetworkFirst(TimeSpan ttl) =>
         new() { Strategy = CacheStrategy.NetworkFirst, Ttl = ttl };
 
-    /// <summary>Only ever serve a stored response; never reach the network.</summary>
-    public static RoutePolicy CacheOnly() =>
-        new() { Strategy = CacheStrategy.CacheOnly };
 
     /// <summary>
     /// Never involve Hyperwyc's store on this route, in either direction: reads are not served

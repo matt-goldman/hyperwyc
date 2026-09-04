@@ -75,16 +75,6 @@ public class SyntheticResponseBodyTests
         Assert.Single(await store.GetPendingOutboxAsync());
     }
 
-    [Fact]
-    public async Task CacheOnlyMiss_DeserialisesToNullRatherThanThrowing()
-    {
-        using var client = new HttpClient(
-            BuildHandler(isConnected: true, strategy: CacheStrategy.CacheOnly));
-
-        var product = await client.GetFromJsonAsync<Product>("https://example.com/api/products/1");
-
-        Assert.Null(product);
-    }
 
     // -------------------------------------------------------------------------
     // Shape of the synthetic response

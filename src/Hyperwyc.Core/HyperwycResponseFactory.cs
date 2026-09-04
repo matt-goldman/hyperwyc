@@ -117,20 +117,4 @@ internal static class HyperwycResponseFactory
         return response;
     }
 
-    /// <summary>
-    /// Returns a synthetic response for a <see cref="CacheStrategy.CacheOnly"/> read
-    /// that found nothing cached.
-    /// </summary>
-    /// <remarks>
-    /// Distinct from <see cref="Offline"/> because the device may well be online —
-    /// the request was not sent because the route opted out of the network, not
-    /// because the network was unavailable. Reporting <c>Offline</c> here would
-    /// misdescribe the situation to any caller inspecting the header.
-    /// </remarks>
-    internal static HttpResponseMessage CacheMiss()
-    {
-        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonNull() };
-        response.Headers.TryAddWithoutValidation(StatusHeader, "CacheMiss");
-        return response;
-    }
 }

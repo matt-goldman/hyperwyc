@@ -156,7 +156,6 @@ the route policy resolved for the request specifies:
 |---|---|---|
 | `CacheFirst` (default) | Serves a fresh cached response; otherwise fetches, caches and returns | Serves the cached response even if stale; otherwise a synthetic offline response |
 | `NetworkFirst` | Always fetches; falls back to the cache only if the request throws | Serves the cached response even if stale; otherwise a synthetic offline response |
-| `CacheOnly` | Serves the cached response regardless of staleness; never sends | Same as online — the network is never consulted either way |
 | `NetworkOnly` | Always sends; never reads or writes the cache | Synthetic offline response; the cache is not consulted |
 
 Successful responses are cached subject to the body size cap, and publish `OnUpdated`. Cached
@@ -167,9 +166,19 @@ responses are reconstructed with their original status code and headers.
 DNS failure, transient outage). `CacheFirst` deliberately does *not* fall back this way: it has
 already considered the cache and judged it stale.
 
-Synthetic read responses carry `X-Hyperwyc-Status: Offline`, except a `CacheOnly` read that
-finds nothing cached, which carries `CacheMiss` — the device may well be online, and the
-request was withheld by policy rather than by connectivity.
+Synthetic read responses carry `X-Hyperwyc-Status: Offline`.
+
+**TTL is a refetch trigger, not a validity bound.** It is consulted online, to decide whether
+`CacheFirst` reaches the network; it is not consulted offline, where a stale response is served
+in preference to none. A route that must never be served stale cannot say so — see
+[issue 54](Backlog/54-ttl-as-a-validity-bound.md).
+
+`CacheOnly` was removed on 2026-09-05. It returned early before `CacheResponseIfEligibleAsync`,
+so a route configured with it could never populate its own cache and missed on every call
+forever. Workbox's equivalent works because precaching fills the store at install time; that is
+prefetch-on-boot, still unbuilt. The consumer half of a two-part mechanism shipped without the
+other half. `X-Hyperwyc-Status: CacheMiss` and `HyperwycResponseFactory.CacheMiss()` went with
+it, having served only that strategy. Both return when precaching does.
 
 **Every synthetic response carries the JSON `null` literal as its body**, including the `202`
 for a queued write. An empty body is not JSON, so `GetFromJsonAsync<T>` throws on it — for a

@@ -16,7 +16,8 @@ namespace Hyperwyc;
 ///     .For("/api/sales/{id}/lines", RoutePolicy.NetworkOnly());
 /// </code>
 /// <para>
-/// Written out that forms a pyramid, widest at the top, which is both the order you think in —
+/// Written out that forms a pyramid — shortest line at the top, widening as each rule
+/// narrows — which is both the order you think in —
 /// state the general rule, then carve out the exceptions — and a shape you can check at a
 /// glance. Where two patterns both match, the one registered later applies, so a broad rule
 /// placed <em>after</em> a narrow one will override it.

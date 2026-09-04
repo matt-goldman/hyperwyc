@@ -140,7 +140,6 @@ Hyperwyc sits in your `HttpClient` pipeline as a `DelegatingHandler` — the sam
 | `RoutePolicy.CacheFirst()` | Serve a fresh cached response; otherwise fetch | Serve the cached response even if stale |
 | `RoutePolicy.CacheFirst(ttl)` | As above, with the freshness window stated | As above |
 | `RoutePolicy.NetworkFirst()` | Always fetch; fall back to the cache only if the request fails | Serve the cached response even if stale |
-| `RoutePolicy.CacheOnly()` | Serve from cache regardless of age; never touch the network | Same |
 | `RoutePolicy.NetworkOnly()` | Always fetch; never read or write the store | **Writes are not queued** — see below |
 
 ### Per-route policies
@@ -158,8 +157,8 @@ services.AddHyperwyc(options =>
 });
 ```
 
-Written out that forms a pyramid, widest at the top — the order you think in, and a shape you
-can check at a glance. It's the same model as `.gitignore` and the CSS cascade: state the
+Written out that forms a pyramid — the shortest line at the top, widening as each rule narrows
+— which is the order you think in, and a shape you can check at a glance. It's the same model as `.gitignore` and the CSS cascade: state the
 general rule, then carve out the exceptions. Where two patterns both match, the one registered
 later applies, so a broad rule placed *after* a narrow one will override it.
 
@@ -188,12 +187,17 @@ Compose with `with` for anything the factories don't cover:
 > shared mutable resource. Declining to take custody is more honest than a `202` Hyperwyc might
 > honour hours later.
 
-Offline, `CacheFirst` and `NetworkFirst` both serve stale cached data rather than nothing, and
-`CacheOnly` behaves the same as it does online. `NetworkOnly` opts out of the cache entirely,
-so it has nothing to offer offline.
+> **TTL is a refetch trigger, not an expiry.** Offline, `CacheFirst` and `NetworkFirst` both
+> serve stale cached data rather than nothing — the TTL is not consulted, because there is
+> nothing to refetch from and stale data beats none for the reads this library exists to serve.
+> So `CacheFirst(TimeSpan.FromMinutes(5))` means "refetch after five minutes when you can", not
+> "never serve anything older than five minutes".
+>
+> If a route must *not* be served stale — a price, a safety configuration, a permission set,
+> where silently-old data is worse than none — Hyperwyc cannot express that yet. Tracked as
+> [issue 54](Backlog/54-ttl-as-a-validity-bound.md).
 
-A `CacheOnly` read that finds nothing cached returns `X-Hyperwyc-Status: CacheMiss` rather than
-`Offline` — the device may be online, and the request was withheld by policy, not connectivity.
+`NetworkOnly` opts out of the store entirely, so it has nothing to offer offline.
 
 The app doesn't need to know the difference. Your existing code doesn't change.
 

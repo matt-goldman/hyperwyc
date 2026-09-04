@@ -54,9 +54,9 @@ public class RoutePolicyMapTests
     [Fact]
     public void BareStar_MatchesEverything()
     {
-        var map = new RoutePolicyMap().For("*", RoutePolicy.CacheOnly());
+        var map = new RoutePolicyMap().For("*", RoutePolicy.NetworkOnly());
 
-        Assert.Equal(CacheStrategy.CacheOnly, Resolve(map, "https://example.com/anything/at/all").Strategy);
+        Assert.Equal(CacheStrategy.NetworkOnly, Resolve(map, "https://example.com/anything/at/all").Strategy);
     }
 
     // -------------------------------------------------------------------------
@@ -96,9 +96,9 @@ public class RoutePolicyMapTests
         var map = new RoutePolicyMap()
             .For("/api/*", RoutePolicy.CacheFirst(TimeSpan.FromHours(1)))
             .For("/api/sales/*", RoutePolicy.NetworkFirst(TimeSpan.FromSeconds(30)))
-            .For("/api/sales/draft", RoutePolicy.CacheOnly());
+            .For("/api/sales/draft", RoutePolicy.NetworkOnly());
 
-        Assert.Equal(CacheStrategy.CacheOnly, Resolve(map, "https://example.com/api/sales/draft").Strategy);
+        Assert.Equal(CacheStrategy.NetworkOnly, Resolve(map, "https://example.com/api/sales/draft").Strategy);
         Assert.Equal(CacheStrategy.NetworkFirst, Resolve(map, "https://example.com/api/sales/7").Strategy);
         Assert.Equal(CacheStrategy.CacheFirst, Resolve(map, "https://example.com/api/products").Strategy);
     }
@@ -188,7 +188,6 @@ public class RoutePolicyMapTests
     {
         Assert.Equal(CacheStrategy.CacheFirst, RoutePolicy.CacheFirst().Strategy);
         Assert.Equal(CacheStrategy.NetworkFirst, RoutePolicy.NetworkFirst().Strategy);
-        Assert.Equal(CacheStrategy.CacheOnly, RoutePolicy.CacheOnly().Strategy);
         Assert.Equal(CacheStrategy.NetworkOnly, RoutePolicy.NetworkOnly().Strategy);
 
         Assert.Equal(TimeSpan.FromMinutes(5), RoutePolicy.CacheFirst().Ttl);

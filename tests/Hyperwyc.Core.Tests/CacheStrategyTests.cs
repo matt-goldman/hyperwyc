@@ -94,75 +94,9 @@ public class CacheStrategyTests
         Assert.Equal("Offline", response.Headers.GetValues("X-Hyperwyc-Status").Single());
     }
 
-    // -------------------------------------------------------------------------
-    // CacheOnly — never reaches the network
-    // -------------------------------------------------------------------------
 
-    [Fact]
-    public async Task CacheOnly_ServesCache_WithoutCallingNetwork()
-    {
-        var store = new InMemorySyncStore();
-        await store.UpsertAsync(CachedEnvelope());
-        var stub = NetworkReturning();
-        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.CacheOnly));
 
-        var response = await client.GetAsync(Url);
 
-        Assert.Equal(0, stub.CallCount);
-        Assert.Equal("cached", await response.Content.ReadAsStringAsync());
-    }
-
-    [Fact]
-    public async Task CacheOnly_ServesStaleCache_RatherThanCallingNetwork()
-    {
-        var store = new InMemorySyncStore();
-        await store.UpsertAsync(CachedEnvelope());
-        var stub = NetworkReturning();
-        using var client = new HttpClient(
-            BuildHandler(store, stub, CacheStrategy.CacheOnly, cacheIsStale: true));
-
-        var response = await client.GetAsync(Url);
-
-        Assert.Equal(0, stub.CallCount);
-        Assert.Equal("cached", await response.Content.ReadAsStringAsync());
-    }
-
-    [Fact]
-    public async Task CacheOnly_EmptyCache_ReturnsCacheMissWithoutCallingNetwork()
-    {
-        var store = new InMemorySyncStore();
-        var stub = NetworkReturning();
-        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.CacheOnly));
-
-        var response = await client.GetAsync(Url);
-
-        Assert.Equal(0, stub.CallCount);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        // Not "Offline" — the device is online; the route opted out of the network.
-        Assert.Equal("CacheMiss", response.Headers.GetValues("X-Hyperwyc-Status").Single());
-    }
-
-    [Fact]
-    public async Task CacheOnly_EmptyCache_ReturnsCacheMiss()
-    {
-        var store = new InMemorySyncStore();
-        var stub = NetworkReturning();
-        var handler = new HyperwycHandler(
-            store,
-            new FakeConnectivityService(isConnected: true),
-            new SyncEventStream(),
-            OptionsFor(CacheStrategy.CacheOnly, cacheIsStale: false))
-        { InnerHandler = stub };
-        using var client = new HttpClient(handler);
-
-        var response = await client.GetAsync(Url);
-
-        // One shape for a synthetic response now that OfflineResponsePolicy is gone: a normal
-        // success the caller need not branch on, distinguished by the status header.
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("CacheMiss", response.Headers.GetValues("X-Hyperwyc-Status").Single());
-    }
 
     // -------------------------------------------------------------------------
     // NetworkFirst — network first, cache only as a failure fallback

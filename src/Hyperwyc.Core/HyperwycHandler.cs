@@ -143,7 +143,10 @@ public sealed class HyperwycHandler : DelegatingHandler
 
         var url = request.RequestUri?.ToString() ?? string.Empty;
 
-        // Serve from cache even if stale — any cached data is better than nothing offline.
+        // Serve from cache even if stale. TTL is a refetch trigger, not a validity bound:
+        // offline there is nothing to refetch from, and stale data beats none for the reads
+        // this library exists to serve. A route that must not be served stale cannot say so
+        // yet — see issue #54.
         var cached = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
         if (cached is not null)
             return BuildResponseFromEnvelope(cached);
@@ -195,15 +198,6 @@ public sealed class HyperwycHandler : DelegatingHandler
         if (strategy == CacheStrategy.NetworkOnly)
             return await base.SendAsync(request, ct).ConfigureAwait(false);
 
-        // CacheOnly never reaches the network, so staleness is irrelevant — a stale
-        // cached response is the only answer available.
-        if (strategy == CacheStrategy.CacheOnly)
-        {
-            var cacheOnly = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
-            return cacheOnly is not null
-                ? BuildResponseFromEnvelope(cacheOnly)
-                : HyperwycResponseFactory.CacheMiss();
-        }
 
         // CacheFirst serves a fresh cached response without touching the network.
         // NetworkFirst always goes to the network, and consults the cache only on failure.
