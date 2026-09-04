@@ -8,8 +8,24 @@ where silently-old data is worse than no data — cannot say so.
 
 ## Status
 
-⬜ Open. Filed 2026-09-05. **Sequence behind [issue 21](21-v1-date-header-rewriting.md)**, which
-may dissolve it.
+⛔ **Closed the day it was filed, 2026-09-05 — by making the validity bound the only semantic.**
+
+Filed to track the missing second behaviour, then dissolved by removing the first. TTL now says
+how old a stored response may be and still be served, online and offline alike; past it, nothing
+is served. There is no flag, no dependency on [21](../21-v1-date-header-rewriting.md), and no fifth
+strategy.
+
+The case against the old behaviour, once stated plainly, was hard to answer: one value meant two
+things with a hidden mode switch, and the mode switch fired exactly when the library is supposed
+to be doing its job. "Fetch fresh whenever possible" was always expressible as `NetworkFirst` —
+a strategy — so nothing was lost by making TTL mean one thing.
+
+The default rose from five minutes to one day in the same change. As a refetch trigger five
+minutes was reasonable; as a validity bound it would make a cache useless for any offline
+session longer than a coffee break.
+
+Kept rather than deleted because the analysis below is the reasoning for the current design, and
+because the HTTP prior art is worth not rediscovering.
 
 ## The two semantics
 
@@ -39,13 +55,13 @@ That argues against a fifth `CacheStrategy` and for either a flag or a server-dr
 
 ## Three candidate homes, in the order they should be considered
 
-1. **Expose the age and let the application decide** — [issue 21](21-v1-date-header-rewriting.md)
+1. **Expose the age and let the application decide** — [issue 21](../21-v1-date-header-rewriting.md)
    already plans `X-Hyperwyc-Cached-At`. With it, a caller reads the age and applies its own
    tolerance. That hands over what only Hyperwyc knows and leaves the judgement where the domain
-   knowledge is, which is the answer [the scope test](../docs/decisions/README.md#the-standing-scope-test)
+   knowledge is, which is the answer [the scope test](../../docs/decisions/README.md#the-standing-scope-test)
    prefers. **Check whether this removes the need before building anything else** — the same move
    that dissolved cross-route invalidation.
-2. **Honour `must-revalidate`** — [issue 41](41-honour-cacheability-directives.md). Server-driven,
+2. **Honour `must-revalidate`** — [issue 41](../41-honour-cacheability-directives.md). Server-driven,
    no configuration, correct long-term. No help to a consumer whose API sends no directives.
 3. **A `ServeStaleWhenOffline` flag on `RoutePolicy`**, defaulting to `true`. Most convenient,
    and the only one that adds a knob. `false` would return the synthetic offline response, so no
@@ -61,7 +77,7 @@ That argues against a fifth `CacheStrategy` and for either a flag or a server-dr
 ## Notes
 
 - Raised by the author while reviewing per-route policies
-  ([22](Done/22-v1-per-route-policies.md)): *"I would expect ttl to fail a fetch if offline and
+  ([22](22-v1-per-route-policies.md)): *"I would expect ttl to fail a fetch if offline and
   the cached item has expired, yet I think ttl is ignored for offline."*
 - Not urgent. The default is defensible and is what a Service Worker does; what was missing was
   saying so.

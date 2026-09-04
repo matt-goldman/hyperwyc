@@ -171,7 +171,7 @@ A policy carries three things:
 | Member | Default | |
 |---|---|---|
 | `Strategy` | `CacheFirst` | How reads are served |
-| `Ttl` | 5 minutes | How long a stored response stays fresh |
+| `Ttl` | 1 day | How old a stored response may be and still be served, online or offline |
 | `InvalidateCacheOnWrite` | `true` | Whether a successful write clears stored responses under the same path prefix |
 
 Compose with `with` for anything the factories don't cover:
@@ -187,15 +187,14 @@ Compose with `with` for anything the factories don't cover:
 > shared mutable resource. Declining to take custody is more honest than a `202` Hyperwyc might
 > honour hours later.
 
-> **TTL is a refetch trigger, not an expiry.** Offline, `CacheFirst` and `NetworkFirst` both
-> serve stale cached data rather than nothing — the TTL is not consulted, because there is
-> nothing to refetch from and stale data beats none for the reads this library exists to serve.
-> So `CacheFirst(TimeSpan.FromMinutes(5))` means "refetch after five minutes when you can", not
-> "never serve anything older than five minutes".
+> **TTL says how old a cached response may be and still be served — nothing else.** It means the
+> same thing online and offline. Past it, the response is not served: online it is refetched,
+> offline the caller gets the same "no data" answer as if nothing were cached.
 >
-> If a route must *not* be served stale — a price, a safety configuration, a permission set,
-> where silently-old data is worse than none — Hyperwyc cannot express that yet. Tracked as
-> [issue 54](Backlog/54-ttl-as-a-validity-bound.md).
+> So set it to how long the data is genuinely useful, not to how often you would like to
+> refresh. "Always fetch when I can" is `NetworkFirst`, which is a strategy — using a short TTL
+> to force refetching would leave you nothing to serve offline, which is the opposite of the
+> point. The default is one day.
 
 `NetworkOnly` opts out of the store entirely, so it has nothing to offer offline.
 

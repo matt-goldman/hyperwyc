@@ -152,26 +152,47 @@ public class HyperwycHandlerOfflinePathTests
     }
 
     [Fact]
-    public async Task OfflineRead_ServesStaleCacheWhenOffline()
+    public async Task OfflineRead_ServesCachedResponseWithinItsTtl()
     {
         var store = new InMemorySyncStore();
-        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", "stale-data"));
+        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", "cached-data"));
 
-        // Staleness must not prevent cache serving when offline — stale data beats none.
         var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: false),
             new SyncEventStream(),
-            // Zero TTL: every cached entry is stale. Offline, that must not matter.
+            TestOptions.WithTtl(TimeSpan.FromMinutes(5)))
+        { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
+        using var client = new HttpClient(handler);
+
+        var response = await client.GetAsync("https://example.com/api/items");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("cached-data", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task OfflineRead_PastItsTtl_ServesNothingRatherThanSomethingTooOld()
+    {
+        var store = new InMemorySyncStore();
+        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", "too-old"));
+
+        // The TTL means the same thing offline as online: how old a stored response may be and
+        // still be served. Past it the caller gets the offline response as though nothing were
+        // cached — an application can act on "no data" and cannot detect "quietly too old".
+        var handler = new HyperwycHandler(
+            store,
+            new FakeConnectivityService(isConnected: false),
+            new SyncEventStream(),
             TestOptions.WithTtl(TimeSpan.Zero))
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
         using var client = new HttpClient(handler);
 
         var response = await client.GetAsync("https://example.com/api/items");
-        var body = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("stale-data", body);
+        Assert.Equal("Offline", response.Headers.GetValues("X-Hyperwyc-Status").Single());
+        Assert.DoesNotContain("too-old", await response.Content.ReadAsStringAsync());
     }
 
     // -------------------------------------------------------------------------

@@ -37,13 +37,16 @@ public class CacheRefreshTests
             });
     }
 
-    /// <summary>A zero TTL means every read is a refetch, which is what exercises the replace.</summary>
+    /// <summary>
+    /// A zero TTL means every read is a refetch, which is what exercises the replace. Offline
+    /// it would also mean nothing is servable, so the offline handler gets a live TTL.
+    /// </summary>
     private static HyperwycHandler Handler(
         ISyncStore store, HttpMessageHandler inner, bool connected = true) =>
         new(store,
             new FakeConnectivityService(connected),
             new SyncEventStream(),
-            TestOptions.WithTtl(TimeSpan.Zero))
+            TestOptions.WithTtl(connected ? TimeSpan.Zero : TimeSpan.FromMinutes(5)))
         { InnerHandler = inner };
 
     [Fact]

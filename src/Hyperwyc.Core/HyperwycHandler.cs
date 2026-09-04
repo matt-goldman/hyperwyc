@@ -137,18 +137,20 @@ public sealed class HyperwycHandler : DelegatingHandler
         HttpRequestMessage request,
         CancellationToken ct)
     {
-        // NetworkOnly opts out of the cache entirely, so there is nothing to serve.
-        if (Policy(request).Strategy == CacheStrategy.NetworkOnly)
+        var policy = Policy(request);
+
+        // NetworkOnly opts out of the store entirely, so there is nothing to serve.
+        if (policy.Strategy == CacheStrategy.NetworkOnly)
             return HyperwycResponseFactory.Offline();
 
         var url = request.RequestUri?.ToString() ?? string.Empty;
 
-        // Serve from cache even if stale. TTL is a refetch trigger, not a validity bound:
-        // offline there is nothing to refetch from, and stale data beats none for the reads
-        // this library exists to serve. A route that must not be served stale cannot say so
-        // yet — see issue #54.
+        // The TTL applies offline exactly as it does online: it says how old a stored response
+        // may be and still be served, not when to go looking for a fresher one. Past it, the
+        // caller gets the offline response as though nothing were cached — which is the point,
+        // because an application can act on "no data" and cannot detect "quietly too old".
         var cached = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
-        if (cached is not null)
+        if (cached is not null && !IsStale(cached, policy.Ttl))
             return BuildResponseFromEnvelope(cached);
 
         return HyperwycResponseFactory.Offline();
@@ -218,7 +220,7 @@ public sealed class HyperwycHandler : DelegatingHandler
             // Reachable when IConnectivityService reports online but the API is not
             // actually reachable — a captive portal, DNS failure or transient outage.
             var fallback = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
-            if (fallback is not null)
+            if (fallback is not null && !IsStale(fallback, policy.Ttl))
                 return BuildResponseFromEnvelope(fallback);
 
             throw;

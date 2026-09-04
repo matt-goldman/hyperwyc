@@ -24,13 +24,27 @@ public sealed record RoutePolicy
     public CacheStrategy Strategy { get; init; } = CacheStrategy.CacheFirst;
 
     /// <summary>
-    /// How long a stored response stays fresh. Defaults to 5 minutes.
+    /// How old a stored response may be and still be served. Defaults to one day.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// <b>A validity bound, not a refetch trigger.</b> Past its TTL a stored response is not
+    /// served at all — online it is refetched, offline the caller gets the synthetic offline
+    /// response as though nothing were cached. The TTL is the whole of the answer to "how stale
+    /// may this be", and it means the same thing whether or not there is a network.
+    /// </para>
+    /// <para>
+    /// So set it to how long the data is genuinely useful, not to how often you would like to
+    /// refresh. "Always fetch when I can" is <see cref="NetworkFirst()"/>, which is a strategy;
+    /// using a short TTL to force refetching would leave nothing servable offline, which is
+    /// the opposite of what this library is for.
+    /// </para>
+    /// <para>
     /// Always concrete, never inherited. A TTL that could come from two places is what caused
     /// issue #29, so the matched policy is the single source and there is no fallback chain.
+    /// </para>
     /// </remarks>
-    public TimeSpan Ttl { get; init; } = TimeSpan.FromMinutes(5);
+    public TimeSpan Ttl { get; init; } = TimeSpan.FromDays(1);
 
     /// <summary>
     /// Whether a successful write clears stored responses under the same path prefix.

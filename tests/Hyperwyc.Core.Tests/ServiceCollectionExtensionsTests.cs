@@ -213,13 +213,13 @@ public sealed class ServiceCollectionExtensionsTests
     // -------------------------------------------------------------------------
 
     [Fact]
-    public void AddHyperwycCore_Defaults_ApplyFiveMinuteTtl()
+    public void AddHyperwycCore_Defaults_ApplyAOneDayTtl()
     {
         var sp = BuildProvider(null);
 
         var options = sp.GetRequiredService<HyperwycOptions>();
 
-        Assert.Equal(TimeSpan.FromMinutes(5), options.Routes.Default.Ttl);
+        Assert.Equal(TimeSpan.FromDays(1), options.Routes.Default.Ttl);
         Assert.Equal(CacheStrategy.CacheFirst, options.Routes.Default.Strategy);
     }
 

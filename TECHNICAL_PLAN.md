@@ -154,8 +154,8 @@ the route policy resolved for the request specifies:
 
 | Strategy | Online | Offline |
 |---|---|---|
-| `CacheFirst` (default) | Serves a fresh cached response; otherwise fetches, caches and returns | Serves the cached response even if stale; otherwise a synthetic offline response |
-| `NetworkFirst` | Always fetches; falls back to the cache only if the request throws | Serves the cached response even if stale; otherwise a synthetic offline response |
+| `CacheFirst` (default) | Serves a cached response within its TTL; otherwise fetches, caches and returns | Serves a cached response within its TTL; otherwise a synthetic offline response |
+| `NetworkFirst` | Always fetches; falls back to a cached response within its TTL if the request throws | Serves a cached response within its TTL; otherwise a synthetic offline response |
 | `NetworkOnly` | Always sends; never reads or writes the cache | Synthetic offline response; the cache is not consulted |
 
 Successful responses are cached subject to the body size cap, and publish `OnUpdated`. Cached
@@ -168,10 +168,17 @@ already considered the cache and judged it stale.
 
 Synthetic read responses carry `X-Hyperwyc-Status: Offline`.
 
-**TTL is a refetch trigger, not a validity bound.** It is consulted online, to decide whether
-`CacheFirst` reaches the network; it is not consulted offline, where a stale response is served
-in preference to none. A route that must never be served stale cannot say so — see
-[issue 54](Backlog/54-ttl-as-a-validity-bound.md).
+**TTL is a validity bound.** It states how old a stored response may be and still be served, and
+means the same thing whether or not there is a network: online, an expired response is refetched;
+offline, the caller gets the synthetic offline response as though nothing were cached.
+`NetworkFirst`'s failure fallback honours it too.
+
+It was briefly a refetch trigger — consulted online, ignored offline, so a short TTL silently
+became "serve anything, however old" the moment connectivity dropped. That made one value mean
+two things with a hidden mode switch, and left no way to say "this must not be served stale". One
+meaning, and "fetch fresh whenever possible" is `NetworkFirst`, which is a strategy rather than a
+TTL. The default rose from five minutes to one day at the same time: as a validity bound, five
+minutes would make a cache useless for the offline sessions this library exists to serve.
 
 `CacheOnly` was removed on 2026-09-05. It returned early before `CacheResponseIfEligibleAsync`,
 so a route configured with it could never populate its own cache and missed on every call
@@ -502,7 +509,7 @@ below.
 
 | Option | Default |
 |---|---|
-| `Routes` | An empty `RoutePolicyMap` whose `Default` is `RoutePolicy.CacheFirst()` — CacheFirst, 5-minute TTL, invalidate on write |
+| `Routes` | An empty `RoutePolicyMap` whose `Default` is `RoutePolicy.CacheFirst()` — CacheFirst, one-day TTL, invalidate on write |
 | `Connectivity` | **No default — required.** Usually supplied by registering an `IConnectivityService` rather than by setting this; resolving throws if neither is done |
 | `MaxCachedResponseBodyBytes` | 524,288 (512 KB) |
 | `ReplayTransport` | `null` — a plain `HttpClientHandler` is used |

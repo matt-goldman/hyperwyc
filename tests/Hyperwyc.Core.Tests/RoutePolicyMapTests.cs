@@ -190,7 +190,7 @@ public class RoutePolicyMapTests
         Assert.Equal(CacheStrategy.NetworkFirst, RoutePolicy.NetworkFirst().Strategy);
         Assert.Equal(CacheStrategy.NetworkOnly, RoutePolicy.NetworkOnly().Strategy);
 
-        Assert.Equal(TimeSpan.FromMinutes(5), RoutePolicy.CacheFirst().Ttl);
+        Assert.Equal(TimeSpan.FromDays(1), RoutePolicy.CacheFirst().Ttl);
         Assert.Equal(TimeSpan.FromDays(7), RoutePolicy.CacheFirst(TimeSpan.FromDays(7)).Ttl);
     }
 
