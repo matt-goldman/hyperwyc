@@ -1,4 +1,4 @@
-# Issue 26 — [v2.0, under consideration] Typed Response Shaping for Offline Reads
+# Issue 26 — Typed Response Shaping for Offline Reads
 
 ## Summary
 
@@ -6,7 +6,27 @@ Provide a way for Hyperwyc to return a *deserialisable* body (e.g. `"[]"`, `"{}"
 
 ## Status
 
-**Under consideration for v2.0.** This issue captures the problem and the candidate approaches; no commitment to ship.
+⛔ **Closed 2026-08-28, superseded by its own Layer 0.**
+
+The sharp edge — an empty body throwing `JsonException` out of `GetFromJsonAsync<T>` — was fixed
+by returning the JSON `null` literal, which shipped separately and is covered by
+`SyntheticResponseBodyTests`. What remained was Layer 1, a `ReturnsCollection` flag per route so
+a collection could deserialise as `[]` rather than `null`, and Layer 2, a source generator.
+
+Both are closed unbuilt, on [ADR 0004](../../docs/decisions/0004-default-to-removal.md):
+
+- **Layer 1 is a configuration knob for a null check the consumer writes anyway.** A server
+  returning an empty response, a `204`, or a literal `null` produces the same shape with Hyperwyc
+  nowhere near it, so the online path needs that check regardless. It also asks Hyperwyc to know
+  something it does not — that a route returns a collection — which is consumer knowledge
+  relocated into our configuration rather than removed, the pattern
+  [ADR 0003](../../docs/decisions/0003-default-what-you-can-decide-correctly.md) warns about.
+- **Layer 2 was always "nice to have, low priority"** and depended on Layer 1 being wanted.
+
+This item had already conceded the ground: *"the issue is much smaller than it was: the sharp
+edge is gone, and what is left is the convenience of `[]` over `null` for collections."* Reopen
+only if a consumer reports the null check as a real cost, which would be evidence rather than
+anticipation.
 
 ## Background
 
@@ -86,7 +106,7 @@ ordinary deserialisation does not throw.
 than it was: the sharp edge is gone, and what is left is the convenience of `[]` over `null` for
 collections.
 
-Layer 1 folds naturally into per-route policies ([issue 22](22-v1-per-route-policies.md)) as a
+Layer 1 folds naturally into per-route policies ([issue 22](../22-v1-per-route-policies.md)) as a
 boolean rather than the free-form `EmptyOfflineBody` that item currently anticipates.
 
 ## Candidate Approaches

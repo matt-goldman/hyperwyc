@@ -73,7 +73,7 @@ cheaper now bodies are already bytes.
 |---|---|---|---|
 | 25 | [Binary request/response bodies](Done/25-binary-request-response-bodies.md) | ✅ Done | Bodies are `byte[]` end to end — `ReadAsByteArrayAsync` in, `ByteArrayContent` out. Round-trip tests cover PNG, gzip and JSON; four of them fail against the old string path. `ByteArrayContent` also stamps no `Content-Type` of its own, which removes the trap that made replayed JSON writes go out as `text/plain`. Cap left at 512 KB, deliberately |
 | 49 | [Unreadable store recovery](49-unreadable-store-recovery.md) | ⬜ Open | **Proposed for v1.0, not yet agreed.** A key mismatch throws a raw `CryptographicException` from wherever the store is first touched, including out of the consumer's `HttpClient.SendAsync`. Policy: log, publish an event, degrade to an empty store, stop there — no throw, no delete, no recovery. `ResetStoreAsync` is already the application's remedy. Sequence after [32](32-default-encryption-key.md) |
-| 22 | [Per-route policies](22-v1-per-route-policies.md) | ⬜ Open | A single global policy cannot express "cache the catalogue for a day, never cache payments" — which the README already promises. Also where a `ReturnsCollection` flag would live (see [26](26-v2-typed-response-shaping.md)), and where `ApiFirst` should be renamed `NetworkFirst` |
+| 22 | [Per-route policies](22-v1-per-route-policies.md) | ⬜ Open | Last RC blocker. A single global policy cannot express "cache the catalogue for a day, never cache payments", which the README already promises. **Rewritten post-audit**: `OfflineResponsePolicy` and the staleness evaluator no longer exist, so what varies per route is strategy, TTL and invalidate-on-write. Removes `ISyncPolicy` — every member takes a request that no implementation uses — rather than adding a map beside it. Also renames `ApiFirst` to `NetworkFirst` |
 
 ## v1.2 — ergonomics and operational visibility
 
@@ -109,7 +109,7 @@ then **46 before 45**, since cheap revalidation is what makes stale-while-revali
 | # | Item | Status | Notes |
 |---|---|---|---|
 | 50 | ["Designing resilient applications with Hyperwyc"](50-resilient-applications-guide.md) | ⬜ Open | Guidance doc, deliberately unscheduled. Collects the scattered "not our remit" caveats into one place and describes the application-owned-store pattern for consumers who need guaranteed delivery. Write it once [22](22-v1-per-route-policies.md) and [25](Done/25-binary-request-response-bodies.md) have stopped moving the surface |
-| 26 | [Typed response shaping for offline reads](26-v2-typed-response-shaping.md) | 💭 Under consideration | Revised down to three layers. Layer 0 — return `null` rather than an empty body — is nearly free and fixes objects, since an empty body throws for those too. Layer 1 is a `ReturnsCollection` flag on [22](22-v1-per-route-policies.md). Layer 2 (source generator) stays speculative |
+| 26 | [Typed response shaping for offline reads](Done/26-v2-typed-response-shaping.md) | ⛔ Superseded | Closed unbuilt. Layer 0 — return `null` rather than an empty body — shipped separately and removed the sharp edge. Layer 1 (`ReturnsCollection`) is a config knob for a null check the consumer writes anyway, and asks Hyperwyc to know a route returns a collection. Layer 2 depended on Layer 1 |
 
 ## Unfiled roadmap items
 

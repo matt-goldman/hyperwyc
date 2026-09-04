@@ -175,7 +175,7 @@ request was withheld by policy rather than by connectivity.
 for a queued write. An empty body is not JSON, so `GetFromJsonAsync<T>` throws on it — for a
 single object as much as for a collection. `null` deserialises cleanly to a case application
 code already has to handle. A collection still arrives as `null` rather than `[]`; emitting `[]`
-needs per-route knowledge, tracked in [issue 26](Backlog/26-v2-typed-response-shaping.md).
+needs per-route knowledge, tracked in [issue 26](Backlog/Done/26-v2-typed-response-shaping.md).
 
 #### Cache Invalidation Prefix
 
