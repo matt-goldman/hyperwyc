@@ -1,11 +1,17 @@
 # Hyperwyc
 
 **A Service Worker for .NET.** An `HttpClient` handler that caches responses, queues writes made
-offline, and replays them when the network comes back — without your calling code changing.
+offline, and replays them when the network comes back, *without your calling code changing.*
+
+## Quick start
+
+Install the package:
 
 ```bash
 dotnet add package Hyperwyc
 ```
+
+Provide your own [connectivity service](docs/connectivity.md), register the Hyperwyc handler with your `HttpClient`, and register Hyperwyc in DI:
 
 ```csharp
 services.AddSingleton<IConnectivityService, MyConnectivityService>();
@@ -17,7 +23,7 @@ services.AddHttpClient("MyApi")
 services.AddHyperwyc();
 ```
 
-That's the setup. Your existing calls are untouched:
+That's all you need to get started, and your existing calls are untouched:
 
 ```csharp
 // Online: fetched, and cached on the way back.
@@ -29,12 +35,14 @@ var products = await client.GetFromJsonAsync<List<Product>>("/products");
 var response = await client.PostAsJsonAsync("/sales", sale);
 ```
 
-| | |
-|---|---|
-| **Offline reads** | Served from cache, with a per-route TTL saying how old is too old |
+Hyperwyc is invisible to your `HttpClient` calling code (with a custom header appended if you need it, see []())
+
+|                    |                                                                                           |
+| ------------------ | ----------------------------------------------------------------------------------------- |
+| **Offline reads**  | Served from cache, with a per-route TTL saying how old is too old                         |
 | **Offline writes** | Queued durably and replayed on reconnect, through your own pipeline so auth still applies |
-| **Outcomes** | An event stream tells you what the server eventually said about a deferred write |
-| **Storage** | Durable and encrypted out of the box — no store to choose, nothing to wire up |
+| **Outcomes**       | An event stream tells you what the server eventually said about a deferred write          |
+| **Storage**        | Durable and encrypted out of the box — no store to choose, nothing to wire up             |
 
 ## Is it right for your app?
 
