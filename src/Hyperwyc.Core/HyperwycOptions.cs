@@ -36,9 +36,9 @@ public sealed class HyperwycOptions
     public RoutePolicyMap Routes { get; } = new();
 
     /// <summary>
-    /// Reports whether the device can reach the network. <b>Required</b>, though most
-    /// applications satisfy it by registering an <see cref="IConnectivityService"/> in the
-    /// container rather than by setting this.
+    /// Reports whether the device can reach the network. Optional — most applications supply
+    /// one by registering an <see cref="IConnectivityService"/> in the container, and one that
+    /// supplies none gets <see cref="NetworkAvailabilityConnectivityService"/>.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -51,24 +51,22 @@ public sealed class HyperwycOptions
     /// <para>
     /// This property is the alternative for an instance you already hold, or when you would
     /// rather keep the configuration in one place. A container registration wins if both are
-    /// present. If neither is, resolving <see cref="IConnectivityService"/> throws with a
-    /// message describing the options.
+    /// present.
     /// </para>
     /// <para>
-    /// Deliberately has no default. Hyperwyc can choose a store for you because any durable
-    /// store will do, but it cannot choose a connectivity source: that depends on the
-    /// platform, which is something only your application knows. Silently defaulting to
-    /// "always online" would leave the library caching responses while never queueing or
-    /// replaying anything — working in appearance and not in substance, which is the exact
-    /// failure it exists to prevent.
+    /// <b>Supply one anyway on a mobile device.</b> The fallback reports whether a network
+    /// interface is up, not whether your API is reachable, so it says "connected" behind a
+    /// captive portal or on a signal too weak to carry a request. Nothing is lost when it is
+    /// wrong — a read is served from the store and a write is queued, exactly as if the device
+    /// had been known to be offline — but each wrong answer costs a doomed request first. An
+    /// implementation over <c>Connectivity.Current</c> is about twenty lines and the sample
+    /// application has one to copy.
     /// </para>
     /// <para>
-    /// If you have no implementation yet, there are three answers: one written against your
-    /// platform (about twenty lines on .NET MAUI, and the sample application has one to
-    /// copy); <see cref="NetworkAvailabilityConnectivityService"/>, which is BCL-only and
-    /// detects hard-offline but not a captive portal; or
-    /// <see cref="AlwaysOnlineConnectivityService"/>, under which nothing is ever queued or
-    /// replayed.
+    /// The fallback is a default rather than a guess because a poor connectivity answer can no
+    /// longer cost correctness: the transport is what decides, and Hyperwyc degrades on what it
+    /// reports. That was not true until the transport-failure paths were fixed, which is why
+    /// this option was once required — see ADR 0007.
     /// </para>
     /// </remarks>
     public IConnectivityService? Connectivity { get; set; }

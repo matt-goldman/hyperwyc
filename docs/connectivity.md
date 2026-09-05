@@ -1,10 +1,25 @@
 # Connectivity
 
-Hyperwyc needs to know whether the device can reach the network, and it has no default for this on purpose. This is the one thing you must supply.
+Hyperwyc uses connectivity to decide which path to try first. It has a working fallback, so you
+do not have to supply one — but on mobile you should, and this page is about why and how.
 
-Hyperwyc makes every effort to be usable out of the box, but this is the one exception to how the rest of the library behaves. For example, you can provide your own store, but Hyperwyc bundles Cabinet by default because, functionally, it doesn't really matter what durable store you use. 
+**Connectivity cannot cost you correctness.** Whatever an implementation claims, the transport
+gets the last word: a read it cannot answer is served from the store or reported as no data, and
+a write it never delivered is queued and replayed later. So a poor connectivity source costs a
+doomed request and some latency, never a lost write and never an exception you would not
+otherwise have seen. That was not always true — see
+[ADR 0007](decisions/0007-connectivity-cannot-cost-correctness.md) for what changed and why the
+docs used to say the opposite.
 
-It cannot pick a connectivity source, because the right answer depends on the platform — and a wrong one fails quietly. If it assumed "always online", every request would take the network path, nothing would ever be queued, and nothing would ever be replayed. You'd have a caching library that looked like it was working.
+What a good one buys you is the doomed request you did not make, and — more importantly — a
+signal when the network comes back, which is what causes queued writes to go out.
+
+## If you supply nothing
+
+You get [`NetworkAvailabilityConnectivityService`](#what-it-actually-checks), and one line in
+your logs at startup saying so. That is a deliberate default, not a guess: it is the only shipped
+implementation that raises a change event, which is what makes queued writes go out without the
+application asking.
 
 ## Register it in your container
 
@@ -12,9 +27,9 @@ It cannot pick a connectivity source, because the right answer depends on the pl
 services.AddSingleton<IConnectivityService, MyConnectivityService>();
 ```
 
-That's it. Order doesn't matter — before or after `AddHyperwyc()`, whichever suits how your
-registrations are organised, and it works the same if something else in your startup registers
-it on your behalf.
+That's it, and it silences the startup notice. Order doesn't matter — before or after
+`AddHyperwyc()`, whichever suits how your registrations are organised, and it works the same if
+something else in your startup registers it on your behalf.
 
 If you'd rather keep the configuration in one place, or you already hold an instance, set it on
 the options instead:
@@ -26,13 +41,12 @@ services.AddHyperwyc(options =>
 });
 ```
 
-A container registration wins if you do both. Do neither and Hyperwyc throws the first time
-anything needs it, with a message listing these options.
+A container registration wins if you do both.
 
 ## Which implementation
 
 **Write one against your platform.** `IConnectivityService` is two members, so this is short —
-and it's what most apps should use.
+and it's what any mobile app should use.
 
 ```csharp
 public interface IConnectivityService
@@ -286,6 +300,12 @@ the zone's SOA minimum. A lookup that failed while you were offline keeps failin
 network returns, so connectivity reports offline, the flush never fires, and queued writes sit
 there. A false positive costs one wasted attempt; a false negative costs delivery. This trades
 the cheap failure for the expensive one.
+
+**You cannot even test whether resolution is working.** The obvious sentinel — resolve
+`{Guid.NewGuid()}.invalid` and treat success as proof the resolver is reachable — does not work,
+because `Dns.GetHostEntry` throws `SocketException` both when the name does not exist and when no
+resolver can be contacted. `SocketErrorCode` nominally separates `HostNotFound` from `TryAgain`,
+but which one you get is up to the platform's resolver, so it is not something to build on.
 
 **And a captive portal defeats it in the wrong direction.** A portal has to answer DNS in order
 to redirect you, so resolution *succeeds* behind one. Against the case that motivated the idea,

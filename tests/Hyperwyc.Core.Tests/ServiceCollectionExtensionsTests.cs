@@ -1,4 +1,5 @@
 using static Hyperwyc.Tests.TestHealthFactory;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Hyperwyc.Interfaces;
 using Hyperwyc.Models;
@@ -307,40 +308,75 @@ public sealed class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void NoConnectivityAnywhere_ThrowsOnResolve()
+    public void NoConnectivityAnywhere_FallsBackToNetworkAvailability()
     {
         var services = new ServiceCollection();
         services.AddHyperwycCore<InMemoryStore>();
         using var sp = services.BuildServiceProvider();
 
-        var ex = Assert.Throws<InvalidOperationException>(
-            () => sp.GetRequiredService<IConnectivityService>());
-
-        // The message has to name the ways out, because the fix is a choice.
-        Assert.Contains("AddSingleton<IConnectivityService", ex.Message);
-        Assert.Contains(nameof(NetworkAvailabilityConnectivityService), ex.Message);
-        Assert.Contains(nameof(AlwaysOnlineConnectivityService), ex.Message);
+        // A default is legitimate here because being wrong can no longer cost correctness —
+        // the transport is what actually decides. See ADR 0007.
+        Assert.IsType<NetworkAvailabilityConnectivityService>(
+            sp.GetRequiredService<IConnectivityService>());
     }
 
     [Fact]
-    public void NoConnectivityAnywhere_ThrowsWhenTheHandlerIsResolved()
+    public void TheFallback_IsAnnouncedOnce_SoItCanBeAttributed()
     {
-        // The failure a consumer who ignored the docs actually meets: the first request.
+        var log = new CollectingLoggerProvider();
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddProvider(log).SetMinimumLevel(LogLevel.Information));
+        services.AddHyperwycCore<InMemoryStore>();
+        using var sp = services.BuildServiceProvider();
+
+        sp.GetRequiredService<IConnectivityService>();
+        sp.GetRequiredService<IConnectivityService>();
+
+        // A singleton, so the factory runs once however many times it is resolved.
+        var message = Assert.Single(log.Messages);
+        Assert.Contains("NetworkAvailabilityConnectivityService", message);
+        Assert.Contains("AddSingleton<IConnectivityService", message);
+    }
+
+    [Fact]
+    public void AnExplicitRegistration_SilencesTheFallback()
+    {
+        var log = new CollectingLoggerProvider();
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddProvider(log).SetMinimumLevel(LogLevel.Information));
+        services.AddHyperwycCore<InMemoryStore>();
+        services.AddSingleton<IConnectivityService, AlwaysOnlineConnectivityService>();
+        using var sp = services.BuildServiceProvider();
+
+        Assert.IsType<AlwaysOnlineConnectivityService>(sp.GetRequiredService<IConnectivityService>());
+        Assert.Empty(log.Messages);
+    }
+
+    [Fact]
+    public void NoConnectivityAnywhere_ResolvesAWorkingSystem()
+    {
+        // What a consumer who supplies nothing gets: a library that runs. That is the whole
+        // point of the default, and it is only honest because a poor connectivity answer now
+        // costs an attempt rather than a write.
         var services = new ServiceCollection();
         services.AddHyperwycCore<InMemoryStore>(o => o.FlushOnStartup = false);
         using var sp = services.BuildServiceProvider();
 
-        Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<IHyperwyc>());
+        Assert.NotNull(sp.GetRequiredService<IHyperwyc>());
+        Assert.NotNull(sp.GetRequiredService<HyperwycHandler>());
     }
 
     [Fact]
-    public void NoConnectivityAnywhere_RegistrationItselfDoesNotThrow()
+    public void TheFallback_DoesNotWinOverARegistrationMadeLater()
     {
+        // Order-independence is why the fallback is a factory rather than a check at
+        // registration: a source generator has no say in where its output lands.
         var services = new ServiceCollection();
-
-        // Deliberate: throwing here would make the container route order-dependent, so the
-        // check has to wait until something asks for the service.
         services.AddHyperwycCore<InMemoryStore>();
+        services.AddSingleton<IConnectivityService>(new FakeConnectivityService(isConnected: false));
+        using var sp = services.BuildServiceProvider();
+
+        Assert.IsType<FakeConnectivityService>(sp.GetRequiredService<IConnectivityService>());
     }
 
     // -------------------------------------------------------------------------
@@ -439,5 +475,25 @@ public sealed class ServiceCollectionExtensionsTests
             _inner.InvalidateCacheForPrefixAsync(urlPrefix, ct);
 
         public Task ResetAsync(CancellationToken ct = default) => _inner.ResetAsync(ct);
+    }
+
+    /// <summary>Captures log messages so the fallback notice can be asserted on.</summary>
+    private sealed class CollectingLoggerProvider : ILoggerProvider
+    {
+        public List<string> Messages { get; } = [];
+
+        public ILogger CreateLogger(string categoryName) => new Collector(Messages);
+        public void Dispose() { }
+
+        private sealed class Collector(List<string> messages) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(
+                LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+                Func<TState, Exception?, string> formatter)
+                => messages.Add(formatter(state, exception));
+        }
     }
 }

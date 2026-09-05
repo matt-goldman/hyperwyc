@@ -99,15 +99,17 @@ public sealed class CabinetRegistrationTests : IDisposable
     }
 
     [Fact]
-    public void AddHyperwyc_NoConnectivity_ThrowsOnResolve()
+    public void AddHyperwyc_NoConnectivity_Works()
     {
         var services = new ServiceCollection();
         services.AddHyperwyc(configureStore: o => o.DirectoryPath = _tempDir);
         using var sp = services.BuildServiceProvider();
 
-        // Cabinet makes storage a non-decision; connectivity stays a decision, because
-        // only the application knows how its platform reports it.
-        Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<IHyperwyc>());
+        // The quick start: Cabinet makes storage a non-decision, and connectivity is now a
+        // decision you can defer rather than one you must make before anything runs.
+        Assert.NotNull(sp.GetRequiredService<IHyperwyc>());
+        Assert.IsType<NetworkAvailabilityConnectivityService>(
+            sp.GetRequiredService<IConnectivityService>());
     }
 
     [Fact]

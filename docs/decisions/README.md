@@ -11,7 +11,8 @@ reversed.
 | [0003](0003-default-what-you-can-decide-correctly.md) | Default what you can decide correctly; require what you cannot | Accepted |
 | [0004](0004-default-to-removal.md) | Default to removal | Accepted |
 | [0005](0005-vocabulary.md) | Name things for the purpose, not the mechanism | Accepted |
-| [0006](0006-a-shipped-implementation-is-not-a-default.md) | A shipped implementation is not a default | Accepted |
+| [0006](0006-a-shipped-implementation-is-not-a-default.md) | A shipped implementation is not a default | Superseded by 0007 |
+| [0007](0007-connectivity-cannot-cost-correctness.md) | Connectivity is an optimisation, not a correctness input | Accepted |
 
 ## What belongs here
 
@@ -123,6 +124,9 @@ belongs in Hyperwyc at all. Reproduced here because it is meant to be used, not 
 [ADR 0003](0003-default-what-you-can-decide-correctly.md) covers the capabilities that pass the
 scope test: given that Hyperwyc should do this, should it have a default?
 
+0. Is this input load-bearing at all, or does something downstream already know better? If the
+   system finds out for itself one layer down, the choice is about efficiency and the rest of
+   this test does not apply — see [ADR 0007](0007-connectivity-cannot-cost-correctness.md).
 1. Can Hyperwyc choose correctly from what it knows? Platform, API and domain knowledge belong
    to the application.
 2. If the default is wrong, does the consumer find out? Wrong-and-loud is fine; wrong-and-silent
@@ -131,8 +135,9 @@ scope test: given that Hyperwyc should do this, should it have a default?
 4. If it must be required, is the fix short and obvious? Ship something to point at, and make
    sure requiring a decision has not quietly required an *ordering* as well.
 5. Would this default be equally right everywhere Hyperwyc runs? An implementation good on one
-   host and unreliable on another can ship, but must be named — see
-   [ADR 0006](0006-a-shipped-implementation-is-not-a-default.md).
+   host and unreliable on another is worth naming in the docs; whether it must be *chosen*
+   depends on question 0 — see [ADR 0006](0006-a-shipped-implementation-is-not-a-default.md) and
+   [ADR 0007](0007-connectivity-cannot-cost-correctness.md).
 
 ## The standing removal test
 

@@ -7,8 +7,6 @@ dotnet add package Hyperwyc
 ```
 
 ```csharp
-services.AddSingleton<IConnectivityService, MyConnectivityService>();
-
 services.AddHttpClient("MyApi")
     .AddHyperwycHandler()
     .AddHttpMessageHandler<AuthHandler>();
@@ -16,13 +14,21 @@ services.AddHttpClient("MyApi")
 services.AddHyperwyc();
 ```
 
-That's the whole setup. Storage needs no decision — `AddHyperwyc()` gives you a durable,
-encrypted store out of the box.
+That's the whole setup. You get a durable, encrypted store and a working connectivity source
+without deciding anything.
 
-The one thing Hyperwyc can't decide for you is how to tell whether the device is online, so
-you supply an `IConnectivityService`. Register it like any other service and you're done; if
-you don't have an implementation, [Connectivity](connectivity.md) covers your options, one of
-which ships in the box.
+**On a mobile device, add one more line.** Hyperwyc falls back to a BCL connectivity check that
+reports whether a network interface is up, not whether your API is reachable — good enough on a
+desktop or a server, wrong often enough on a phone to be worth replacing:
+
+```csharp
+services.AddSingleton<IConnectivityService, MauiConnectivityService>();
+```
+
+That is an optimisation, not a repair. Nothing is lost when the fallback is wrong: a read is
+served from the store and a write is queued, exactly as if the device had been known to be
+offline. What you save is a doomed request each time. [Connectivity](connectivity.md) has an
+implementation to copy for MAUI and for Windows.
 
 Everything else has a working default, and is there when you want it:
 
