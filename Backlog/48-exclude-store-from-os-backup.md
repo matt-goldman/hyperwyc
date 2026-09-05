@@ -57,7 +57,7 @@ refetches. Worth a sentence, not a section.
 
 Found while writing this up, and it deserves its own attention.
 
-`CabinetSyncStore.DeriveKey` is `SHA256(UTF8(DirectoryPath))`, over the *absolute* path. On iOS
+`CabinetStore.DeriveKey` is `SHA256(UTF8(DirectoryPath))`, over the *absolute* path. On iOS
 that path lives under `/var/mobile/Containers/Data/Application/<UUID>/…`, and **that UUID is not
 stable across a reinstall or a restore onto a new device.** Restoring a backup therefore puts the
 files back at a different absolute path, which derives a different key, which cannot decrypt
@@ -172,7 +172,7 @@ Nothing needs to be built for the documentation to be actionable.
    for this particular piece of advice.
 2. **Ordering on iOS.** The directory must exist before the backup flag can be set, and Hyperwyc
    deliberately does not create it until the store is first resolved (issue 31). Does the
-   consumer resolve `ISyncStore` early to force creation, or should `DefaultDirectoryPath()` gain
+   consumer resolve `IHyperwycStore` early to force creation, or should `DefaultDirectoryPath()` gain
    a companion that creates the directory? The second is a small, honest addition; the first is
    free but ugly.
 3. **Should this be more than documentation for the outbox specifically?** A stored "device

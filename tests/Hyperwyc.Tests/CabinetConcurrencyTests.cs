@@ -27,7 +27,7 @@ public sealed class CabinetConcurrencyTests : IDisposable
             Directory.Delete(_dir, recursive: true);
     }
 
-    private CabinetSyncStore Store() => new(_dir);
+    private CabinetStore Store() => new(_dir);
 
     private static Envelope Cached(string url) => new()
     {
@@ -109,7 +109,7 @@ public sealed class CabinetConcurrencyTests : IDisposable
     }
 
     [Fact]
-    public async Task ConcurrentMarkSynced_DoesNotLoseUpdates()
+    public async Task ConcurrentMarkDelivered_DoesNotLoseUpdates()
     {
         var store = Store();
         var ids = new List<string>();
@@ -120,7 +120,7 @@ public sealed class CabinetConcurrencyTests : IDisposable
             await store.UpsertAsync(e);
         }
 
-        await Task.WhenAll(ids.Select(id => Task.Run(() => store.MarkSyncedAsync(id))));
+        await Task.WhenAll(ids.Select(id => Task.Run(() => store.MarkDeliveredAsync(id))));
 
         // Every envelope is out of the outbox. Without serialisation these are
         // read-modify-write races and some updates are silently discarded.

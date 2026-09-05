@@ -40,8 +40,8 @@ Extend `DiagnosticsPage` (issue #23) with:
 ## Acceptance Criteria
 
 - [ ] `RequeueDeadLetteredAsync` and `DismissDeadLetteredAsync` added to `IHyperwyc`.
-- [ ] `ISyncStore` extended with `RequeuAsync(string id)` and `DeleteAsync(string id)` (or equivalent).
-- [ ] Both operations implemented in `InMemorySyncStore` and `CabinetSyncStore`.
+- [ ] `IHyperwycStore` extended with `RequeuAsync(string id)` and `DeleteAsync(string id)` (or equivalent).
+- [ ] Both operations implemented in `InMemoryStore` and `CabinetStore`.
 - [ ] Requeue on an online device triggers an immediate flush.
 - [ ] `DiagnosticsPage` in the MAUI sample updated with per-item and bulk dismiss actions.
 - [ ] Unit tests cover: requeue resets retry fields, requeue triggers flush, dismiss removes envelope, requeue on unknown id is a no-op.

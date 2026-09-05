@@ -9,11 +9,11 @@ namespace Hyperwyc.Interfaces;
 public interface IHyperwyc
 {
     /// <summary>
-    /// A hot observable that emits a <see cref="SyncEvent"/> each time a request
+    /// A hot observable that emits a <see cref="HyperwycEvent"/> each time a request
     /// moves through the sync lifecycle (queued, retried, synced, failed, or
     /// updated).
     /// </summary>
-    IObservable<SyncEvent> SyncEvents { get; }
+    IObservable<HyperwycEvent> Events { get; }
 
     /// <summary>
     /// Drains the outbox now, sending queued writes in the order they were made.

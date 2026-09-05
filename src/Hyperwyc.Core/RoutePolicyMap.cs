@@ -65,7 +65,7 @@ public sealed class RoutePolicyMap
     /// The most recently registered policy whose pattern matches <paramref name="url"/>, or
     /// <see cref="Default"/>.
     /// </summary>
-    public RoutePolicy Resolve(Uri? url)
+    public RoutePolicy PolicyFor(Uri? url)
     {
         var path = url is null
             ? string.Empty

@@ -8,20 +8,20 @@ using Xunit;
 namespace Hyperwyc.Tests;
 
 /// <summary>
-/// Covers <see cref="SyncOrchestrator"/> disposal. Before issue #33 the orchestrator
+/// Covers <see cref="OutboxProcessor"/> disposal. Before issue #33 the orchestrator
 /// implemented only <see cref="IAsyncDisposable"/>, so disposing a service provider
 /// synchronously threw once it had been resolved, and <c>DisposeAsync</c> waited out
 /// the entire retry budget.
 /// </summary>
-public class SyncOrchestratorDisposalTests
+public class OutboxProcessorDisposalTests
 {
-    private static SyncOrchestrator BuildOrchestrator(
-        InMemorySyncStore store,
+    private static OutboxProcessor BuildOrchestrator(
+        InMemoryStore store,
         HttpMessageHandler transport) =>
         new(
             store,
             new FakeConnectivityService(isConnected: true),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             new HyperwycOptions(),
             transport);
 
@@ -90,14 +90,14 @@ public class SyncOrchestratorDisposalTests
     // -------------------------------------------------------------------------
 
     [Fact]
-    public void ServiceProvider_DisposedSynchronously_AfterResolvingOrchestrator_DoesNotThrow()
+    public void ServiceProvider_DisposedSynchronously_AfterResolvingProcessor_DoesNotThrow()
     {
         var services = new ServiceCollection();
-        services.AddHyperwycCore<InMemorySyncStore>(
+        services.AddHyperwycCore<InMemoryStore>(
             o => o.Connectivity = new AlwaysOnlineConnectivityService());
         var sp = services.BuildServiceProvider();
 
-        sp.GetRequiredService<SyncOrchestrator>();
+        sp.GetRequiredService<OutboxProcessor>();
 
         // This is what threw before issue #33.
         sp.Dispose();
@@ -110,7 +110,7 @@ public class SyncOrchestratorDisposalTests
     [Fact]
     public async Task Dispose_MidFlush_LeavesEnvelopesQueuedAndDoesNotDeadLetter()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(OutboxEnvelope());
 
         var transport = new BlockingTransport();
@@ -134,7 +134,7 @@ public class SyncOrchestratorDisposalTests
     [Fact]
     public async Task DisposeAsync_MidFlush_ReturnsWithoutWaitingOutTheRetryBudget()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(OutboxEnvelope());
 
         var transport = new BlockingTransport();
@@ -162,7 +162,7 @@ public class SyncOrchestratorDisposalTests
     [Fact]
     public async Task Dispose_ReturnsBeforeTheFlushHasFinishedUnwinding()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(OutboxEnvelope());
 
         var transport = new SlowUnwindTransport();
@@ -181,7 +181,7 @@ public class SyncOrchestratorDisposalTests
     [Fact]
     public async Task DisposeAsync_ReturnsOnlyAfterTheFlushHasUnwound()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(OutboxEnvelope());
 
         var transport = new SlowUnwindTransport();
@@ -206,7 +206,7 @@ public class SyncOrchestratorDisposalTests
     [Fact]
     public async Task Dispose_CancelsAManualFlushThatPassedNoToken()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(OutboxEnvelope());
 
         var transport = new BlockingTransport();
@@ -229,7 +229,7 @@ public class SyncOrchestratorDisposalTests
     [Fact]
     public void Dispose_IsIdempotent()
     {
-        var orchestrator = BuildOrchestrator(new InMemorySyncStore(), new BlockingTransport());
+        var orchestrator = BuildOrchestrator(new InMemoryStore(), new BlockingTransport());
 
         orchestrator.Dispose();
         orchestrator.Dispose();
@@ -238,7 +238,7 @@ public class SyncOrchestratorDisposalTests
     [Fact]
     public async Task DisposeAsync_AfterDispose_DoesNotThrow()
     {
-        var orchestrator = BuildOrchestrator(new InMemorySyncStore(), new BlockingTransport());
+        var orchestrator = BuildOrchestrator(new InMemoryStore(), new BlockingTransport());
 
         orchestrator.Dispose();
         await orchestrator.DisposeAsync();
@@ -247,7 +247,7 @@ public class SyncOrchestratorDisposalTests
     [Fact]
     public async Task Dispose_AfterDisposeAsync_DoesNotThrow()
     {
-        var orchestrator = BuildOrchestrator(new InMemorySyncStore(), new BlockingTransport());
+        var orchestrator = BuildOrchestrator(new InMemoryStore(), new BlockingTransport());
 
         await orchestrator.DisposeAsync();
         orchestrator.Dispose();
@@ -256,7 +256,7 @@ public class SyncOrchestratorDisposalTests
     [Fact]
     public async Task FlushAsync_AfterDispose_ThrowsObjectDisposed()
     {
-        var orchestrator = BuildOrchestrator(new InMemorySyncStore(), new BlockingTransport());
+        var orchestrator = BuildOrchestrator(new InMemoryStore(), new BlockingTransport());
         orchestrator.Dispose();
 
         await Assert.ThrowsAsync<ObjectDisposedException>(() => orchestrator.FlushAsync());
@@ -265,7 +265,7 @@ public class SyncOrchestratorDisposalTests
     [Fact]
     public async Task FlushAsync_AfterDisposeAsync_ThrowsObjectDisposed()
     {
-        var orchestrator = BuildOrchestrator(new InMemorySyncStore(), new BlockingTransport());
+        var orchestrator = BuildOrchestrator(new InMemoryStore(), new BlockingTransport());
         await orchestrator.DisposeAsync();
 
         await Assert.ThrowsAsync<ObjectDisposedException>(() => orchestrator.FlushAsync());

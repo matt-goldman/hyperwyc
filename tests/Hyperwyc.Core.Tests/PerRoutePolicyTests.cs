@@ -16,8 +16,8 @@ public class PerRoutePolicyTests
     private const string Payments = "https://example.com/api/payments/charge";
 
     private static HyperwycHandler Handler(
-        InMemorySyncStore store, HttpMessageHandler inner, HyperwycOptions options, bool connected) =>
-        new(store, new FakeConnectivityService(connected), new SyncEventStream(), options)
+        InMemoryStore store, HttpMessageHandler inner, HyperwycOptions options, bool connected) =>
+        new(store, new FakeConnectivityService(connected), new HyperwycEventStream(), options)
         { InnerHandler = inner };
 
     private static Envelope Cached(string url, string body)
@@ -39,7 +39,7 @@ public class PerRoutePolicyTests
     [Fact]
     public async Task OneRouteServesFromCacheWhileAnotherAlwaysHitsTheNetwork()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Cached(Products, "cached-products"));
         await store.UpsertAsync(Cached(Payments, "cached-payments"));
 
@@ -63,7 +63,7 @@ public class PerRoutePolicyTests
     [Fact]
     public async Task ARouteWithAShortTtlRefetchesWhileALongOneDoesNot()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Cached(Products, "stale-products"));
         await store.UpsertAsync(Cached("https://example.com/api/reference/codes", "reference"));
 
@@ -90,7 +90,7 @@ public class PerRoutePolicyTests
     {
         // The payments case: deferring the write is the wrong answer, so Hyperwyc declines
         // custody rather than issuing a 202 it may honour hours later.
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var options = new HyperwycOptions();
         options.Routes.For("/api/payments/*", RoutePolicy.NetworkOnly());
 
@@ -107,7 +107,7 @@ public class PerRoutePolicyTests
     [Fact]
     public async Task OfflineWriteToAnyOtherRoute_IsStillQueued()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var options = new HyperwycOptions();
         options.Routes.For("/api/payments/*", RoutePolicy.NetworkOnly());
 
@@ -130,7 +130,7 @@ public class PerRoutePolicyTests
     [Fact]
     public async Task ARouteCanOptOutOfInvalidationOnWrite()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Cached("https://example.com/api/log", "kept"));
 
         var options = new HyperwycOptions();
@@ -150,17 +150,17 @@ public class PerRoutePolicyTests
     {
         // The orchestrator resolves through the same map, so a replayed write honours the
         // route's decision rather than a global one.
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Cached("https://example.com/api/log", "kept"));
         await store.UpsertAsync(new Envelope { Url = "https://example.com/api/log", Method = "POST" });
 
         var options = new HyperwycOptions();
         options.Routes.For("/api/log/*", RoutePolicy.CacheFirst() with { InvalidateCacheOnWrite = false });
 
-        await using var orchestrator = new SyncOrchestrator(
+        await using var orchestrator = new OutboxProcessor(
             store,
             new FakeConnectivityService(isConnected: true),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             options,
             new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)));
 

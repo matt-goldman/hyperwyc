@@ -42,17 +42,17 @@ public class CacheRefreshTests
     /// it would also mean nothing is servable, so the offline handler gets a live TTL.
     /// </summary>
     private static HyperwycHandler Handler(
-        ISyncStore store, HttpMessageHandler inner, bool connected = true) =>
+        IHyperwycStore store, HttpMessageHandler inner, bool connected = true) =>
         new(store,
             new FakeConnectivityService(connected),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             TestOptions.WithTtl(connected ? TimeSpan.Zero : TimeSpan.FromMinutes(5)))
         { InnerHandler = inner };
 
     [Fact]
     public async Task Refetching_ReplacesTheCachedResponse()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var transport = new VersioningTransport();
 
         using (var client = new HttpClient(Handler(store, transport)))
@@ -86,7 +86,7 @@ public class CacheRefreshTests
     public async Task GoingOfflineAfterARefresh_ServesTheRefreshedCopy()
     {
         // The sample's scenario: read online twice, then read offline.
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var transport = new VersioningTransport();
 
         using (var online = new HttpClient(Handler(store, transport)))
@@ -126,7 +126,7 @@ public class CacheRefreshTests
     {
         // Cache ids are prefixed, so they can never collide with a queued write's random id —
         // even when the write targets a URL that is also cached.
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
 
         using (var offline = new HttpClient(Handler(
             store, new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)), connected: false)))
@@ -144,14 +144,14 @@ public class CacheRefreshTests
     }
 
     /// <summary>
-    /// Delegates to an <see cref="InMemorySyncStore"/> while tracking the ids it has been asked
+    /// Delegates to an <see cref="InMemoryStore"/> while tracking the ids it has been asked
     /// to store, so a test can see how many envelopes actually exist rather than only what the
     /// query methods choose to return. Accumulation is otherwise invisible: an orphaned cache
     /// envelope is excluded from the outbox and shadowed in the cache lookup.
     /// </summary>
-    private sealed class CountingStore : ISyncStore
+    private sealed class CountingStore : IHyperwycStore
     {
-        private readonly InMemorySyncStore _inner = new();
+        private readonly InMemoryStore _inner = new();
         private readonly HashSet<string> _ids = [];
 
         public int Count => _ids.Count;
@@ -168,8 +168,8 @@ public class CacheRefreshTests
         public Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default) =>
             _inner.GetPendingOutboxAsync(ct);
 
-        public Task MarkSyncedAsync(string id, CancellationToken ct = default) =>
-            _inner.MarkSyncedAsync(id, ct);
+        public Task MarkDeliveredAsync(string id, CancellationToken ct = default) =>
+            _inner.MarkDeliveredAsync(id, ct);
 
         public Task MoveToDeadLetterAsync(string id, CancellationToken ct = default) =>
             _inner.MoveToDeadLetterAsync(id, ct);

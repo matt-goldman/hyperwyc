@@ -2,7 +2,7 @@
 
 ## Summary
 
-`ISyncStore.GetCachedResponseAsync(url)` matches on the request URL and nothing else. A server
+`IHyperwycStore.GetCachedResponseAsync(url)` matches on the request URL and nothing else. A server
 that varies its response by request header — content negotiation being the common case — will
 have one variant served in place of another.
 
@@ -50,7 +50,7 @@ request's.
   "first envelope with this URL" lookup cannot express.
 
 That last point is the substantive change: the store's cache lookup is currently
-`(url) -> entry`, and it needs to become `(url, variant) -> entry`. It touches `ISyncStore`, both
+`(url) -> entry`, and it needs to become `(url, variant) -> entry`. It touches `IHyperwycStore`, both
 implementations, and the invalidation path, which today clears every entry under a URL prefix and
 would now be clearing several variants at once — which happens to be correct.
 
@@ -77,7 +77,7 @@ would now be clearing several variants at once — which happens to be correct.
 - [ ] Unit test: two requests differing only in a `Vary`-named header get different responses.
 - [ ] Unit test: a `Vary: *` response is returned to the caller but not cached.
 - [ ] Unit test: the no-`Vary` path is unchanged.
-- [ ] `CabinetSyncStore` and `InMemorySyncStore` both implement variant matching.
+- [ ] `CabinetStore` and `InMemoryStore` both implement variant matching.
 
 ## Notes
 
@@ -85,4 +85,4 @@ would now be clearing several variants at once — which happens to be correct.
 - The failure mode is silent and looks like a server fault, which is what makes it worth fixing
   before there are users rather than after a confusing bug report.
 - Best sequenced with [issue 25](Done/25-binary-request-response-bodies.md): both change how a cached
-  entry is keyed and stored, and both touch every `ISyncStore` implementation.
+  entry is keyed and stored, and both touch every `IHyperwycStore` implementation.

@@ -3,9 +3,9 @@ using Xunit;
 
 namespace Hyperwyc.Tests;
 
-public class SyncEventStreamTests
+public class HyperwycEventStreamTests
 {
-    private static SyncEvent MakeEvent(SyncEventType type = SyncEventType.OnQueued) =>
+    private static HyperwycEvent MakeEvent(HyperwycEventType type = HyperwycEventType.OnQueued) =>
         new(type, "https://example.com/api/orders", "POST", DateTimeOffset.UtcNow);
 
     // -------------------------------------------------------------------------
@@ -13,14 +13,14 @@ public class SyncEventStreamTests
     // -------------------------------------------------------------------------
 
     /// <summary>Simple observer that records received events and terminal signals.</summary>
-    private sealed class RecordingObserver : IObserver<SyncEvent>
+    private sealed class RecordingObserver : IObserver<HyperwycEvent>
     {
-        private readonly List<SyncEvent> _events = [];
-        public IReadOnlyList<SyncEvent> Events => _events;
+        private readonly List<HyperwycEvent> _events = [];
+        public IReadOnlyList<HyperwycEvent> Events => _events;
         public bool Completed { get; private set; }
         public Exception? Error { get; private set; }
 
-        public void OnNext(SyncEvent value) => _events.Add(value);
+        public void OnNext(HyperwycEvent value) => _events.Add(value);
         public void OnCompleted() => Completed = true;
         public void OnError(Exception error) => Error = error;
     }
@@ -32,7 +32,7 @@ public class SyncEventStreamTests
     [Fact]
     public void Publish_SingleSubscriber_ReceivesEvent()
     {
-        using var stream = new SyncEventStream();
+        using var stream = new HyperwycEventStream();
         var observer = new RecordingObserver();
         stream.Subscribe(observer);
 
@@ -46,12 +46,12 @@ public class SyncEventStreamTests
     [Fact]
     public void Publish_MultipleEvents_ReceivedInOrder()
     {
-        using var stream = new SyncEventStream();
+        using var stream = new HyperwycEventStream();
         var observer = new RecordingObserver();
         stream.Subscribe(observer);
 
-        var e1 = MakeEvent(SyncEventType.OnQueued);
-        var e2 = MakeEvent(SyncEventType.OnSynced);
+        var e1 = MakeEvent(HyperwycEventType.OnQueued);
+        var e2 = MakeEvent(HyperwycEventType.OnDelivered);
         stream.Publish(e1);
         stream.Publish(e2);
 
@@ -67,7 +67,7 @@ public class SyncEventStreamTests
     [Fact]
     public void Dispose_Subscription_StopsReceivingEvents()
     {
-        using var stream = new SyncEventStream();
+        using var stream = new HyperwycEventStream();
         var observer = new RecordingObserver();
         var sub = stream.Subscribe(observer);
 
@@ -80,7 +80,7 @@ public class SyncEventStreamTests
     [Fact]
     public void Dispose_Subscription_Twice_DoesNotThrow()
     {
-        using var stream = new SyncEventStream();
+        using var stream = new HyperwycEventStream();
         var observer = new RecordingObserver();
         var sub = stream.Subscribe(observer);
 
@@ -95,7 +95,7 @@ public class SyncEventStreamTests
     [Fact]
     public void Publish_MultipleSubscribers_AllReceiveEvent()
     {
-        using var stream = new SyncEventStream();
+        using var stream = new HyperwycEventStream();
         var o1 = new RecordingObserver();
         var o2 = new RecordingObserver();
         var o3 = new RecordingObserver();
@@ -113,7 +113,7 @@ public class SyncEventStreamTests
     [Fact]
     public void Publish_AfterOneUnsubscribes_OnlyRemainingSubscribersReceive()
     {
-        using var stream = new SyncEventStream();
+        using var stream = new HyperwycEventStream();
         var o1 = new RecordingObserver();
         var o2 = new RecordingObserver();
         stream.Subscribe(o1);
@@ -133,7 +133,7 @@ public class SyncEventStreamTests
     [Fact]
     public void Publish_SubscriberThrows_OtherSubscribersStillReceive()
     {
-        using var stream = new SyncEventStream();
+        using var stream = new HyperwycEventStream();
 
         var faultyObserver = new FaultyObserver();
         var goodObserver = new RecordingObserver();
@@ -145,9 +145,9 @@ public class SyncEventStreamTests
         Assert.Single(goodObserver.Events);
     }
 
-    private sealed class FaultyObserver : IObserver<SyncEvent>
+    private sealed class FaultyObserver : IObserver<HyperwycEvent>
     {
-        public void OnNext(SyncEvent value) => throw new InvalidOperationException("boom");
+        public void OnNext(HyperwycEvent value) => throw new InvalidOperationException("boom");
         public void OnCompleted() { }
         public void OnError(Exception error) { }
     }
@@ -159,7 +159,7 @@ public class SyncEventStreamTests
     [Fact]
     public void Dispose_Stream_CallsOnCompletedOnAllSubscribers()
     {
-        var stream = new SyncEventStream();
+        var stream = new HyperwycEventStream();
         var o1 = new RecordingObserver();
         var o2 = new RecordingObserver();
         stream.Subscribe(o1);
@@ -174,7 +174,7 @@ public class SyncEventStreamTests
     [Fact]
     public void Dispose_Stream_PublishIsNoOp()
     {
-        var stream = new SyncEventStream();
+        var stream = new HyperwycEventStream();
         var observer = new RecordingObserver();
         stream.Subscribe(observer);
         stream.Dispose();
@@ -187,7 +187,7 @@ public class SyncEventStreamTests
     [Fact]
     public void Dispose_Stream_Twice_DoesNotThrow()
     {
-        var stream = new SyncEventStream();
+        var stream = new HyperwycEventStream();
         stream.Dispose();
         stream.Dispose(); // should be idempotent
     }
@@ -195,7 +195,7 @@ public class SyncEventStreamTests
     [Fact]
     public void Subscribe_AfterDispose_ImmediatelyCallsOnCompleted()
     {
-        var stream = new SyncEventStream();
+        var stream = new HyperwycEventStream();
         stream.Dispose();
 
         var observer = new RecordingObserver();
@@ -211,7 +211,7 @@ public class SyncEventStreamTests
     [Fact]
     public void PublishError_CallsOnErrorOnAllSubscribers()
     {
-        using var stream = new SyncEventStream();
+        using var stream = new HyperwycEventStream();
         var o1 = new RecordingObserver();
         var o2 = new RecordingObserver();
         stream.Subscribe(o1);
@@ -227,7 +227,7 @@ public class SyncEventStreamTests
     [Fact]
     public void PublishError_ClearsSubscribers_SubsequentPublishDeliveredToNone()
     {
-        using var stream = new SyncEventStream();
+        using var stream = new HyperwycEventStream();
         var observer = new RecordingObserver();
         stream.Subscribe(observer);
 
@@ -244,8 +244,8 @@ public class SyncEventStreamTests
     [Fact]
     public void IsAssignableAsIObservable()
     {
-        var stream = new SyncEventStream();
-        IObservable<SyncEvent> observable = stream;
+        var stream = new HyperwycEventStream();
+        IObservable<HyperwycEvent> observable = stream;
         Assert.NotNull(observable);
         stream.Dispose();
     }

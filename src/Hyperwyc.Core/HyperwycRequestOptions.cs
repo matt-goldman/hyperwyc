@@ -17,7 +17,7 @@ public static class HyperwycRequestOptions
 {
     /// <summary>
     /// A value identifying this request to the application, echoed back on every
-    /// <see cref="Models.SyncEvent"/> concerning it so a deferred outcome can be matched to
+    /// <see cref="Models.HyperwycEvent"/> concerning it so a deferred outcome can be matched to
     /// the record that produced it.
     /// </summary>
     /// <remarks>

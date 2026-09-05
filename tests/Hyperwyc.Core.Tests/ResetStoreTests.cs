@@ -48,7 +48,7 @@ public class ResetStoreTests
     [Fact]
     public async Task Reset_EmptyStore_Succeeds()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using var sp = Build(store, new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)));
 
         await sp.GetRequiredService<IHyperwyc>().ResetStoreAsync();
@@ -59,7 +59,7 @@ public class ResetStoreTests
     [Fact]
     public async Task Reset_DiscardsQueuedWritesAndCachedResponses()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
         await store.UpsertAsync(Cached("https://example.com/api/products"));
 
@@ -74,7 +74,7 @@ public class ResetStoreTests
     [Fact]
     public async Task Reset_LeavesTheStoreUsable()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
 
         var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
@@ -97,7 +97,7 @@ public class ResetStoreTests
     [Fact]
     public async Task Reset_DoesNotSendQueuedWrites()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
 
         var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
@@ -118,7 +118,7 @@ public class ResetStoreTests
     [Fact]
     public async Task Reset_WaitsForAnInFlightFlush()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
 
         var transport = new GatedTransport(HttpStatusCode.OK);
@@ -147,7 +147,7 @@ public class ResetStoreTests
         // The sharp end. A transiently-failing envelope is upserted by DeferAsync when the
         // attempt completes; if that lands after the wipe the envelope is resurrected, and on
         // a logout that means the previous user's queued write comes back.
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
 
         var transport = new GatedTransport(HttpStatusCode.ServiceUnavailable);
@@ -168,7 +168,7 @@ public class ResetStoreTests
     [Fact]
     public async Task Reset_ThenFlush_SendsNothing()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
         await store.UpsertAsync(Outbox());
 
@@ -201,7 +201,7 @@ public class ResetStoreTests
         },
     };
 
-    private static ServiceProvider Build(ISyncStore store, HttpMessageHandler transport)
+    private static ServiceProvider Build(IHyperwycStore store, HttpMessageHandler transport)
     {
         var services = new ServiceCollection();
         services.AddSingleton<IConnectivityService>(new FakeConnectivityService(isConnected: true));

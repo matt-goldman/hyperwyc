@@ -19,7 +19,7 @@ var headers = FlattenHeaders(request.Headers);
 ```
 
 There is no filter. Any queued write or cached read stores the bearer token that was on
-the request at the time — into Cabinet's on-disk store for `CabinetSyncStore`. Cabinet
+the request at the time — into Cabinet's on-disk store for `CabinetStore`. Cabinet
 encrypts at rest, which mitigates but does not remove the exposure: tokens outlive their
 useful life in the store, are replayed verbatim on flush, and appear in any diagnostics
 surface built for issue #23.
@@ -27,7 +27,7 @@ surface built for issue #23.
 Replaying a stale token is also a functional problem, not only a privacy one. The
 documented handler ordering (`HyperwycHandler` before the auth handler) exists precisely
 so that replayed requests pick up a *fresh* token — but a persisted `Authorization` header
-is re-applied by `SyncOrchestrator.BuildRequest`, and the orchestrator sends through a bare
+is re-applied by `OutboxProcessor.BuildRequest`, and the orchestrator sends through a bare
 transport handler that has no auth handler in it at all. So the stale header is what
 actually goes on the wire during a flush.
 

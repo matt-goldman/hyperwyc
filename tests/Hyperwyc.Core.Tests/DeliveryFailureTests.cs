@@ -16,14 +16,14 @@ namespace Hyperwyc.Tests;
 /// </remarks>
 public class DeliveryFailureTests
 {
-    private static SyncOrchestrator BuildOrchestrator(
-        InMemorySyncStore store,
+    private static OutboxProcessor BuildOrchestrator(
+        InMemoryStore store,
         HttpMessageHandler transport,
-        SyncEventStream? events = null) =>
+        HyperwycEventStream? events = null) =>
         new(
             store,
             new FakeConnectivityService(isConnected: true),
-            events ?? new SyncEventStream(),
+            events ?? new HyperwycEventStream(),
             new HyperwycOptions(),
             transport);
 
@@ -79,7 +79,7 @@ public class DeliveryFailureTests
     [InlineData(HttpStatusCode.UnprocessableEntity)]
     public async Task PermanentFailure_DeadLettersOnTheFirstAttempt(HttpStatusCode status)
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
         var transport = new CountingTransport(status);
         await using var orchestrator = BuildOrchestrator(store, transport);
@@ -93,11 +93,11 @@ public class DeliveryFailureTests
     [Fact]
     public async Task PermanentFailure_PublishesOnFailed()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
-        var events = new SyncEventStream();
-        var received = new List<SyncEvent>();
-        events.Subscribe(new DelegateObserver<SyncEvent>(received.Add));
+        var events = new HyperwycEventStream();
+        var received = new List<HyperwycEvent>();
+        events.Subscribe(new DelegateObserver<HyperwycEvent>(received.Add));
 
         await using var orchestrator = BuildOrchestrator(
             store, new CountingTransport(HttpStatusCode.Conflict), events: events);
@@ -105,7 +105,7 @@ public class DeliveryFailureTests
         await orchestrator.FlushAsync();
 
         // One attempt, one event. There is no retry to announce.
-        Assert.Single(received, e => e.Type == SyncEventType.OnFailed);
+        Assert.Single(received, e => e.Type == HyperwycEventType.OnFailed);
     }
 
     // -------------------------------------------------------------------------
@@ -115,7 +115,7 @@ public class DeliveryFailureTests
     [Fact]
     public async Task ARejectedWrite_DoesNotDelayOrBlockTheOnesBehindIt()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox("https://example.com/api/rejected"));
         await store.UpsertAsync(Outbox("https://example.com/api/fine"));
 
@@ -143,7 +143,7 @@ public class DeliveryFailureTests
     [Fact]
     public async Task TransientFailure_LeavesTheEnvelopeQueuedForTheNextFlush()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
         var transport = new CountingTransport(HttpStatusCode.ServiceUnavailable);
         await using var orchestrator = BuildOrchestrator(store, transport);
@@ -157,14 +157,14 @@ public class DeliveryFailureTests
 
         // The server answered, and not with a refusal — so the write is still live, and the
         // outcome recorded against it says why it has not gone yet.
-        Assert.Equal(SyncOutcomeKind.TransientFailure, pending.LastOutcome?.Kind);
+        Assert.Equal(DeliveryOutcomeKind.TransientFailure, pending.LastOutcome?.Kind);
         Assert.Equal(503, pending.LastOutcome?.StatusCode);
     }
 
     [Fact]
     public async Task TransientFailure_IsRetriedByTheNextFlush_WithNoBudgetToExhaust()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
         var failing = new CountingTransport(HttpStatusCode.ServiceUnavailable);
 
@@ -189,7 +189,7 @@ public class DeliveryFailureTests
     [Fact]
     public async Task TransientFailure_DoesNotDelayTheNextEnvelopeInTheFlush()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox("https://example.com/api/flaky"));
         await store.UpsertAsync(Outbox("https://example.com/api/fine"));
 
@@ -219,7 +219,7 @@ public class DeliveryFailureTests
     [Fact]
     public async Task TransportFailure_AbandonsTheRestOfTheFlush()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox("https://example.com/api/one"));
         await store.UpsertAsync(Outbox("https://example.com/api/two"));
         await store.UpsertAsync(Outbox("https://example.com/api/three"));
@@ -238,7 +238,7 @@ public class DeliveryFailureTests
     [Fact]
     public async Task TransportFailure_DoesNotDeadLetter()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
         await using var orchestrator = BuildOrchestrator(store, new ThrowingTransport());
 
@@ -248,14 +248,14 @@ public class DeliveryFailureTests
         Assert.False(pending.IsDeadLettered);
 
         // Being unable to reach the network says nothing about the request.
-        Assert.Equal(SyncOutcomeKind.TransportFailure, pending.LastOutcome?.Kind);
+        Assert.Equal(DeliveryOutcomeKind.TransportFailure, pending.LastOutcome?.Kind);
         Assert.Null(pending.LastOutcome?.StatusCode);
     }
 
     [Fact]
     public async Task TransportFailure_LeavesEnvelopesEligibleForTheNextFlush()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
         var throwing = new ThrowingTransport();
 

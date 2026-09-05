@@ -6,7 +6,7 @@ using Hyperwyc.Models;
 
 namespace Hyperwyc.Sample.Maui.ViewModels;
 
-public partial class LiveEventsViewModel : ObservableObject, IDisposable, IObserver<SyncEvent>
+public partial class LiveEventsViewModel : ObservableObject, IDisposable, IObserver<HyperwycEvent>
 {
     private readonly IDisposable _eventSubscription;
 
@@ -14,7 +14,7 @@ public partial class LiveEventsViewModel : ObservableObject, IDisposable, IObser
 
     public LiveEventsViewModel(IHyperwyc hyperwyc)
     {
-        _eventSubscription = hyperwyc.SyncEvents.Subscribe(this);
+        _eventSubscription = hyperwyc.Events.Subscribe(this);
     }
 
     public void Dispose()
@@ -34,11 +34,11 @@ public partial class LiveEventsViewModel : ObservableObject, IDisposable, IObser
         await toast.Show(CancellationToken.None);
     }
 
-    public void OnNext(SyncEvent value)
+    public void OnNext(HyperwycEvent value)
     {
         LiveEvents.Add(new EventViewModel(value));
 
-        //if (value.Outcome?.Kind is null or SyncOutcomeKind.Succeeded) return;
+        //if (value.Outcome?.Kind is null or DeliveryOutcomeKind.Succeeded) return;
 
         var message = $"A {value.Method} call to {value.Url} has failed: {value.Outcome?.Kind}";
         var toast = Toast.Make(message);
@@ -64,11 +64,11 @@ public class EventViewModel
     public string Title { get; }
 
 
-    public EventViewModel(SyncEvent syncEvent)
+    public EventViewModel(HyperwycEvent syncEvent)
     {
         Url = syncEvent.Url;
 
-        IsSuccess = syncEvent.Outcome?.Kind == SyncOutcomeKind.Succeeded;
+        IsSuccess = syncEvent.Outcome?.Kind == DeliveryOutcomeKind.Succeeded;
 
         TitleColor = IsSuccess ? Colors.Green : Colors.Red;
 

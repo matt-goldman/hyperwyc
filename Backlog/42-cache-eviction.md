@@ -9,7 +9,7 @@ every GET accumulates indefinitely.
 ## The problem
 
 `MaxCachedResponseBodyBytes` rejects a single response over 512 KB. Nothing counts how many
-entries exist or what they add up to. `ISyncStore` has no eviction operation at all —
+entries exist or what they add up to. `IHyperwycStore` has no eviction operation at all —
 `ResetAsync` deletes everything, which is the only bulk removal available and is far too blunt
 to be a growth strategy.
 
@@ -61,7 +61,7 @@ read again.
 1. **When does eviction run?** On write, so the bound is never exceeded; or as a sweep at
    startup and after a flush, which is cheaper but allows temporary overshoot. A sweep is
    probably right for mobile — eviction on every cache write puts work on the request path.
-2. **Should `ISyncStore` grow eviction operations, or should the orchestrator drive it through
+2. **Should `IHyperwycStore` grow eviction operations, or should the orchestrator drive it through
    existing ones?** Pushing it into the interface makes it a burden on every store implementer,
    including the future IndexedDb and Sqlite providers. Driving it from above keeps implementers
    simple but is chattier.
@@ -83,7 +83,7 @@ read again.
 - [ ] Unit test: exceeding the byte bound evicts until under it.
 - [ ] Unit test: a pending outbox entry is never evicted, whatever the bounds.
 - [ ] Unit test: reading a cached entry updates its access time and protects it from eviction.
-- [ ] `CabinetSyncStore` and `InMemorySyncStore` both honour the policy.
+- [ ] `CabinetStore` and `InMemoryStore` both honour the policy.
 - [ ] README documents the bounds and what happens when they are hit.
 
 ## Notes

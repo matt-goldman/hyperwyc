@@ -11,7 +11,7 @@ namespace Hyperwyc;
 /// Most applications should install the <c>Hyperwyc</c> package and call
 /// <c>AddHyperwyc()</c>, which supplies durable Cabinet-backed storage with no further
 /// configuration. Use the methods here when you are providing your own
-/// <see cref="ISyncStore"/>.
+/// <see cref="IHyperwycStore"/>.
 /// </remarks>
 public static class ServiceCollectionExtensions
 {
@@ -23,7 +23,7 @@ public static class ServiceCollectionExtensions
     /// <remarks>
     /// <para>
     /// The store is a type parameter rather than an option so that omitting it is a
-    /// compile-time error. There is no fallback: <see cref="InMemorySyncStore"/> loses
+    /// compile-time error. There is no fallback: <see cref="InMemoryStore"/> loses
     /// all queued writes and cached responses when the process ends, which is exactly
     /// the failure an offline library exists to prevent, so it is never selected
     /// implicitly.
@@ -31,12 +31,12 @@ public static class ServiceCollectionExtensions
     /// <code>
     /// services.AddHyperwycCore&lt;MyCustomStore&gt;(options =&gt;
     /// {
-    ///     options.DefaultPolicy = SyncPolicy.CacheFirst(TimeSpan.FromDays(1));
+    ///     options.Routes.Default = RoutePolicy.CacheFirst(TimeSpan.FromDays(1));
     /// });
     /// </code>
     /// </remarks>
     /// <typeparam name="TStore">
-    /// The <see cref="ISyncStore"/> implementation to register. Must be constructible
+    /// The <see cref="IHyperwycStore"/> implementation to register. Must be constructible
     /// by the container — supply configuration through its own options type rather
     /// than through primitive constructor parameters, or use the factory overload.
     /// </typeparam>
@@ -46,11 +46,11 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddHyperwycCore<TStore>(
         this IServiceCollection services,
         Action<HyperwycOptions>? configure = null)
-        where TStore : class, ISyncStore
+        where TStore : class, IHyperwycStore
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.TryAddSingleton<ISyncStore, TStore>();
+        services.TryAddSingleton<IHyperwycStore, TStore>();
         return AddCoreServices(services, configure);
     }
 
@@ -65,12 +65,12 @@ public static class ServiceCollectionExtensions
     /// implements <see cref="IDisposable"/>.
     /// </remarks>
     /// <param name="services">The service collection to register with.</param>
-    /// <param name="storeFactory">Factory producing the <see cref="ISyncStore"/> to use.</param>
+    /// <param name="storeFactory">Factory producing the <see cref="IHyperwycStore"/> to use.</param>
     /// <param name="configure">Optional delegate to configure <see cref="HyperwycOptions"/>.</param>
     /// <returns>The original <paramref name="services"/> for chaining.</returns>
     public static IServiceCollection AddHyperwycCore(
         this IServiceCollection services,
-        Func<IServiceProvider, ISyncStore> storeFactory,
+        Func<IServiceProvider, IHyperwycStore> storeFactory,
         Action<HyperwycOptions>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -85,7 +85,7 @@ public static class ServiceCollectionExtensions
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Registers everything except the <see cref="ISyncStore"/>, which each public
+    /// Registers everything except the <see cref="IHyperwycStore"/>, which each public
     /// entry point supplies in its own way.
     /// </summary>
     private static IServiceCollection AddCoreServices(
@@ -100,7 +100,7 @@ public static class ServiceCollectionExtensions
         // sources for one value, resolved in the wrong order.
 
         // Register the options object itself as a singleton so HyperwycHandler
-        // and SyncOrchestrator can receive it via constructor injection.
+        // and OutboxProcessor can receive it via constructor injection.
         services.AddSingleton(options);
 
         // Connectivity has no default on purpose: see HyperwycOptions.Connectivity.
@@ -119,19 +119,19 @@ public static class ServiceCollectionExtensions
                 _ => throw new InvalidOperationException(NoConnectivityMessage));
 
         // Core singletons.
-        services.TryAddSingleton<SyncEventStream>();
+        services.TryAddSingleton<HyperwycEventStream>();
 
         services.TryAddSingleton<IHyperwyc>(sp => new HyperwycService(
-            sp.GetRequiredService<SyncEventStream>(),
-            sp.GetRequiredService<SyncOrchestrator>()));
+            sp.GetRequiredService<HyperwycEventStream>(),
+            sp.GetRequiredService<OutboxProcessor>()));
 
         // Replays go back through the named client they were queued on, so downstream
         // handlers (auth above all) apply to them. ReplayTransport is the fallback for
         // envelopes with no client name — see issue #37.
-        services.TryAddSingleton<SyncOrchestrator>(sp => new SyncOrchestrator(
-            sp.GetRequiredService<ISyncStore>(),
+        services.TryAddSingleton<OutboxProcessor>(sp => new OutboxProcessor(
+            sp.GetRequiredService<IHyperwycStore>(),
             sp.GetRequiredService<IConnectivityService>(),
-            sp.GetRequiredService<SyncEventStream>(),
+            sp.GetRequiredService<HyperwycEventStream>(),
             sp.GetRequiredService<HyperwycOptions>(),
             options.ReplayTransport ?? new HttpClientHandler(),
             sp.GetService<IHttpClientFactory>()));

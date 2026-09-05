@@ -32,9 +32,9 @@ public sealed class CabinetRegistrationTests : IDisposable
         services.AddHyperwyc(Connectivity, o => o.DirectoryPath = _tempDir);
 
         using var sp = services.BuildServiceProvider();
-        var store = sp.GetRequiredService<ISyncStore>();
+        var store = sp.GetRequiredService<IHyperwycStore>();
 
-        Assert.IsType<CabinetSyncStore>(store);
+        Assert.IsType<CabinetStore>(store);
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public sealed class CabinetRegistrationTests : IDisposable
 
         using var sp = services.BuildServiceProvider();
 
-        // SyncOrchestrator is internal to the core assembly — consumers reach
+        // OutboxProcessor is internal to the core assembly — consumers reach
         // flushing through IHyperwyc, so that is what this asserts.
         Assert.NotNull(sp.GetService<IHyperwyc>());
         Assert.NotNull(sp.GetService<HyperwycHandler>());
@@ -80,7 +80,7 @@ public sealed class CabinetRegistrationTests : IDisposable
         // Registration alone must not touch the filesystem.
         Assert.False(Directory.Exists(_tempDir));
 
-        sp.GetRequiredService<ISyncStore>();
+        sp.GetRequiredService<IHyperwycStore>();
 
         Assert.True(Directory.Exists(_tempDir));
     }
@@ -88,14 +88,14 @@ public sealed class CabinetRegistrationTests : IDisposable
     [Fact]
     public void AddHyperwyc_ExplicitStoreRegistration_IsNotOverridden()
     {
-        var custom = new InMemorySyncStore();
+        var custom = new InMemoryStore();
         var services = new ServiceCollection();
-        services.AddSingleton<ISyncStore>(custom);
+        services.AddSingleton<IHyperwycStore>(custom);
         services.AddHyperwyc(Connectivity, o => o.DirectoryPath = _tempDir);
 
         using var sp = services.BuildServiceProvider();
 
-        Assert.Same(custom, sp.GetRequiredService<ISyncStore>());
+        Assert.Same(custom, sp.GetRequiredService<IHyperwycStore>());
     }
 
     [Fact]
@@ -152,12 +152,12 @@ public sealed class CabinetRegistrationTests : IDisposable
     }
 
     [Fact]
-    public void CabinetSyncStore_OptionsConstructor_HonoursExplicitKey()
+    public void CabinetStore_OptionsConstructor_HonoursExplicitKey()
     {
         var key = new byte[32];
         Random.Shared.NextBytes(key);
 
-        var store = new CabinetSyncStore(new CabinetStoreOptions
+        var store = new CabinetStore(new CabinetStoreOptions
         {
             DirectoryPath = _tempDir,
             EncryptionKey = key,
@@ -167,8 +167,8 @@ public sealed class CabinetRegistrationTests : IDisposable
     }
 
     [Fact]
-    public void CabinetSyncStore_OptionsConstructor_NullOptions_Throws() =>
-        Assert.Throws<ArgumentNullException>(() => new CabinetSyncStore((CabinetStoreOptions)null!));
+    public void CabinetStore_OptionsConstructor_NullOptions_Throws() =>
+        Assert.Throws<ArgumentNullException>(() => new CabinetStore((CabinetStoreOptions)null!));
 
     /// <summary>Supplies the required connectivity service. See issue #47.</summary>
     private static void Connectivity(HyperwycOptions options) =>

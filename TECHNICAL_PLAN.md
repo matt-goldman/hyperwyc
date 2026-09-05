@@ -47,16 +47,16 @@ for applications that need explicit offline handling.
 
 | Package | Assembly | Contents |
 |---------|----------|----------|
-| `Hyperwyc.Core` | `Hyperwyc.Core.dll` | `HyperwycHandler`, the interfaces (`ISyncStore`, `IConnectivityService`, `IHyperwyc`), `RoutePolicy`, `RoutePolicyMap`, `SyncEventStream`, `InMemorySyncStore`, `AlwaysOnlineConnectivityService`, `NetworkAvailabilityConnectivityService`. Depends on `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Hosting.Abstractions` and `Microsoft.Extensions.Http`; no storage dependency. |
-| `Hyperwyc` | `Hyperwyc.dll` | `CabinetSyncStore` backed by [Cabinet](https://github.com/mattgoldman/cabinet), `CabinetStoreOptions`, and the batteries-included `AddHyperwyc()`. Depends on `Hyperwyc.Core` and `Cabinet`. |
+| `Hyperwyc.Core` | `Hyperwyc.Core.dll` | `HyperwycHandler`, the interfaces (`IHyperwycStore`, `IConnectivityService`, `IHyperwyc`), `RoutePolicy`, `RoutePolicyMap`, `HyperwycEventStream`, `InMemoryStore`, `AlwaysOnlineConnectivityService`, `NetworkAvailabilityConnectivityService`. Depends on `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Hosting.Abstractions` and `Microsoft.Extensions.Http`; no storage dependency. |
+| `Hyperwyc` | `Hyperwyc.dll` | `CabinetStore` backed by [Cabinet](https://github.com/mattgoldman/cabinet), `CabinetStoreOptions`, and the batteries-included `AddHyperwyc()`. Depends on `Hyperwyc.Core` and `Cabinet`. |
 
 `Hyperwyc` is the package almost everyone installs: `AddHyperwyc()` with no arguments produces
 a working, durable configuration. `Hyperwyc.Core` is for developers supplying their own
-`ISyncStore`, and future provider packages — `Hyperwyc.LiteDb`, `Hyperwyc.IndexedDb` — sit
+`IHyperwycStore`, and future provider packages — `Hyperwyc.LiteDb`, `Hyperwyc.IndexedDb` — sit
 alongside it.
 
 Package ID, assembly name and root namespace are deliberately independent. `Hyperwyc.Core`
-ships types in the `Hyperwyc` namespace, and `Hyperwyc` ships `CabinetSyncStore` in
+ships types in the `Hyperwyc` namespace, and `Hyperwyc` ships `CabinetStore` in
 `Hyperwyc.Cabinet`, so a single `using Hyperwyc;` reaches the common surface regardless of
 which packages are installed.
 
@@ -64,20 +64,20 @@ which packages are installed.
 
 | Entry point | Package | Store |
 |---|---|---|
-| `AddHyperwyc(configure?, configureStore?)` | `Hyperwyc` | `CabinetSyncStore`, constructed by the container |
+| `AddHyperwyc(configure?, configureStore?)` | `Hyperwyc` | `CabinetStore`, constructed by the container |
 | `AddHyperwycCore<TStore>(configure?)` | `Hyperwyc.Core` | `TStore`, constructed by the container |
 | `AddHyperwycCore(storeFactory, configure?)` | `Hyperwyc.Core` | Whatever the factory returns |
 
-`IHyperwyc` is the whole consumer-facing runtime surface — `SyncEvents`, `FlushAsync` and
-`ResetStoreAsync`. `SyncOrchestrator` is internal: flushing is reached through the interface
+`IHyperwyc` is the whole consumer-facing runtime surface — `Events`, `FlushAsync` and
+`ResetStoreAsync`. `OutboxProcessor` is internal: flushing is reached through the interface
 rather than by depending on the concrete type. Configuration enums (`OfflineResponsePolicy`,
-`CacheStrategy`) live in the root `Hyperwyc` namespace rather than `Hyperwyc.Models`, so
+`SourcePriority`) live in the root `Hyperwyc` namespace rather than `Hyperwyc.Models`, so
 configuring options needs no second `using`; `Hyperwyc.Models` holds only genuine data types
-(`Envelope`, `CachedResponse`, `SyncEvent`, `RetryOptions`).
+(`Envelope`, `CachedResponse`, `HyperwycEvent`, `RetryOptions`).
 
 The store is a type parameter rather than a property on `HyperwycOptions`. That makes omitting
 it a compile-time error, where an options property would allow an application to silently run
-on `InMemorySyncStore` and lose every queued write at restart — the exact failure the library
+on `InMemoryStore` and lose every queued write at restart — the exact failure the library
 exists to prevent. Registration is by type, so the container owns construction and disposal and
 no store is built (and no directory touched) unless something resolves it.
 
@@ -129,7 +129,7 @@ The handler branches first on connectivity, then on whether the method is mutati
 3. If **online**:
    - Sends the request immediately.
    - On success, invalidates cached GETs sharing the URL prefix (configurable via
-     the route policy's `InvalidateCacheOnWrite`), and publishes `OnSynced`.
+     the route policy's `InvalidateCacheOnWrite`), and publishes `OnDelivered`.
 
 Online writes are not persisted to the outbox — they either succeed against the origin or
 their failure status is returned to the caller unchanged. Only offline writes are queued.
@@ -149,7 +149,7 @@ bookkeeping and is never sent.
 
 #### Incoming Responses (Read Operations)
 
-Read handling for `GET`, `HEAD` and `OPTIONS` is governed by the `CacheStrategy` that
+Read handling for `GET`, `HEAD` and `OPTIONS` is governed by the `SourcePriority` that
 the route policy resolved for the request specifies:
 
 | Strategy | Online | Offline |
@@ -201,9 +201,9 @@ as the individual resource. Query strings are excluded from the prefix.
 
 ---
 
-### 3. Synchronisation Workflow
+### 3. Delivery Workflow
 
-`SyncOrchestrator` owns outbound replay. It subscribes to
+`OutboxProcessor` owns outbound replay. It subscribes to
 `IConnectivityService.ConnectivityChanged` at construction and exposes `FlushAsync` for
 manual triggering (e.g. a "sync now" button).
 
@@ -218,7 +218,7 @@ manual triggering (e.g. a "sync now" button).
   do not reach replays unless that transport supplies them. It defaults to a plain
   `HttpClientHandler`, and is never disposed by Hyperwyc: a caller-supplied handler stays the
   caller's to dispose, and the default lives for the application's lifetime.
-- On successful delivery: marks `IsSynced = true`, publishes `OnSynced`, and applies
+- On successful delivery: marks `IsSynced = true`, publishes `OnDelivered`, and applies
   write-triggered invalidation.
 - **One attempt per envelope per flush.** There is no in-flush retry loop; a failed attempt
   resolves to one of three outcomes below. This is what keeps a single undeliverable write from
@@ -241,7 +241,7 @@ retrying a flaky endpoint — are handled by its own handlers, which run first (
 
 #### Which envelopes a flush attempts
 
-`ISyncStore.GetReadyToSendAsync(now)` returns envelopes never attempted plus those whose
+`IHyperwycStore.GetReadyToSendAsync(now)` returns envelopes never attempted plus those whose
 scheduled retry time has arrived — deliberately excluding ones still waiting, so a flush does
 not re-attempt deferred work. `GetPendingOutboxAsync` reports everything queued regardless of
 readiness, which is what diagnostics wants.
@@ -266,7 +266,7 @@ disposal at all.
 
 #### Disposal
 
-`SyncOrchestrator` implements both `IDisposable` and `IAsyncDisposable`, and both mean *stop
+`OutboxProcessor` implements both `IDisposable` and `IAsyncDisposable`, and both mean *stop
 now*. Each cancels a lifetime token that every flush is linked to — including a manual
 `FlushAsync()` that supplied no token of its own — so the flush loop exits at its next envelope
 boundary, with any in-progress send and backoff delay cancelled. `DisposeAsync` additionally
@@ -289,25 +289,25 @@ semaphore's `AvailableWaitHandle` is never used and the invoker does not own its
 | Component | Responsibility |
 |-----------|----------------|
 | `HyperwycHandler` | Intercepts requests; routes to cache, network, or outbox. Pipeline entry point |
-| `SyncOrchestrator` | Drains the outbox on connectivity restoration or manual flush; owns retry and dead-lettering. Internal — reached through `IHyperwyc` |
+| `OutboxProcessor` | Drains the outbox on connectivity restoration or manual flush; owns retry and dead-lettering. Internal — reached through `IHyperwyc` |
 | `HyperwycHostedService` | Triggers the startup flush |
-| `HyperwycService` | Default `IHyperwyc` — exposes `SyncEvents`, `FlushAsync` and `ResetStoreAsync` |
-| `ISyncStore` | CRUD over stored envelopes; pluggable |
-| `InMemorySyncStore` | Non-durable store, for tests and for consumers who genuinely want no persistence. Never selected implicitly |
-| `CabinetSyncStore` | Durable `ISyncStore` using Cabinet |
+| `HyperwycService` | Default `IHyperwyc` — exposes `Events`, `FlushAsync` and `ResetStoreAsync` |
+| `IHyperwycStore` | CRUD over stored envelopes; pluggable |
+| `InMemoryStore` | Non-durable store, for tests and for consumers who genuinely want no persistence. Never selected implicitly |
+| `CabinetStore` | Durable `IHyperwycStore` using Cabinet |
 | `IConnectivityService` | Reports online/offline state and raises change events |
 | `AlwaysOnlineConnectivityService` | Always reports connected. Opt-in only; nothing is queued or replayed under it |
 | `NetworkAvailabilityConnectivityService` | BCL-backed `IConnectivityService` over `NetworkInterface.GetIsNetworkAvailable()`. Opt-in; detects hard-offline, not an unreachable API |
 | `RoutePolicy` | Cache strategy, TTL and write-invalidation for one route |
 | `RoutePolicyMap` | Pattern-to-policy map; later registrations refine earlier ones |
-| `SyncEventStream` | Reactive event publisher (`IObservable<SyncEvent>`) |
+| `HyperwycEventStream` | Reactive event publisher (`IObservable<HyperwycEvent>`) |
 | `HyperwycResponseFactory` | Builds the synthetic `Queued` and `Offline` responses |
 
 ---
 
 ### 5. Storage — Cabinet
 
-Hyperwyc's default `ISyncStore` implementation uses **Cabinet**, whose document-oriented
+Hyperwyc's default `IHyperwycStore` implementation uses **Cabinet**, whose document-oriented
 model and flexible index system suit HTTP request/response envelopes. It ships in the
 `Hyperwyc` package and is what `AddHyperwyc()` resolves with no configuration.
 
@@ -356,7 +356,7 @@ Each request/response pair is persisted as a single document:
 #### Route Policies
 
 `RoutePolicyMap` maps URL patterns to `RoutePolicy` values. Both the handler and
-`SyncOrchestrator` resolve through the same map, so a replayed write honours its route's
+`OutboxProcessor` resolve through the same map, so a replayed write honours its route's
 invalidation decision rather than a global one.
 
 **Later registrations refine earlier ones**, so a map is written general to specific. That is
@@ -377,13 +377,13 @@ function of a request: deciding per request is not a policy but a handler, which
 replaced `ISyncPolicy`, whose two members both took an `HttpRequestMessage` that no shipped
 implementation ever read.
 
-`CacheStrategy.NetworkOnly` is the only strategy that governs writes as well as reads — an
+`SourcePriority.NetworkOnly` is the only strategy that governs writes as well as reads — an
 offline write to such a route is not queued, and passes through to the transport to fail as it
 would without Hyperwyc installed.
 
 #### Cache Entry Identity
 
-A cache envelope's `Id` is derived from the URL (`cache:{url}`), not generated. `ISyncStore.UpsertAsync`
+A cache envelope's `Id` is derived from the URL (`cache:{url}`), not generated. `IHyperwycStore.UpsertAsync`
 keys on `Id`, so a refetch **replaces** the stored response rather than adding a second envelope
 beside it.
 
@@ -411,7 +411,7 @@ File uploads, image downloads, protobuf and gzip-encoded payloads round-trip byt
 type. A `StringContent` default was what made every replayed JSON write go out as `text/plain`.
 
 For textual routes, `GetRequestBodyAsText()` on `Envelope`, `GetBodyAsText()` on
-`CachedResponse` and `SyncOutcome`, and `GetRequestBodyAsText()` on `SyncEvent` decode as UTF-8.
+`CachedResponse` and `DeliveryOutcome`, and `GetRequestBodyAsText()` on `HyperwycEvent` decode as UTF-8.
 They are conveniences for diagnostics and for callers who know their route is text; nothing
 inside Hyperwyc uses them, because nothing inside Hyperwyc is entitled to assume a body is text.
 
@@ -431,10 +431,10 @@ large binaries can raise it themselves. Outbound requests are queued regardless 
 
 ### 6. Reactive Event Stream
 
-Hyperwyc exposes sync lifecycle changes as `IObservable<SyncEvent>`:
+Hyperwyc exposes sync lifecycle changes as `IObservable<HyperwycEvent>`:
 
 ```csharp
-IObservable<SyncEvent> SyncEvents { get; }
+IObservable<HyperwycEvent> Events { get; }
 ```
 
 `IObservable<T>` is a BCL interface (`System.IObservable<T>`). The core package implements it
@@ -448,7 +448,7 @@ prefer event-style consumption get it with a one-line `.Subscribe(...)`.
 | Event | Trigger | Payload beyond type/url/method/timestamp |
 |-------|---------|---|
 | `OnQueued` | Request cached to outbox (offline) | `CorrelationId`, `RequestId`, `RequestBody` |
-| `OnSynced` | Outbound request successfully delivered | The above, plus this attempt's `Outcome` |
+| `OnDelivered` | Outbound request successfully delivered | The above, plus this attempt's `Outcome` |
 | `OnFailed` | Request moved to dead-letter after threshold | The above, plus the final `Outcome` |
 | `OnUpdated` | Cached response refreshed from API | None — not a queued write |
 
@@ -464,9 +464,9 @@ instruction this way does not breach ADR 0001. It is kept distinct from `Envelop
 is under the application's control and carries no uniqueness guarantee, whereas `Envelope.Id`
 keys the store.
 
-#### `SyncOutcome`
+#### `DeliveryOutcome`
 
-`SyncOutcome` is persisted on `Envelope.LastOutcome` and the same instance is handed out on the
+`DeliveryOutcome` is persisted on `Envelope.LastOutcome` and the same instance is handed out on the
 event. The durable record is the primary artefact: a background flush can complete while the
 application is not running, so an outcome delivered only as an event is one nobody hears about.
 Consequently everything on it must serialise, which is why transport failures carry
@@ -485,7 +485,7 @@ resource. A transport failure is recorded on the envelope but publishes no event
 abandons and the envelope keeps its place.
 
 The outcome is written with a plain `UpsertAsync` before `MoveToDeadLetterAsync`, leaving
-`ISyncStore` unchanged. The pair is not atomic: a crash between them leaves the envelope carrying
+`IHyperwycStore` unchanged. The pair is not atomic: a crash between them leaves the envelope carrying
 its outcome but still pending, so it is retried and — classification being deterministic on the
 status code — reaches the same verdict.
 
@@ -556,7 +556,7 @@ The three supported implementations, in the order most consumers should consider
 | `AlwaysOnlineConnectivityService` | `Hyperwyc.Core` | Nothing. Reports connected always |
 
 A false positive costs a wasted attempt, not correctness: the request fails at the transport
-and `SyncOrchestrator` abandons the flush and waits for the next signal (§3).
+and `OutboxProcessor` abandons the flush and waits for the next signal (§3).
 
 `CabinetStoreOptions`, configured through `AddHyperwyc`'s second delegate, carries the
 storage-specific settings — `DirectoryPath` (default `{LocalApplicationData}/Hyperwyc`) and
@@ -592,7 +592,7 @@ rather than fixed.
 
 ### 9. Security and Privacy
 
-- **Encryption at rest** is provided by `CabinetSyncStore` (AES-256-GCM). When no key is
+- **Encryption at rest** is provided by `CabinetStore` (AES-256-GCM). When no key is
   supplied, one is derived from the store path via SHA-256. That default requires no
   configuration and keeps cached data from casual inspection of the device filesystem, but it
   is deterministic for a given path and so is not a defence against an attacker holding the
@@ -674,8 +674,8 @@ scope test and removed everything the project had already decided against but wa
 
 **All retry apparatus.** `RetryOptions`, `ISyncPolicy.GetRetryOptions`,
 `HyperwycOptions.DefaultRetryOptions` and `ConnectivityDebounceDelay`, `Envelope.RetryCount` and
-`NextRetryUtc`, `ISyncStore.GetReadyToSendAsync`, exponential backoff with jitter, the follow-up
-scheduler, the connectivity debounce, `SyncEventType.OnRetrying`, and `SyncOutcome.AttemptCount`
+`NextRetryUtc`, `IHyperwycStore.GetReadyToSendAsync`, exponential backoff with jitter, the follow-up
+scheduler, the connectivity debounce, `HyperwycEventType.OnRetrying`, and `DeliveryOutcome.AttemptCount`
 and `IsFinal`.
 
 [Issue 38](Backlog/Done/38-retry-classification.md) had already concluded that Hyperwyc retries
@@ -698,24 +698,43 @@ staleness earns an interface back.
 an opinion. Synthetic responses now have one shape: a normal-looking success, distinguished by
 `X-Hyperwyc-Status` and — for writes — the `202`.
 
-**`SyncOutcome.Headers`.** A full response-header dictionary captured on every outcome that
+**`DeliveryOutcome.Headers`.** A full response-header dictionary captured on every outcome that
 nothing read.
 
-Nothing here is foreclosed. `Hyperwyc.Core` with a consumer-supplied `ISyncStore` is the seam
+Nothing here is foreclosed. `Hyperwyc.Core` with a consumer-supplied `IHyperwycStore` is the seam
 through which any of it can be re-added by whoever actually needs it, which is what made removing
 it safe rather than reckless.
 
 ---
 
-## TODO: the "sync" vocabulary is wrong
+## Vocabulary
 
-`ISyncStore`, `SyncOrchestrator`, `SyncEvent`, `SyncPolicy`, `SyncOutcome`, `SyncEvents` — the
-prefix is everywhere, and it names something Hyperwyc explicitly is not.
+Settled 2026-09-05. Two rules, and the reasoning is worth keeping because naming shaped design
+decisions here more than once.
 
-"Sync" implies bidirectional synchronisation with conflict resolution: Realm, CommunityToolkit
-Datasync, the category Hyperwyc positions itself *against* in "What It Doesn't Do". Hyperwyc
-caches responses and replays queued writes in one direction, and takes no position on conflicts.
-The ubiquitous language should say so.
+**"Sync" is gone.** It named bidirectional synchronisation with conflict resolution — Realm,
+CommunityToolkit Datasync, the category "What It Doesn't Do" exists to distance Hyperwyc from.
+What the write path actually does is queue and deliver, and that vocabulary was already in the
+code (`outbox`, `flush`). So: `IHyperwycStore`, `InMemoryStore`, `CabinetStore`,
+`OutboxProcessor`, `HyperwycEvent`, `DeliveryOutcome`, `MarkDeliveredAsync`, `OnDelivered`.
 
-Not scheduled, and deliberately not a backlog item — captured here so it is not rediscovered a
-third time. Worth settling before v1, since renaming public types is free now and breaking later.
+**"Cache" stayed, and narrowed.** Every use of it is genuine caching, and `CacheFirst` /
+`NetworkFirst` are Workbox's names — vocabulary developers already have. The problem was never
+the word; it was that "cache" was the *only* word, so it stretched over the write path where it
+does not fit. Once "outbox" and "deliver" cover writes, "cache" retracts to what it describes.
+
+**`CacheStrategy` became `SourcePriority`.** It was the one casualty: `NetworkOnly` governs
+writes as well as reads, so a name claiming "cache" over-reached. `NetworkStrategy` would have
+been the same mistake mirrored — every candidate that named one side left a third of the values
+arguing with it. `SourcePriority` names the *relationship*: which source takes precedence, with
+`NetworkOnly` the degenerate case where one has all of it. `RoutePolicyMap.Resolve` became
+`PolicyFor` in the same pass, so "resolving a policy" and "resolving a request" stopped sharing
+a word.
+
+**`Envelope.IsSynced` was deliberately left.** It is set `true` on cached responses, so it means
+"not a pending outbox entry" — renaming it `IsDelivered` would have been actively false rather
+than merely vague. That it could not be renamed is the tell that the model is wrong, not the
+name; tracked as [issue 55](Backlog/55-envelope-kind-discriminator.md).
+
+Run as a pure mechanical pass with no behaviour edits, test count identical either side (29 and
+263). Backlog items in `Done/` keep the old vocabulary, since they record what was decided when.

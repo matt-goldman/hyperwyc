@@ -23,23 +23,23 @@ public sealed class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddHyperwycCore_Defaults_RegistersSyncEventStreamAsSingleton()
+    public void AddHyperwycCore_Defaults_RegistersHyperwycEventStreamAsSingleton()
     {
         var sp = BuildProvider(null);
 
-        var a = sp.GetRequiredService<SyncEventStream>();
-        var b = sp.GetRequiredService<SyncEventStream>();
+        var a = sp.GetRequiredService<HyperwycEventStream>();
+        var b = sp.GetRequiredService<HyperwycEventStream>();
 
         Assert.Same(a, b);
     }
 
     [Fact]
-    public void AddHyperwycCore_Defaults_RegistersSyncOrchestratorAsSingleton()
+    public void AddHyperwycCore_Defaults_RegistersOutboxProcessorAsSingleton()
     {
         var sp = BuildProvider(null);
 
-        var a = sp.GetRequiredService<SyncOrchestrator>();
-        var b = sp.GetRequiredService<SyncOrchestrator>();
+        var a = sp.GetRequiredService<OutboxProcessor>();
+        var b = sp.GetRequiredService<OutboxProcessor>();
 
         Assert.Same(a, b);
     }
@@ -56,13 +56,13 @@ public sealed class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddHyperwycCore_Defaults_RegistersTStoreAsISyncStore()
+    public void AddHyperwycCore_Defaults_RegistersTStoreAsIHyperwycStore()
     {
         var sp = BuildProvider(null);
 
-        var store = sp.GetRequiredService<ISyncStore>();
+        var store = sp.GetRequiredService<IHyperwycStore>();
 
-        Assert.IsType<InMemorySyncStore>(store);
+        Assert.IsType<InMemoryStore>(store);
     }
 
     [Fact]
@@ -70,8 +70,8 @@ public sealed class ServiceCollectionExtensionsTests
     {
         var sp = BuildProvider(null);
 
-        var a = sp.GetRequiredService<ISyncStore>();
-        var b = sp.GetRequiredService<ISyncStore>();
+        var a = sp.GetRequiredService<IHyperwycStore>();
+        var b = sp.GetRequiredService<IHyperwycStore>();
 
         Assert.Same(a, b);
     }
@@ -91,7 +91,7 @@ public sealed class ServiceCollectionExtensionsTests
 
 
     // -------------------------------------------------------------------------
-    // IHyperwyc is a singleton backed by the same SyncEventStream
+    // IHyperwyc is a singleton backed by the same HyperwycEventStream
     // -------------------------------------------------------------------------
 
     [Fact]
@@ -112,7 +112,7 @@ public sealed class ServiceCollectionExtensionsTests
     [Fact]
     public async Task IHyperwyc_FlushAsync_DrainsTheOutbox()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(new Envelope { Url = "https://example.com/api/x", Method = "POST" });
 
         var transport = new StubHttpMessageHandler(
@@ -135,7 +135,7 @@ public sealed class ServiceCollectionExtensionsTests
         var transport = new DisposalTrackingHandler();
 
         var services = new ServiceCollection();
-        services.AddHyperwycCore<InMemorySyncStore>(WithConnectivity(o => o.ReplayTransport = transport));
+        services.AddHyperwycCore<InMemoryStore>(WithConnectivity(o => o.ReplayTransport = transport));
         var sp = services.BuildServiceProvider();
         sp.GetRequiredService<IHyperwyc>();
 
@@ -146,13 +146,13 @@ public sealed class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void IHyperwyc_ExposesSyncEvents()
+    public void IHyperwyc_ExposesEvents()
     {
         var sp = BuildProvider(null);
 
         var hyperwyc = sp.GetRequiredService<IHyperwyc>();
 
-        Assert.NotNull(hyperwyc.SyncEvents);
+        Assert.NotNull(hyperwyc.Events);
     }
 
     // -------------------------------------------------------------------------
@@ -166,7 +166,7 @@ public sealed class ServiceCollectionExtensionsTests
         services.AddSingleton(new StoreDependency());
         services.AddHyperwycCore<StoreWithDependency>(WithConnectivity());
 
-        var store = services.BuildServiceProvider().GetRequiredService<ISyncStore>();
+        var store = services.BuildServiceProvider().GetRequiredService<IHyperwycStore>();
 
         Assert.IsType<StoreWithDependency>(store);
     }
@@ -174,11 +174,11 @@ public sealed class ServiceCollectionExtensionsTests
     [Fact]
     public void AddHyperwycCore_Factory_UsesSuppliedInstance()
     {
-        var customStore = new InMemorySyncStore();
+        var customStore = new InMemoryStore();
         var services = new ServiceCollection();
         services.AddHyperwycCore(_ => customStore, WithConnectivity());
 
-        var resolved = services.BuildServiceProvider().GetRequiredService<ISyncStore>();
+        var resolved = services.BuildServiceProvider().GetRequiredService<IHyperwycStore>();
 
         Assert.Same(customStore, resolved);
     }
@@ -192,14 +192,14 @@ public sealed class ServiceCollectionExtensionsTests
             _ =>
             {
                 invoked = true;
-                return new InMemorySyncStore();
+                return new InMemoryStore();
             },
             WithConnectivity());
 
         using var sp = services.BuildServiceProvider();
         Assert.False(invoked);
 
-        sp.GetRequiredService<ISyncStore>();
+        sp.GetRequiredService<IHyperwycStore>();
         Assert.True(invoked);
     }
 
@@ -220,7 +220,7 @@ public sealed class ServiceCollectionExtensionsTests
         var options = sp.GetRequiredService<HyperwycOptions>();
 
         Assert.Equal(TimeSpan.FromDays(1), options.Routes.Default.Ttl);
-        Assert.Equal(CacheStrategy.CacheFirst, options.Routes.Default.Strategy);
+        Assert.Equal(SourcePriority.CacheFirst, options.Routes.Default.SourcePriority);
     }
 
     [Fact]
@@ -232,10 +232,10 @@ public sealed class ServiceCollectionExtensionsTests
 
         var routes = sp.GetRequiredService<HyperwycOptions>().Routes;
 
-        Assert.Equal(CacheStrategy.NetworkOnly,
-            routes.Resolve(new Uri("https://example.com/api/payments/charge")).Strategy);
+        Assert.Equal(SourcePriority.NetworkOnly,
+            routes.PolicyFor(new Uri("https://example.com/api/payments/charge")).SourcePriority);
         Assert.Equal(TimeSpan.FromHours(1),
-            routes.Resolve(new Uri("https://example.com/api/products")).Ttl);
+            routes.PolicyFor(new Uri("https://example.com/api/products")).Ttl);
     }
 
     // -------------------------------------------------------------------------
@@ -255,7 +255,7 @@ public sealed class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddSingleton<IConnectivityService, AlwaysOnlineConnectivityService>();
 
-        services.AddHyperwycCore<InMemorySyncStore>();
+        services.AddHyperwycCore<InMemoryStore>();
 
         using var sp = services.BuildServiceProvider();
         Assert.IsType<AlwaysOnlineConnectivityService>(sp.GetRequiredService<IConnectivityService>());
@@ -265,7 +265,7 @@ public sealed class ServiceCollectionExtensionsTests
     public void ConnectivityRegisteredAfterHyperwyc_IsUsed()
     {
         var services = new ServiceCollection();
-        services.AddHyperwycCore<InMemorySyncStore>();
+        services.AddHyperwycCore<InMemoryStore>();
 
         services.AddSingleton<IConnectivityService, AlwaysOnlineConnectivityService>();
 
@@ -279,7 +279,7 @@ public sealed class ServiceCollectionExtensionsTests
         // Resolving the interface directly is not enough: the placeholder must also be out
         // of the way for everything Hyperwyc injects it into.
         var services = new ServiceCollection();
-        services.AddHyperwycCore<InMemorySyncStore>(o => o.FlushOnStartup = false);
+        services.AddHyperwycCore<InMemoryStore>(o => o.FlushOnStartup = false);
         services.AddSingleton<IConnectivityService>(new FakeConnectivityService(isConnected: true));
 
         using var sp = services.BuildServiceProvider();
@@ -294,7 +294,7 @@ public sealed class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddSingleton<IConnectivityService, AlwaysOnlineConnectivityService>();
 
-        services.AddHyperwycCore<InMemorySyncStore>(
+        services.AddHyperwycCore<InMemoryStore>(
             o => o.Connectivity = new NetworkAvailabilityConnectivityService());
 
         using var sp = services.BuildServiceProvider();
@@ -309,7 +309,7 @@ public sealed class ServiceCollectionExtensionsTests
     public void NoConnectivityAnywhere_ThrowsOnResolve()
     {
         var services = new ServiceCollection();
-        services.AddHyperwycCore<InMemorySyncStore>();
+        services.AddHyperwycCore<InMemoryStore>();
         using var sp = services.BuildServiceProvider();
 
         var ex = Assert.Throws<InvalidOperationException>(
@@ -326,7 +326,7 @@ public sealed class ServiceCollectionExtensionsTests
     {
         // The failure a consumer who ignored the docs actually meets: the first request.
         var services = new ServiceCollection();
-        services.AddHyperwycCore<InMemorySyncStore>(o => o.FlushOnStartup = false);
+        services.AddHyperwycCore<InMemoryStore>(o => o.FlushOnStartup = false);
         using var sp = services.BuildServiceProvider();
 
         Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<IHyperwyc>());
@@ -339,7 +339,7 @@ public sealed class ServiceCollectionExtensionsTests
 
         // Deliberate: throwing here would make the container route order-dependent, so the
         // check has to wait until something asks for the service.
-        services.AddHyperwycCore<InMemorySyncStore>();
+        services.AddHyperwycCore<InMemoryStore>();
     }
 
     // -------------------------------------------------------------------------
@@ -352,7 +352,7 @@ public sealed class ServiceCollectionExtensionsTests
         IServiceCollection? services = null;
 
         Assert.Throws<ArgumentNullException>(
-            () => services!.AddHyperwycCore<InMemorySyncStore>());
+            () => services!.AddHyperwycCore<InMemoryStore>());
     }
 
     [Fact]
@@ -372,7 +372,7 @@ public sealed class ServiceCollectionExtensionsTests
     private static ServiceProvider BuildProvider(Action<HyperwycOptions>? configure)
     {
         var services = new ServiceCollection();
-        services.AddHyperwycCore<InMemorySyncStore>(WithConnectivity(configure));
+        services.AddHyperwycCore<InMemoryStore>(WithConnectivity(configure));
         return services.BuildServiceProvider();
     }
 
@@ -413,9 +413,9 @@ public sealed class ServiceCollectionExtensionsTests
     /// <c>AddHyperwycCore&lt;TStore&gt;</c> resolves dependencies rather than
     /// requiring a parameterless constructor. Delegates to an in-memory store.
     /// </summary>
-    private sealed class StoreWithDependency(StoreDependency dependency) : ISyncStore
+    private sealed class StoreWithDependency(StoreDependency dependency) : IHyperwycStore
     {
-        private readonly InMemorySyncStore _inner = new();
+        private readonly InMemoryStore _inner = new();
 
         public StoreDependency Dependency { get; } = dependency;
 
@@ -428,8 +428,8 @@ public sealed class ServiceCollectionExtensionsTests
         public Task UpsertAsync(Envelope envelope, CancellationToken ct = default) =>
             _inner.UpsertAsync(envelope, ct);
 
-        public Task MarkSyncedAsync(string id, CancellationToken ct = default) =>
-            _inner.MarkSyncedAsync(id, ct);
+        public Task MarkDeliveredAsync(string id, CancellationToken ct = default) =>
+            _inner.MarkDeliveredAsync(id, ct);
 
         public Task MoveToDeadLetterAsync(string id, CancellationToken ct = default) =>
             _inner.MoveToDeadLetterAsync(id, ct);

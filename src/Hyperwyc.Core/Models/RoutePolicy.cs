@@ -18,10 +18,10 @@ namespace Hyperwyc.Models;
 public sealed record RoutePolicy
 {
     /// <summary>
-    /// How reads are served, and — for <see cref="CacheStrategy.NetworkOnly"/> — whether writes
+    /// How reads are served, and — for <see cref="SourcePriority.NetworkOnly"/> — whether writes
     /// are queued at all.
     /// </summary>
-    public CacheStrategy Strategy { get; init; } = CacheStrategy.CacheFirst;
+    public SourcePriority SourcePriority { get; init; } = SourcePriority.CacheFirst;
 
     /// <summary>
     /// How old a stored response may be and still be served. Defaults to one day.
@@ -65,11 +65,11 @@ public sealed record RoutePolicy
 
     /// <summary>Always try the network first, falling back to a stored response on failure.</summary>
     public static RoutePolicy NetworkFirst() =>
-        new() { Strategy = CacheStrategy.NetworkFirst };
+        new() { SourcePriority = SourcePriority.NetworkFirst };
 
     /// <inheritdoc cref="NetworkFirst()"/>
     public static RoutePolicy NetworkFirst(TimeSpan ttl) =>
-        new() { Strategy = CacheStrategy.NetworkFirst, Ttl = ttl };
+        new() { SourcePriority = SourcePriority.NetworkFirst, Ttl = ttl };
 
 
     /// <summary>
@@ -84,5 +84,5 @@ public sealed record RoutePolicy
     /// take custody is more honest than accepting a write it may deliver hours later.
     /// </remarks>
     public static RoutePolicy NetworkOnly() =>
-        new() { Strategy = CacheStrategy.NetworkOnly, InvalidateCacheOnWrite = false };
+        new() { SourcePriority = SourcePriority.NetworkOnly, InvalidateCacheOnWrite = false };
 }

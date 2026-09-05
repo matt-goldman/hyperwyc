@@ -8,7 +8,7 @@ namespace Hyperwyc.Models;
 /// <remarks>
 /// <para>
 /// This is the record Hyperwyc persists on the <see cref="Envelope"/>, and
-/// <see cref="SyncEvent.Outcome"/> hands out the same instance. That is deliberate: an event
+/// <see cref="HyperwycEvent.Outcome"/> hands out the same instance. That is deliberate: an event
 /// is transient and a mobile app is routinely killed between a background flush and the user
 /// next opening it, so a failure delivered only as an event is a failure nobody hears about.
 /// The durable record is the primary artefact and the event is a live view of it, rather than
@@ -20,19 +20,19 @@ namespace Hyperwyc.Models;
 /// </para>
 /// <para>
 /// <see cref="Kind"/> alone says whether Hyperwyc is finished with the envelope:
-/// <see cref="SyncOutcomeKind.Succeeded"/> and <see cref="SyncOutcomeKind.Rejected"/> are final,
+/// <see cref="DeliveryOutcomeKind.Succeeded"/> and <see cref="DeliveryOutcomeKind.Rejected"/> are final,
 /// the other two mean it stays in the outbox for the next flush.
 /// </para>
 /// </remarks>
-public sealed record SyncOutcome
+public sealed record DeliveryOutcome
 {
     /// <summary>What happened on the attempt.</summary>
-    public SyncOutcomeKind Kind { get; init; }
+    public DeliveryOutcomeKind Kind { get; init; }
 
 
     /// <summary>
     /// The HTTP status code, or <see langword="null"/> for a
-    /// <see cref="SyncOutcomeKind.TransportFailure"/> where no response arrived.
+    /// <see cref="DeliveryOutcomeKind.TransportFailure"/> where no response arrived.
     /// </summary>
     public int? StatusCode { get; init; }
 
@@ -59,7 +59,7 @@ public sealed record SyncOutcome
     public bool BodyTruncated { get; init; }
 
     /// <summary>
-    /// The transport failure message, for <see cref="SyncOutcomeKind.TransportFailure"/>.
+    /// The transport failure message, for <see cref="DeliveryOutcomeKind.TransportFailure"/>.
     /// <see langword="null"/> otherwise.
     /// </summary>
     /// <remarks>

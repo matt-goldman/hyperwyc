@@ -26,7 +26,7 @@ build if I need this to be reliable?*
 
 The short answer is usually **an application-owned store alongside Hyperwyc's**. The application
 records its own intent durably, treats Hyperwyc as the delivery mechanism, and reconciles against
-what comes back on `SyncEvents`. That is a coherent architecture, it is what a serious consumer
+what comes back on `Events`. That is a coherent architecture, it is what a serious consumer
 will end up at anyway, and nothing currently describes it.
 
 Getting that written down is also what allows Hyperwyc to keep saying no. "Not our remit" is a
@@ -62,7 +62,7 @@ An inspection app, from a real client project:
    when offline. A read Hyperwyc handles entirely.
 2. **Record a vehicle inspection.** It goes to the application's own local database *and* is
    POSTed to the API. The local store is what the UI reads; Hyperwyc is what eventually delivers.
-3. **Flag it unsynced** from the synthetic `202`, and mark it synced from the `SyncEvent` stream.
+3. **Flag it unsynced** from the synthetic `202`, and mark it synced from the `HyperwycEvent` stream.
    That is the whole integration, and it is small.
 4. **Conflicts do not arise**, because inspectors do not edit each other's reports. Where they
    genuinely do — adding notes to a shared report — the answer is an established backend pattern
@@ -76,8 +76,8 @@ should be the running example rather than an appendix.
 Not a specification — a list of what has accumulated and would belong here.
 
 - **What Hyperwyc surfaces, and how to use it.** `X-Hyperwyc-Status` and
-  `X-Hyperwyc-Correlation-Id` on synthetic responses, and the `SyncEvent` stream with its
-  `SyncOutcome` ([issue 40](Done/40-surface-deferred-outcomes.md)). Correlating a `202` back to a
+  `X-Hyperwyc-Correlation-Id` on synthetic responses, and the `HyperwycEvent` stream with its
+  `DeliveryOutcome` ([issue 40](Done/40-surface-deferred-outcomes.md)). Correlating a `202` back to a
   local record is the foundation everything else builds on.
 - **The application-owned store pattern.** Recording intent locally, driving UI from that rather
   than from Hyperwyc, and using events to reconcile. This is the core of the document.

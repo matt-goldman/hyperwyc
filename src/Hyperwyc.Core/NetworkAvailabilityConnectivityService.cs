@@ -18,7 +18,7 @@ namespace Hyperwyc;
 /// <para>
 /// That is usually good enough: Hyperwyc treats connectivity as a hint about which path to
 /// take, and a request that gets a false positive fails at the transport, which
-/// <see cref="SyncOrchestrator"/> already handles by abandoning the flush and waiting for
+/// <see cref="OutboxProcessor"/> already handles by abandoning the flush and waiting for
 /// the next signal. What it costs is latency and a wasted attempt, not correctness.
 /// </para>
 /// <para>

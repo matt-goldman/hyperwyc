@@ -6,7 +6,7 @@ using Hyperwyc.Models;
 namespace Hyperwyc.Cabinet;
 
 /// <summary>
-/// A durable <see cref="ISyncStore"/> backed by Cabinet, suitable for production
+/// A durable <see cref="IHyperwycStore"/> backed by Cabinet, suitable for production
 /// use in .NET MAUI (iOS, Android, macOS, Windows) and other .NET applications.
 /// </summary>
 /// <remarks>
@@ -14,7 +14,7 @@ namespace Hyperwyc.Cabinet;
 /// LINQ queries and AES-256-GCM encryption at rest via
 /// <see cref="AesGcmEncryptionProvider"/>.
 /// </remarks>
-public sealed class CabinetSyncStore : ISyncStore
+public sealed class CabinetStore : IHyperwycStore
 {
     private readonly RecordSet<Envelope> _records;
 
@@ -27,11 +27,11 @@ public sealed class CabinetSyncStore : ISyncStore
     //
     // Concurrency is not exotic here. HyperwycHandler is transient and runs on whatever
     // thread the caller used, so two overlapping HTTP requests reach the store at once, and
-    // an orchestrator flush runs on a background task alongside all of it.
+    // an processor flush runs on a background task alongside all of it.
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     /// <summary>
-    /// Initialises a new <see cref="CabinetSyncStore"/> with a per-path key
+    /// Initialises a new <see cref="CabinetStore"/> with a per-path key
     /// derived from <paramref name="dbDirectory"/> via SHA-256.
     /// </summary>
     /// <remarks>
@@ -43,11 +43,11 @@ public sealed class CabinetSyncStore : ISyncStore
     /// Directory path where Cabinet will write its encrypted files.
     /// Created automatically if it does not exist.
     /// </param>
-    public CabinetSyncStore(string dbDirectory)
+    public CabinetStore(string dbDirectory)
         : this(dbDirectory, DeriveKey(dbDirectory)) { }
 
     /// <summary>
-    /// Initialises a new <see cref="CabinetSyncStore"/> from
+    /// Initialises a new <see cref="CabinetStore"/> from
     /// <paramref name="options"/>. This is the constructor the DI container uses when
     /// the store is registered by type.
     /// </summary>
@@ -57,7 +57,7 @@ public sealed class CabinetSyncStore : ISyncStore
     /// constructor taking a bare <see cref="string"/> cannot be resolved from DI.
     /// </remarks>
     /// <param name="options">Store location and encryption settings.</param>
-    public CabinetSyncStore(CabinetStoreOptions options)
+    public CabinetStore(CabinetStoreOptions options)
         : this(DirectoryFrom(options), KeyFrom(options)) { }
 
     // Arguments are evaluated left to right, so the null check in DirectoryFrom runs
@@ -72,7 +72,7 @@ public sealed class CabinetSyncStore : ISyncStore
         options.EncryptionKey ?? DeriveKey(options.DirectoryPath);
 
     /// <summary>
-    /// Initialises a new <see cref="CabinetSyncStore"/> with an explicit 32-byte
+    /// Initialises a new <see cref="CabinetStore"/> with an explicit 32-byte
     /// AES-256 encryption key.
     /// </summary>
     /// <param name="dbDirectory">
@@ -83,7 +83,7 @@ public sealed class CabinetSyncStore : ISyncStore
     /// A 32-byte (256-bit) encryption key. Keep this secret — losing it
     /// means losing access to all stored data.
     /// </param>
-    public CabinetSyncStore(string dbDirectory, byte[] encryptionKey)
+    public CabinetStore(string dbDirectory, byte[] encryptionKey)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dbDirectory);
         ArgumentNullException.ThrowIfNull(encryptionKey);
@@ -97,7 +97,7 @@ public sealed class CabinetSyncStore : ISyncStore
     }
 
     // -------------------------------------------------------------------------
-    // ISyncStore
+    // IHyperwycStore
     // -------------------------------------------------------------------------
 
     /// <inheritdoc/>
@@ -153,7 +153,7 @@ public sealed class CabinetSyncStore : ISyncStore
     }
 
     /// <inheritdoc/>
-    public async Task MarkSyncedAsync(string id, CancellationToken ct = default)
+    public async Task MarkDeliveredAsync(string id, CancellationToken ct = default)
     {
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try

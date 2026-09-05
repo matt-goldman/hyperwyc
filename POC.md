@@ -125,7 +125,7 @@ which is the point the sample is making. See
       ▼
 HyperwycHandler (in the HttpClient pipeline)
       │
-      ├── Online?  ──Yes──▶ Send to API ──▶ OnSynced
+      ├── Online?  ──Yes──▶ Send to API ──▶ OnDelivered
       │
       └── Offline? ──────▶ Persist to Cabinet store ──▶ OnQueued
                                    │
@@ -138,7 +138,7 @@ HyperwycHandler (in the HttpClient pipeline)
                           ┌────────┴────────┴────────┐
                      Success        4xx            5xx
                         │            │              │
-                    OnSynced   Dead-letter   Queued for a
+                    OnDelivered   Dead-letter   Queued for a
                                     │        later attempt
                                  OnFailed         │
                                            (until the budget

@@ -26,8 +26,8 @@ public sealed class HyperwycHandler : DelegatingHandler
     /// handlers — auth above all — apply to them exactly as they do to ordinary
     /// requests. Only this handler steps aside. Inferring "this is a replay" from
     /// connectivity is not sufficient: a replay reaching the normal online path
-    /// would publish a second <c>OnSynced</c> and re-run cache invalidation, work
-    /// the orchestrator has already taken responsibility for.
+    /// would publish a second <c>OnDelivered</c> and re-run cache invalidation, work
+    /// the processor has already taken responsibility for.
     /// </remarks>
     internal static readonly HttpRequestOptionsKey<bool> ReplayMarker = new("Hyperwyc.Replay");
 
@@ -39,9 +39,9 @@ public sealed class HyperwycHandler : DelegatingHandler
         HttpMethod.Delete,
     ];
 
-    private readonly ISyncStore _store;
+    private readonly IHyperwycStore _store;
     private readonly IConnectivityService _connectivity;
-    private readonly SyncEventStream _events;
+    private readonly HyperwycEventStream _events;
     private readonly HyperwycOptions _options;
     private readonly string? _clientName;
 
@@ -60,9 +60,9 @@ public sealed class HyperwycHandler : DelegatingHandler
     /// <c>AddHyperwycHandler()</c> to have this captured automatically.
     /// </param>
     public HyperwycHandler(
-        ISyncStore store,
+        IHyperwycStore store,
         IConnectivityService connectivity,
-        SyncEventStream events,
+        HyperwycEventStream events,
         HyperwycOptions options,
         string? clientName = null)
     {
@@ -111,7 +111,7 @@ public sealed class HyperwycHandler : DelegatingHandler
         // request goes to the transport and fails as it would without Hyperwyc installed,
         // which is the truth — accepting it with a 202 would be a promise we were told not to
         // make.
-        if (Policy(request).Strategy == CacheStrategy.NetworkOnly)
+        if (Policy(request).SourcePriority == SourcePriority.NetworkOnly)
             return await base.SendAsync(request, ct).ConfigureAwait(false);
 
         // Buffer content before the synchronous read inside Envelope.ForRequest.
@@ -121,8 +121,8 @@ public sealed class HyperwycHandler : DelegatingHandler
         var envelope = Envelope.ForRequest(request, _clientName);
         await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
 
-        _events.Publish(new SyncEvent(
-            SyncEventType.OnQueued,
+        _events.Publish(new HyperwycEvent(
+            HyperwycEventType.OnQueued,
             request.RequestUri?.ToString() ?? string.Empty,
             request.Method.Method,
             DateTimeOffset.UtcNow,
@@ -140,7 +140,7 @@ public sealed class HyperwycHandler : DelegatingHandler
         var policy = Policy(request);
 
         // NetworkOnly opts out of the store entirely, so there is nothing to serve.
-        if (policy.Strategy == CacheStrategy.NetworkOnly)
+        if (policy.SourcePriority == SourcePriority.NetworkOnly)
             return HyperwycResponseFactory.Offline();
 
         var url = request.RequestUri?.ToString() ?? string.Empty;
@@ -181,8 +181,8 @@ public sealed class HyperwycHandler : DelegatingHandler
                 await _store.InvalidateCacheForPrefixAsync(prefix, ct).ConfigureAwait(false);
             }
 
-            _events.Publish(new SyncEvent(
-                SyncEventType.OnSynced, url, request.Method.Method, DateTimeOffset.UtcNow));
+            _events.Publish(new HyperwycEvent(
+                HyperwycEventType.OnDelivered, url, request.Method.Method, DateTimeOffset.UtcNow));
         }
 
         return response;
@@ -193,17 +193,17 @@ public sealed class HyperwycHandler : DelegatingHandler
         CancellationToken ct)
     {
         var policy = Policy(request);
-        var strategy = policy.Strategy;
+        var strategy = policy.SourcePriority;
         var url = request.RequestUri?.ToString() ?? string.Empty;
 
         // NetworkOnly neither reads nor writes the cache.
-        if (strategy == CacheStrategy.NetworkOnly)
+        if (strategy == SourcePriority.NetworkOnly)
             return await base.SendAsync(request, ct).ConfigureAwait(false);
 
 
         // CacheFirst serves a fresh cached response without touching the network.
         // NetworkFirst always goes to the network, and consults the cache only on failure.
-        if (strategy == CacheStrategy.CacheFirst)
+        if (strategy == SourcePriority.CacheFirst)
         {
             var cached = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
             if (cached is not null && !IsStale(cached, policy.Ttl))
@@ -215,7 +215,7 @@ public sealed class HyperwycHandler : DelegatingHandler
         {
             response = await base.SendAsync(request, ct).ConfigureAwait(false);
         }
-        catch (HttpRequestException) when (strategy == CacheStrategy.NetworkFirst)
+        catch (HttpRequestException) when (strategy == SourcePriority.NetworkFirst)
         {
             // Reachable when IConnectivityService reports online but the API is not
             // actually reachable — a captive portal, DNS failure or transient outage.
@@ -256,8 +256,8 @@ public sealed class HyperwycHandler : DelegatingHandler
         var envelope = Envelope.ForCachedResponse(request, response, _clientName);
         await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
 
-        _events.Publish(new SyncEvent(
-            SyncEventType.OnUpdated, url, request.Method.Method, DateTimeOffset.UtcNow));
+        _events.Publish(new HyperwycEvent(
+            HyperwycEventType.OnUpdated, url, request.Method.Method, DateTimeOffset.UtcNow));
     }
 
     // -------------------------------------------------------------------------
@@ -287,7 +287,7 @@ public sealed class HyperwycHandler : DelegatingHandler
 
     /// <summary>The policy for this request, resolved from the route map.</summary>
     private RoutePolicy Policy(HttpRequestMessage request) =>
-        _options.Routes.Resolve(request.RequestUri);
+        _options.Routes.PolicyFor(request.RequestUri);
 
     /// <summary>Whether a cached response has outlived its route's TTL.</summary>
     /// <remarks>

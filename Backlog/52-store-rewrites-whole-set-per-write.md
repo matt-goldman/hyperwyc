@@ -2,7 +2,7 @@
 
 ## Summary
 
-`CabinetSyncStore` persists through Cabinet's `RecordSet<Envelope>`, and every single-record
+`CabinetStore` persists through Cabinet's `RecordSet<Envelope>`, and every single-record
 change calls `SaveAllAsync` — serialising, encrypting and rewriting the whole record set. One
 cached response therefore costs O(total records) to store, and filling a cache costs O(n²).
 

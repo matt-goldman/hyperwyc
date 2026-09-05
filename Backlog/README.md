@@ -31,10 +31,10 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | # | Item | Status | Notes |
 |---|---|---|---|
 | 01 | [Repository & solution setup](Done/01-repo-and-solution-setup.md) | ✅ Done | `hyperwyc.slnx`, two src projects, two test projects |
-| 02 | [Core interfaces](Done/02-core-interfaces.md) | ✅ Done | `ISyncStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`, `IHyperwyc` |
+| 02 | [Core interfaces](Done/02-core-interfaces.md) | ✅ Done | `IHyperwycStore`, `IConnectivityService`, `ISyncPolicy`, `IStalenessEvaluator`, `IHyperwyc` |
 | 03 | [Envelope model](Done/03-envelope-model.md) | ✅ Done | `Envelope` + `CachedResponse` |
-| 04 | [`InMemorySyncStore`](Done/04-in-memory-sync-store.md) | ✅ Done | |
-| 05 | [`SyncEventStream`](Done/05-sync-event-stream.md) | ✅ Done | Hand-rolled `IObservable<SyncEvent>`; no `System.Reactive` dependency |
+| 04 | [`InMemoryStore`](Done/04-in-memory-sync-store.md) | ✅ Done | |
+| 05 | [`HyperwycEventStream`](Done/05-sync-event-stream.md) | ✅ Done | Hand-rolled `IObservable<HyperwycEvent>`; no `System.Reactive` dependency |
 | 06 | [Handler — online path](Done/06-hyperwyc-handler-online-path.md) | ✅ Done | |
 | 07 | [Handler — offline path](Done/07-hyperwyc-handler-offline-path.md) | ✅ Done | |
 | 08 | [Idempotency-Key injection](Done/08-idempotency-key-injection.md) | ⛔ Superseded | Removed by [39](Done/39-reconsider-idempotency.md) |
@@ -42,25 +42,25 @@ disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by 
 | 10 | [Write-triggered cache invalidation](Done/10-write-triggered-cache-invalidation.md) | ✅ Done | URL-prefix derivation strips trailing id/GUID segments |
 | 11 | [Sync flush orchestrator](Done/11-sync-flush-orchestrator.md) | ✅ Done | Debounce + single-flush semaphore |
 | 12 | [Polly retry and dead-letter](Done/12-polly-retry-dead-letter.md) | ✅ Done | Retries are in-process within one flush — see item 28 |
-| 14 | [`CabinetSyncStore`](Done/14-cabinet-sync-store.md) | ✅ Done | Cabinet 1.0.7, AES-256-GCM at rest |
+| 14 | [`CabinetStore`](Done/14-cabinet-sync-store.md) | ✅ Done | Cabinet 1.0.7, AES-256-GCM at rest |
 | 15 | [`AddHyperwyc()` DI extension](Done/15-di-extension-and-options.md) | ✅ Done | |
 | 17 | [Max cached body size](Done/17-max-cached-body-size.md) | ✅ Done | Enforced in `HandleOnlineReadAsync`; covered by `ResponseCacheReadTests` |
 | 38 | [Retry model: connectivity-driven](Done/38-retry-classification.md) | ✅ Done | One attempt per flush; `4xx` dead-letters at once, `5xx` defers with persisted `RetryCount`/`NextRetryUtc`, a transport failure ends the flush. Made the three orphaned store members live and dropped the `Polly` dependency |
 | 34 | [Flush trigger model](Done/34-app-lifecycle-integration.md) | ✅ Done | Documented as a deliberate absence: no lifecycle wiring, and an explicit warning against adding any |
 | 35 | [Injectable replay transport](Done/35-orchestrator-transport-not-injectable.md) | ✅ Done | `HyperwycOptions.ReplayTransport`. Never disposed by Hyperwyc; also unblocks 30's auth question |
 | 37 | [Replays go through the pipeline](Done/37-replay-through-pipeline.md) | ✅ Done | `HyperwycHandler` steps aside for replays instead of them bypassing the pipeline. Fixes offline writes against authenticated APIs; registration is now `AddHyperwycHandler()` |
-| 36 | [Public surface and organisation](Done/36-public-surface.md) | ✅ Done | `IHyperwyc.FlushAsync()` added, `SyncOrchestrator` internal, config enums moved to the root namespace. No `Services/` folder — folders are namespaces here |
+| 36 | [Public surface and organisation](Done/36-public-surface.md) | ✅ Done | `IHyperwyc.FlushAsync()` added, `OutboxProcessor` internal, config enums moved to the root namespace. No `Services/` folder — folders are namespaces here |
 | 33 | [Orchestrator disposal](Done/33-orchestrator-sync-disposal.md) | ✅ Done | Both paths now cancel a lifetime token every flush links to. Neither waits for queued work to send; `DisposeAsync` waits only for the in-flight flush to unwind |
-| 27 | [`CacheStrategy` never applied](Done/27-cache-strategy-not-applied.md) | ✅ Done | All four presets now honoured on both read paths. Added `X-Hyperwyc-Status: CacheMiss` for a `CacheOnly` read with an empty cache |
+| 27 | [`SourcePriority` never applied](Done/27-cache-strategy-not-applied.md) | ✅ Done | All four presets now honoured on both read paths. Added `X-Hyperwyc-Status: CacheMiss` for a `CacheOnly` read with an empty cache |
 | 29 | [Policy TTL not reaching the evaluator](Done/29-default-ttl-propagation.md) | ✅ Done | Also fixed a second defect found alongside it: the default policy's TTL silently overwrote an explicitly set `DefaultCacheTtl` |
 | 31 | [Package structure](Done/31-package-structure.md) | ✅ Done | `Hyperwyc` (batteries, Cabinet default) over `Hyperwyc.Core`. Store is a type parameter on `AddHyperwycCore<TStore>()`; `HyperwycOptions.Store` removed |
 | 39 | [Idempotency is not Hyperwyc's remit](Done/39-reconsider-idempotency.md) | ✅ Done | Header injection removed; Hyperwyc sends the request the app made and adds nothing. Supersedes 08. Duplicate delivery is a property of retrying in general, resolved between an application and its API |
 | 18 | [Sample — product/sales API](Done/18-poc-web-api.md) | ✅ Done | Random catalogue, stock-decrementing sales, `Idempotency-Key` dedup and 400/404/409 failure paths, all verified against a running server |
-| 40 | [Surface the outcome of a deferred request](Done/40-surface-deferred-outcomes.md) | ✅ Done | `SyncEvent` gains `CorrelationId`/`RequestId`/`RequestBody`/`Outcome`; `SyncOutcome` is persisted on the envelope so a dead-lettered write explains itself after a restart. Correlation id is the caller's if they set one via `HyperwycRequestOptions.CorrelationId`, otherwise generated and returned on the `202`. Unblocks 19's per-sale status |
+| 40 | [Surface the outcome of a deferred request](Done/40-surface-deferred-outcomes.md) | ✅ Done | `HyperwycEvent` gains `CorrelationId`/`RequestId`/`RequestBody`/`Outcome`; `DeliveryOutcome` is persisted on the envelope so a dead-lettered write explains itself after a restart. Correlation id is the caller's if they set one via `HyperwycRequestOptions.CorrelationId`, otherwise generated and returned on the `202`. Unblocks 19's per-sale status |
 | 47 | [Connectivity is required](Done/47-connectivity-is-required.md) | ✅ Done | Ships `NetworkAvailabilityConnectivityService` (BCL-only) **and** removes the `AlwaysOnline` default: a consumer registers an `IConnectivityService` (either side of `AddHyperwyc`) or sets the option, and resolving throws if they do neither. The default failed silently — always-connected means nothing is ever queued or replayed, and the library looks like it works. Narrows 31's zero-config headline, deliberately |
 | 13 | [Connectivity documentation](Done/13-connectivity-reference-implementation.md) | ✅ Done | **Scope revised three times, each removing something from the package**: ship a MAUI type → ship a test double → documentation only → documentation with no default ([47](Done/47-connectivity-is-required.md)). README now carries the full `MauiConnectivityService`, the five decisions in it, and how to fake connectivity in your own tests. The sample source carries the same reasoning as comments, since that is what gets copied |
-| 51 | [`CabinetSyncStore` was not thread-safe](Done/51-cabinet-store-not-thread-safe.md) | ✅ Done | Crash from the sample: two overlapping saves raced Cabinet's write-temp-then-move and the second `File.Move` threw `FileNotFoundException`. Never synchronised since the file was created; every mutating method was also an unguarded read-modify-write. **Fix confirmed, trigger not explained** — the failure went from never to always without a diff that accounts for it; the leading unproven hypothesis is the resilience handler's per-attempt timeout overlapping a retry with an in-flight cache write |
-| 16 | [`ResetStoreAsync()`](Done/16-reset-store-async.md) | ✅ Done | Moved onto `SyncOrchestrator`, which owns the flush gate. Acquires it **blocking** — `FlushAsync`'s try-acquire returns immediately when a flush is running, so the first cut wiped the store underneath one and a deferred envelope was upserted back in afterwards. Reset discards and does not flush: on logout a flush replays through the auth handler the app is revoking, so every write 401s and dead-letters before being wiped anyway |
+| 51 | [`CabinetStore` was not thread-safe](Done/51-cabinet-store-not-thread-safe.md) | ✅ Done | Crash from the sample: two overlapping saves raced Cabinet's write-temp-then-move and the second `File.Move` threw `FileNotFoundException`. Never synchronised since the file was created; every mutating method was also an unguarded read-modify-write. **Fix confirmed, trigger not explained** — the failure went from never to always without a diff that accounts for it; the leading unproven hypothesis is the resilience handler's per-attempt timeout overlapping a retry with an in-flight cache write |
+| 16 | [`ResetStoreAsync()`](Done/16-reset-store-async.md) | ✅ Done | Moved onto `OutboxProcessor`, which owns the flush gate. Acquires it **blocking** — `FlushAsync`'s try-acquire returns immediately when a flush is running, so the first cut wiped the store underneath one and a deferred envelope was upserted back in afterwards. Reset discards and does not flush: on logout a flush replays through the auth handler the app is revoking, so every write 401s and dead-letters before being wiped anyway |
 | **19** | [Sample — .NET MAUI app](Done/19-poc-maui-app.md) | ✅ Done | **Core scenario proven on device:** catalogue served from cache with the network off, across an app restart. |
 
 ## v1.0 — release candidate
@@ -81,7 +81,8 @@ a consumer; these could not.
 | 32 | [Default encryption key](32-default-encryption-key.md) | 🟡 Partial | Decided: keep the path-derived key as the free default, documented as such. Remaining is the MAUI `SecureStorage` reference implementation |
 | 48 | [Exclude the store from OS backup](48-exclude-store-from-os-backup.md) | ⬜ Open | Documentation. The store sits where iOS and Android back it up by default; a **restored outbox replays writes that already happened**, and Hyperwyc has no duplicate suppression by design. Android's 25 MB backup quota is the secondary argument. Path-level exclusion works on both platforms |
 | 52 | [Every cache write rewrites the whole store](52-store-rewrites-whole-set-per-write.md) | ⬜ Open | Cabinet's `RecordSet` calls `SaveAllAsync` for a single-record change, so one cached response costs O(total records) to store and filling a cache costs O(n²). Widens every concurrency window as the store grows, which is the leading explanation for [51](Done/51-cabinet-store-not-thread-safe.md)'s never-to-always failure rate. Partly an upstream Cabinet question |
-| 53 | [Not AOT-safe: no `JsonSerializerContext`](53-aot-json-serialization.md) | ⬜ Open | `CabinetSyncStore` passes `null` where Cabinet accepts `JsonSerializerOptions`, so serialisation falls back to reflection — in a library whose primary audience ships iOS release builds with AOT on by default. Structurally unfixable by the consumer. **Proposed for v1.0** |
+| 53 | [Not AOT-safe: no `JsonSerializerContext`](53-aot-json-serialization.md) | ⬜ Open | `CabinetStore` passes `null` where Cabinet accepts `JsonSerializerOptions`, so serialisation falls back to reflection — in a library whose primary audience ships iOS release builds with AOT on by default. Structurally unfixable by the consumer. **Proposed for v1.0** |
+| 55 | [`Envelope.IsSynced` distinguishes two kinds by negation](55-envelope-kind-discriminator.md) | ⬜ Open | `Envelope` is a cached response *and* a queued write, told apart by a flag set `true` on responses that were never synced anywhere. The vocabulary pass could not rename it — `IsDelivered` would be actively false — which is the tell that the model, not the name, is wrong. Sequence after [49](49-unreadable-store-recovery.md) |
 | 21 | [`Date` header rewriting](21-v1-date-header-rewriting.md) | ⬜ Open | Plus the `X-Hyperwyc-Cached-At` header, which may dissolve [54](Done/54-ttl-as-a-validity-bound.md) |
 | 54 | [TTL is a validity bound](Done/54-ttl-as-a-validity-bound.md) | ⛔ Closed | Filed and dissolved the same day. Rather than adding a way to express "must not be served stale", the refetch-trigger reading was removed: TTL now means how old a response may be and still be served, online and offline alike. Default raised from 5 minutes to 1 day to suit. "Fetch fresh when possible" was always `NetworkFirst` |
 | 23 | [Diagnostics view](23-v1-diagnostics-view.md) | ⬜ Open | Read-only outbox and dead-letter queries on `IHyperwyc`. [40](Done/40-surface-deferred-outcomes.md) persisted the failure detail; this is the read path that makes it observable — and the only place a transport failure, which publishes no event, can be seen |
@@ -138,9 +139,9 @@ request grouping / bulk sync, and GraphQL support.
   [49](49-unreadable-store-recovery.md) makes that self-healing. Revisit the whole line the day
   the first package ships.
 - **The ADR 0004 audit (2026-08-25) removed all retry apparatus, `IStalenessEvaluator`,
-  `OfflineResponsePolicy` and `SyncOutcome.Headers`.** No backlog item: the decision is in
+  `OfflineResponsePolicy` and `DeliveryOutcome.Headers`.** No backlog item: the decision is in
   [ADR 0004](../docs/decisions/0004-default-to-removal.md), the detail is in TECHNICAL_PLAN, and
-  the rest is git history. Items 12 and 28 are superseded by it. `SyncOrchestrator` went from 751
+  the rest is git history. Items 12 and 28 are superseded by it. `OutboxProcessor` went from 751
   lines to 577, `HyperwycOptions` from eleven knobs to seven, and four public types plus two
   public interface members are gone.
 - **Numbering is sequential and permanent.** Items keep their number when they move to
@@ -175,8 +176,8 @@ request grouping / bulk sync, and GraphQL support.
   a problem to solve — log it, raise an event, carry on. The scope correction shrank the item and
   dissolved a dependency on an upstream Cabinet change.
 - **Item 51 is what happens when two implementations of one interface are held to different
-  standards.** `InMemorySyncStore` serialised everything; `CabinetSyncStore` serialised nothing;
-  `ISyncStore` said neither was required. Every store test ran against the safe one and passed,
+  standards.** `InMemoryStore` serialised everything; `CabinetStore` serialised nothing;
+  `IHyperwycStore` said neither was required. Every store test ran against the safe one and passed,
   and the durable one — the one consumers actually use — corrupted its own file under two
   concurrent requests. A shared conformance suite over both implementations is the structural
   fix and is not yet filed.
@@ -203,6 +204,14 @@ request grouping / bulk sync, and GraphQL support.
   documentation only → documentation with connectivity required and no default. Each pass
   removed something from the package. Worth remembering when the next "we should ship a helper
   for this" arrives.
+- **The vocabulary pass (2026-09-05) renamed `sync` out and kept `cache`.** "Sync" named the
+  bidirectional-with-conflict-resolution category the README spends paragraphs distancing us
+  from; the write path is an outbox and a delivery, and that vocabulary was already in the code.
+  "Cache" stayed because every use of it was genuine caching — the problem was that it was the
+  *only* word, so it got stretched over the write path. `CacheStrategy` became `SourcePriority`,
+  which names the relationship between sources rather than either side of it. **Items in `Done/`
+  keep the old vocabulary**: they record what was decided when, and rewriting them would falsify
+  the record.
 - **`CacheOnly` shipped unusable and was removed on 2026-09-05.** It returned early before the
   caching step, so a route configured with it could never populate its own cache and missed on
   every call forever. Workbox's version works because precaching fills the store at install

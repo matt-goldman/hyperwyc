@@ -2,7 +2,7 @@
 
 ## Summary
 
-`CabinetSyncStore` constructs its store as `new FileOfflineStore(dbDirectory, crypto, null)`,
+`CabinetStore` constructs its store as `new FileOfflineStore(dbDirectory, crypto, null)`,
 which resolves to the overload taking an `IIndexProvider?`. Cabinet therefore falls back to its
 own default `new JsonSerializerOptions { WriteIndented = false }` — reflection-based
 serialisation. Any consumer publishing with AOT or trimming inherits that, from a library whose
@@ -37,16 +37,16 @@ From the stack in issue 51, the persisted shape is `List<Envelope>` — Cabinet 
 record set as one document. The context therefore has to cover the full graph:
 
 - `List<Envelope>`, `Envelope`
-- `CachedResponse`, `SyncOutcome`, `SyncOutcomeKind`
+- `CachedResponse`, `DeliveryOutcome`, `DeliveryOutcomeKind`
 - `Dictionary<string, string>` (request and response headers)
-- `byte[]` (`SyncOutcome.Body`), `DateTimeOffset?`, and the enums
+- `byte[]` (`DeliveryOutcome.Body`), `DateTimeOffset?`, and the enums
 
 Per Cabinet's README, the `JsonSerializerContext` must be **hand-written by the consumer** —
 Cabinet's own source generator deliberately does not emit one, because two source generators
 cannot reliably coordinate in a single compilation pass. So this is Hyperwyc's to write, not
 something a package reference gives us.
 
-It belongs in the `Hyperwyc` package, alongside `CabinetSyncStore`, referencing the model types
+It belongs in the `Hyperwyc` package, alongside `CabinetStore`, referencing the model types
 from `Hyperwyc.Core`. An `internal` context is sufficient and preferable — it keeps the public
 surface unchanged, and referencing public types from an internal context is legal.
 
@@ -58,7 +58,7 @@ Through [the scope test](../docs/decisions/README.md#the-standing-scope-test):
 |---|---|
 | Would the problem exist without Hyperwyc? | **No.** It is our store, our model types, and our call into Cabinet |
 | Does it require anything of the consumer's API? | No |
-| Can the application already do it? | **No.** `CabinetSyncStore` builds the `FileOfflineStore` internally; a consumer has no way to supply options for types they do not own |
+| Can the application already do it? | **No.** `CabinetStore` builds the `FileOfflineStore` internally; a consumer has no way to supply options for types they do not own |
 | Does it depend on something only Hyperwyc knows? | **Yes** — the persisted shape is `Envelope`, which is ours |
 
 This is the same shape as [issue 40](Done/40-surface-deferred-outcomes.md): structurally
@@ -67,7 +67,7 @@ impossible for the consumer to fix from outside.
 ## Acceptance Criteria
 
 - [ ] An internal `JsonSerializerContext` in `Hyperwyc` covering the full `List<Envelope>` graph.
-- [ ] `CabinetSyncStore` passes `new JsonSerializerOptions { TypeInfoResolver = <context>.Default }`
+- [ ] `CabinetStore` passes `new JsonSerializerOptions { TypeInfoResolver = <context>.Default }`
       through the four-argument `FileOfflineStore` constructor.
 - [ ] `IsAotCompatible` (or at minimum `IsTrimmable` + `EnableTrimAnalyzer`) set on both src
       projects, so the compiler tells us next time rather than a consumer's release build.

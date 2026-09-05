@@ -29,7 +29,7 @@ public class DeferredOutcomeTests
     [Fact]
     public async Task CallerSuppliedCorrelationId_IsUsedAsTheCorrelationId()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using var sp = BuildOfflineClient(store, out var factory);
 
         using var request = PostTo(Url, correlationId: "sale-42");
@@ -46,7 +46,7 @@ public class DeferredOutcomeTests
     [Fact]
     public async Task NoCorrelationId_OneIsGenerated()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using var sp = BuildOfflineClient(store, out var factory);
 
         await factory.CreateClient("TestApi").PostAsync(Url, new StringContent("{}"));
@@ -61,7 +61,7 @@ public class DeferredOutcomeTests
     [InlineData(null)]
     public async Task QueuedResponse_ReturnsTheCorrelationId(string? supplied)
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using var sp = BuildOfflineClient(store, out var factory);
 
         using var request = PostTo(Url, supplied);
@@ -79,14 +79,14 @@ public class DeferredOutcomeTests
     [Fact]
     public async Task QueuedEvent_CarriesCorrelationRequestIdAndBody()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using var sp = BuildOfflineClient(store, out var factory);
         var events = Collect(sp);
 
         using var request = PostTo(Url, "sale-42", body: """{"quantity":60}""");
         await factory.CreateClient("TestApi").SendAsync(request);
 
-        var queued = Assert.Single(events, e => e.Type == SyncEventType.OnQueued);
+        var queued = Assert.Single(events, e => e.Type == HyperwycEventType.OnQueued);
         Assert.Equal("sale-42", queued.CorrelationId);
         Assert.Equal("""{"quantity":60}""", queued.GetRequestBodyAsText());
         Assert.NotNull(queued.RequestId);
@@ -98,12 +98,12 @@ public class DeferredOutcomeTests
     {
         // The sharpest gap in the issue: URL and method alone cannot tell three queued sales
         // apart, so a per-sale "failed" badge is unimplementable without this.
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         foreach (var id in new[] { "sale-1", "sale-2", "sale-3" })
             await store.UpsertAsync(Outbox(correlationId: id, body: id));
 
-        var events = new List<SyncEvent>();
-        var stream = new SyncEventStream();
+        var events = new List<HyperwycEvent>();
+        var stream = new HyperwycEventStream();
         using var subscription = stream.Subscribe(new Collector(events));
 
         // Only sale-2 is rejected; the others succeed.
@@ -119,9 +119,9 @@ public class DeferredOutcomeTests
         await using var orchestrator = Orchestrator(store, transport, stream);
         await orchestrator.FlushAsync();
 
-        var failed = Assert.Single(events, e => e.Type == SyncEventType.OnFailed);
+        var failed = Assert.Single(events, e => e.Type == HyperwycEventType.OnFailed);
         Assert.Equal("sale-2", failed.CorrelationId);
-        Assert.Equal(2, events.Count(e => e.Type == SyncEventType.OnSynced));
+        Assert.Equal(2, events.Count(e => e.Type == HyperwycEventType.OnDelivered));
     }
 
     // -------------------------------------------------------------------------
@@ -133,11 +133,11 @@ public class DeferredOutcomeTests
     {
         const string ServerSaid = """{"error":"Only 20 left in stock.","available":20}""";
 
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox("sale-42"));
 
-        var events = new List<SyncEvent>();
-        var stream = new SyncEventStream();
+        var events = new List<HyperwycEvent>();
+        var stream = new HyperwycEventStream();
         using var subscription = stream.Subscribe(new Collector(events));
 
         var transport = new StubHttpMessageHandler(_ =>
@@ -150,10 +150,10 @@ public class DeferredOutcomeTests
         await using var orchestrator = Orchestrator(store, transport, stream);
         await orchestrator.FlushAsync();
 
-        var failed = Assert.Single(events, e => e.Type == SyncEventType.OnFailed);
-        var outcome = Assert.IsType<SyncOutcome>(failed.Outcome);
+        var failed = Assert.Single(events, e => e.Type == HyperwycEventType.OnFailed);
+        var outcome = Assert.IsType<DeliveryOutcome>(failed.Outcome);
 
-        Assert.Equal(SyncOutcomeKind.Rejected, outcome.Kind);
+        Assert.Equal(DeliveryOutcomeKind.Rejected, outcome.Kind);
         Assert.Equal(409, outcome.StatusCode);
         Assert.Equal("Conflict", outcome.ReasonPhrase);
         Assert.Equal(ServerSaid, outcome.GetBodyAsText());
@@ -161,15 +161,15 @@ public class DeferredOutcomeTests
     }
 
     [Fact]
-    public async Task Synced_CarriesTheServerResponse()
+    public async Task Delivered_CarriesTheServerResponse()
     {
         const string Created = """{"id":"srv-77","recordedAt":"2026-08-14T09:12:33Z"}""";
 
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox("sale-42"));
 
-        var events = new List<SyncEvent>();
-        var stream = new SyncEventStream();
+        var events = new List<HyperwycEvent>();
+        var stream = new HyperwycEventStream();
         using var subscription = stream.Subscribe(new Collector(events));
 
         var transport = new StubHttpMessageHandler(_ =>
@@ -183,9 +183,9 @@ public class DeferredOutcomeTests
 
         // The caller never saw this response, so without it they cannot reconcile their local
         // record against what the server actually stored.
-        var synced = Assert.Single(events, e => e.Type == SyncEventType.OnSynced);
-        var outcome = Assert.IsType<SyncOutcome>(synced.Outcome);
-        Assert.Equal(SyncOutcomeKind.Succeeded, outcome.Kind);
+        var synced = Assert.Single(events, e => e.Type == HyperwycEventType.OnDelivered);
+        var outcome = Assert.IsType<DeliveryOutcome>(synced.Outcome);
+        Assert.Equal(DeliveryOutcomeKind.Succeeded, outcome.Kind);
         Assert.Equal(201, outcome.StatusCode);
         Assert.Equal(Created, outcome.GetBodyAsText());
     }
@@ -193,22 +193,22 @@ public class DeferredOutcomeTests
     [Fact]
     public async Task TransportFailure_IsDistinguishableFromAnHttpError()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox("sale-42"));
 
         var transport = new StubHttpMessageHandler(
             (Func<HttpRequestMessage, HttpResponseMessage>)(
                 _ => throw new HttpRequestException("No such host is known.")));
 
-        await using var orchestrator = Orchestrator(store, transport, new SyncEventStream());
+        await using var orchestrator = Orchestrator(store, transport, new HyperwycEventStream());
         await orchestrator.FlushAsync();
 
         // No event: the flush abandons and the envelope keeps its place. The record is what
         // explains an outbox that will not drain.
         var pending = Assert.Single(await store.GetPendingOutboxAsync());
-        var outcome = Assert.IsType<SyncOutcome>(pending.LastOutcome);
+        var outcome = Assert.IsType<DeliveryOutcome>(pending.LastOutcome);
 
-        Assert.Equal(SyncOutcomeKind.TransportFailure, outcome.Kind);
+        Assert.Equal(DeliveryOutcomeKind.TransportFailure, outcome.Kind);
         Assert.Null(outcome.StatusCode);
         Assert.Contains("No such host", outcome.Error);
     }
@@ -219,12 +219,12 @@ public class DeferredOutcomeTests
         // There is no retry budget to exhaust (ADR 0004), so the distinction a consumer needs
         // is between "the server refused this" and "the server was unwell" — the first is
         // final, the second leaves the write queued for the next flush.
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox("refused", body: "refused"));
         await store.UpsertAsync(Outbox("unwell", body: "unwell"));
 
-        var events = new List<SyncEvent>();
-        var stream = new SyncEventStream();
+        var events = new List<HyperwycEvent>();
+        var stream = new HyperwycEventStream();
         using var subscription = stream.Subscribe(new Collector(events));
 
         var transport = new StubHttpMessageHandler(async request =>
@@ -238,14 +238,14 @@ public class DeferredOutcomeTests
         await using var orchestrator = Orchestrator(store, transport, stream);
         await orchestrator.FlushAsync();
 
-        var failed = Assert.Single(events, e => e.Type == SyncEventType.OnFailed);
+        var failed = Assert.Single(events, e => e.Type == HyperwycEventType.OnFailed);
         Assert.Equal("refused", failed.CorrelationId);
-        Assert.Equal(SyncOutcomeKind.Rejected, failed.Outcome?.Kind);
+        Assert.Equal(DeliveryOutcomeKind.Rejected, failed.Outcome?.Kind);
 
         // The unwell one is still queued, and says why.
         var pending = Assert.Single(await store.GetPendingOutboxAsync());
         Assert.Equal("unwell", pending.CorrelationId);
-        Assert.Equal(SyncOutcomeKind.TransientFailure, pending.LastOutcome?.Kind);
+        Assert.Equal(DeliveryOutcomeKind.TransientFailure, pending.LastOutcome?.Kind);
     }
 
 
@@ -256,11 +256,11 @@ public class DeferredOutcomeTests
     [Fact]
     public async Task OversizedBody_IsClippedAndFlagged()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox("sale-42"));
 
-        var events = new List<SyncEvent>();
-        var stream = new SyncEventStream();
+        var events = new List<HyperwycEvent>();
+        var stream = new HyperwycEventStream();
         using var subscription = stream.Subscribe(new Collector(events));
 
         var transport = new StubHttpMessageHandler(_ =>
@@ -276,8 +276,8 @@ public class DeferredOutcomeTests
             });
         await orchestrator.FlushAsync();
 
-        var outcome = Assert.IsType<SyncOutcome>(
-            Assert.Single(events, e => e.Type == SyncEventType.OnFailed).Outcome);
+        var outcome = Assert.IsType<DeliveryOutcome>(
+            Assert.Single(events, e => e.Type == HyperwycEventType.OnFailed).Outcome);
 
         // Clipped rather than dropped: half an error message is still actionable.
         Assert.True(outcome.BodyTruncated);
@@ -287,11 +287,11 @@ public class DeferredOutcomeTests
     [Fact]
     public async Task ZeroCap_CapturesNoBodyButStillReportsTheStatus()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(Outbox("sale-42"));
 
-        var events = new List<SyncEvent>();
-        var stream = new SyncEventStream();
+        var events = new List<HyperwycEvent>();
+        var stream = new HyperwycEventStream();
         using var subscription = stream.Subscribe(new Collector(events));
 
         var transport = new StubHttpMessageHandler(_ =>
@@ -307,8 +307,8 @@ public class DeferredOutcomeTests
             });
         await orchestrator.FlushAsync();
 
-        var outcome = Assert.IsType<SyncOutcome>(
-            Assert.Single(events, e => e.Type == SyncEventType.OnFailed).Outcome);
+        var outcome = Assert.IsType<DeliveryOutcome>(
+            Assert.Single(events, e => e.Type == HyperwycEventType.OnFailed).Outcome);
 
         Assert.Null(outcome.Body);
         Assert.False(outcome.BodyTruncated);
@@ -322,7 +322,7 @@ public class DeferredOutcomeTests
     [Fact]
     public async Task DeadLetteredEnvelope_CarriesItsOutcomeThroughSerialisation()
     {
-        var captured = new OutcomeCapturingStore(new InMemorySyncStore());
+        var captured = new OutcomeCapturingStore(new InMemoryStore());
         await captured.UpsertAsync(Outbox("sale-42"));
 
         var transport = new StubHttpMessageHandler(_ =>
@@ -331,16 +331,16 @@ public class DeferredOutcomeTests
                 Content = new StringContent("""{"error":"Only 20 left in stock."}"""),
             });
 
-        await using var orchestrator = Orchestrator(captured, transport, new SyncEventStream());
+        await using var orchestrator = Orchestrator(captured, transport, new HyperwycEventStream());
         await orchestrator.FlushAsync();
 
         // Round-tripped through JSON as a durable store would, which is the real test of the
         // decision to keep exceptions out of the record: an Exception would not survive this.
         var restored = captured.LastSnapshotAsRestored();
-        var outcome = Assert.IsType<SyncOutcome>(restored.LastOutcome);
+        var outcome = Assert.IsType<DeliveryOutcome>(restored.LastOutcome);
 
         Assert.Equal("sale-42", restored.CorrelationId);
-        Assert.Equal(SyncOutcomeKind.Rejected, outcome.Kind);
+        Assert.Equal(DeliveryOutcomeKind.Rejected, outcome.Kind);
         Assert.Equal(409, outcome.StatusCode);
         Assert.Contains("Only 20 left", outcome.GetBodyAsText());
     }
@@ -369,10 +369,10 @@ public class DeferredOutcomeTests
         return request;
     }
 
-    private static SyncOrchestrator Orchestrator(
-        ISyncStore store,
+    private static OutboxProcessor Orchestrator(
+        IHyperwycStore store,
         StubHttpMessageHandler transport,
-        SyncEventStream events,
+        HyperwycEventStream events,
         HyperwycOptions? options = null) =>
         new(store,
             new FakeConnectivityService(isConnected: true),
@@ -381,7 +381,7 @@ public class DeferredOutcomeTests
             transport);
 
     private static ServiceProvider BuildOfflineClient(
-        InMemorySyncStore store, out IHttpClientFactory factory)
+        InMemoryStore store, out IHttpClientFactory factory)
     {
         var services = new ServiceCollection();
         services.AddSingleton<IConnectivityService>(new FakeConnectivityService(isConnected: false));
@@ -396,26 +396,26 @@ public class DeferredOutcomeTests
         return sp;
     }
 
-    private static List<SyncEvent> Collect(IServiceProvider sp)
+    private static List<HyperwycEvent> Collect(IServiceProvider sp)
     {
-        var events = new List<SyncEvent>();
-        sp.GetRequiredService<IHyperwyc>().SyncEvents.Subscribe(new Collector(events));
+        var events = new List<HyperwycEvent>();
+        sp.GetRequiredService<IHyperwyc>().Events.Subscribe(new Collector(events));
         return events;
     }
 
-    private sealed class Collector(List<SyncEvent> collected) : IObserver<SyncEvent>
+    private sealed class Collector(List<HyperwycEvent> collected) : IObserver<HyperwycEvent>
     {
-        public void OnNext(SyncEvent value) => collected.Add(value);
+        public void OnNext(HyperwycEvent value) => collected.Add(value);
         public void OnError(Exception error) { }
         public void OnCompleted() { }
     }
 
     /// <summary>
-    /// Delegates to an <see cref="InMemorySyncStore"/> while snapshotting each upsert as JSON,
+    /// Delegates to an <see cref="InMemoryStore"/> while snapshotting each upsert as JSON,
     /// so a test can read back what a durable store would actually have written rather than
     /// the same object it handed in.
     /// </summary>
-    private sealed class OutcomeCapturingStore(InMemorySyncStore inner) : ISyncStore
+    private sealed class OutcomeCapturingStore(InMemoryStore inner) : IHyperwycStore
     {
         private string? _lastSnapshot;
 
@@ -434,8 +434,8 @@ public class DeferredOutcomeTests
         public Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default) =>
             inner.GetPendingOutboxAsync(ct);
 
-        public Task MarkSyncedAsync(string id, CancellationToken ct = default) =>
-            inner.MarkSyncedAsync(id, ct);
+        public Task MarkDeliveredAsync(string id, CancellationToken ct = default) =>
+            inner.MarkDeliveredAsync(id, ct);
 
         public Task MoveToDeadLetterAsync(string id, CancellationToken ct = default) =>
             inner.MoveToDeadLetterAsync(id, ct);

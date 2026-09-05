@@ -42,9 +42,9 @@ public static class HttpClientBuilderExtensions
         var clientName = builder.Name;
 
         return builder.AddHttpMessageHandler(sp => new HyperwycHandler(
-            sp.GetRequiredService<ISyncStore>(),
+            sp.GetRequiredService<IHyperwycStore>(),
             sp.GetRequiredService<IConnectivityService>(),
-            sp.GetRequiredService<SyncEventStream>(),
+            sp.GetRequiredService<HyperwycEventStream>(),
             sp.GetRequiredService<HyperwycOptions>(),
             clientName));
     }

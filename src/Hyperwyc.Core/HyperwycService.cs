@@ -5,30 +5,30 @@ namespace Hyperwyc;
 
 /// <summary>
 /// Default implementation of <see cref="IHyperwyc"/>. Exposes the sync event stream and
-/// delegates flushing and store reset to the <see cref="SyncOrchestrator"/>.
+/// delegates flushing and store reset to the <see cref="OutboxProcessor"/>.
 /// </summary>
 internal sealed class HyperwycService : IHyperwyc
 {
-    private readonly SyncEventStream _events;
-    private readonly SyncOrchestrator _orchestrator;
+    private readonly HyperwycEventStream _events;
+    private readonly OutboxProcessor _processor;
 
-    internal HyperwycService(SyncEventStream events, SyncOrchestrator orchestrator)
+    internal HyperwycService(HyperwycEventStream events, OutboxProcessor processor)
     {
         ArgumentNullException.ThrowIfNull(events);
-        ArgumentNullException.ThrowIfNull(orchestrator);
+        ArgumentNullException.ThrowIfNull(processor);
 
         _events = events;
-        _orchestrator = orchestrator;
+        _processor = processor;
     }
 
     /// <inheritdoc/>
-    public IObservable<SyncEvent> SyncEvents => _events;
+    public IObservable<HyperwycEvent> Events => _events;
 
     /// <inheritdoc/>
     public Task FlushAsync(CancellationToken ct = default) =>
-        _orchestrator.FlushAsync(ct);
+        _processor.FlushAsync(ct);
 
     /// <inheritdoc/>
     public Task ResetStoreAsync(CancellationToken ct = default) =>
-        _orchestrator.ResetStoreAsync(ct);
+        _processor.ResetStoreAsync(ct);
 }

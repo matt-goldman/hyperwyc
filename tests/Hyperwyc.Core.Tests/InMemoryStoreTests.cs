@@ -3,7 +3,7 @@ using Xunit;
 
 namespace Hyperwyc.Tests;
 
-public class InMemorySyncStoreTests
+public class InMemoryStoreTests
 {
     private static Envelope MakeEnvelope(
         string url = "https://example.com/api/items",
@@ -26,7 +26,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task GetCachedResponseAsync_EmptyStore_ReturnsNull()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var result = await store.GetCachedResponseAsync("https://example.com/api/items");
         Assert.Null(result);
     }
@@ -34,7 +34,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task GetCachedResponseAsync_EnvelopeHasNoResponse_ReturnsNull()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var envelope = MakeEnvelope();
         await store.UpsertAsync(envelope);
 
@@ -46,7 +46,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task GetCachedResponseAsync_EnvelopeHasResponse_ReturnsIt()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var envelope = MakeEnvelope();
         envelope.Response = MakeCachedResponse();
         await store.UpsertAsync(envelope);
@@ -60,7 +60,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task GetCachedResponseAsync_DeadLetteredEnvelope_ReturnsNull()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var envelope = MakeEnvelope();
         envelope.Response = MakeCachedResponse();
         envelope.IsDeadLettered = true;
@@ -74,7 +74,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task GetCachedResponseAsync_UrlNotMatching_ReturnsNull()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var envelope = MakeEnvelope("https://example.com/api/items");
         envelope.Response = MakeCachedResponse();
         await store.UpsertAsync(envelope);
@@ -91,7 +91,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task GetPendingOutboxAsync_EmptyStore_ReturnsEmpty()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var result = await store.GetPendingOutboxAsync();
         Assert.Empty(result);
     }
@@ -99,7 +99,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task GetPendingOutboxAsync_ReturnsPendingEnvelopes()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var e1 = MakeEnvelope();
         var e2 = MakeEnvelope();
         await store.UpsertAsync(e1);
@@ -113,7 +113,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task GetPendingOutboxAsync_ExcludesSynced()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var e1 = MakeEnvelope();
         var e2 = MakeEnvelope();
         e1.IsSynced = true;
@@ -129,7 +129,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task GetPendingOutboxAsync_ExcludesDeadLettered()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var e1 = MakeEnvelope();
         var e2 = MakeEnvelope();
         e1.IsDeadLettered = true;
@@ -145,7 +145,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task GetPendingOutboxAsync_OrderedByCreatedUtc()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var now = DateTimeOffset.UtcNow;
         var e1 = MakeEnvelope(createdUtc: now.AddSeconds(2));
         var e2 = MakeEnvelope(createdUtc: now);
@@ -169,7 +169,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task UpsertAsync_Insert_StoresEnvelope()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var envelope = MakeEnvelope();
         await store.UpsertAsync(envelope);
 
@@ -183,7 +183,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task UpsertAsync_Update_ReplacesExistingById()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var envelope = MakeEnvelope();
         await store.UpsertAsync(envelope);
 
@@ -195,27 +195,27 @@ public class InMemorySyncStoreTests
     }
 
     // -------------------------------------------------------------------------
-    // MarkSyncedAsync
+    // MarkDeliveredAsync
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task MarkSyncedAsync_ExistingId_SetsSynced()
+    public async Task MarkDeliveredAsync_ExistingId_SetsSynced()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var envelope = MakeEnvelope();
         await store.UpsertAsync(envelope);
 
-        await store.MarkSyncedAsync(envelope.Id);
+        await store.MarkDeliveredAsync(envelope.Id);
 
         var outbox = await store.GetPendingOutboxAsync();
         Assert.Empty(outbox);
     }
 
     [Fact]
-    public async Task MarkSyncedAsync_MissingId_DoesNotThrow()
+    public async Task MarkDeliveredAsync_MissingId_DoesNotThrow()
     {
-        var store = new InMemorySyncStore();
-        await store.MarkSyncedAsync("nonexistent-id"); // should not throw
+        var store = new InMemoryStore();
+        await store.MarkDeliveredAsync("nonexistent-id"); // should not throw
     }
 
     // -------------------------------------------------------------------------
@@ -225,7 +225,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task MoveToDeadLetterAsync_ExistingId_SetsDeadLettered()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var envelope = MakeEnvelope();
         await store.UpsertAsync(envelope);
 
@@ -238,7 +238,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task MoveToDeadLetterAsync_MissingId_DoesNotThrow()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.MoveToDeadLetterAsync("nonexistent-id"); // should not throw
     }
 
@@ -249,7 +249,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task InvalidateCacheForPrefixAsync_MatchingUrl_ClearsResponse()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var envelope = MakeEnvelope("https://example.com/api/items");
         envelope.Response = MakeCachedResponse();
         await store.UpsertAsync(envelope);
@@ -263,7 +263,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task InvalidateCacheForPrefixAsync_NonMatchingUrl_PreservesResponse()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var envelope = MakeEnvelope("https://example.com/api/items");
         envelope.Response = MakeCachedResponse();
         await store.UpsertAsync(envelope);
@@ -277,7 +277,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task InvalidateCacheForPrefixAsync_OnlyInvalidatesMatchingUrls()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var e1 = MakeEnvelope("https://example.com/api/items");
         e1.Response = MakeCachedResponse();
         var e2 = MakeEnvelope("https://example.com/other/stuff");
@@ -294,7 +294,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task InvalidateCacheForPrefixAsync_EmptyStore_DoesNotThrow()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.InvalidateCacheForPrefixAsync("https://example.com/"); // should not throw
     }
 
@@ -305,7 +305,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task ResetAsync_ClearsAllEnvelopes()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(MakeEnvelope("https://example.com/a"));
         await store.UpsertAsync(MakeEnvelope("https://example.com/b"));
 
@@ -318,7 +318,7 @@ public class InMemorySyncStoreTests
     [Fact]
     public async Task ResetAsync_EmptyStore_DoesNotThrow()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.ResetAsync(); // should not throw
     }
 }

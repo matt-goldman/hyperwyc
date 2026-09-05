@@ -12,7 +12,7 @@ public class ResponseCacheReadTests
     // -------------------------------------------------------------------------
 
     private static HyperwycHandler BuildHandler(
-        InMemorySyncStore store,
+        InMemoryStore store,
         Fakes.StubHttpMessageHandler inner,
         bool cacheIsStale,
         int maxBodyBytes = 512 * 1024)
@@ -27,7 +27,7 @@ public class ResponseCacheReadTests
         return new HyperwycHandler(
             store,
             new Fakes.FakeConnectivityService(isConnected: true),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             options)
         { InnerHandler = inner };
     }
@@ -53,7 +53,7 @@ public class ResponseCacheReadTests
     [Fact]
     public async Task FreshCacheHit_DoesNotCallNetwork()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(FreshCachedEnvelope("https://example.com/api/items"));
 
         var stub = new Fakes.StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
@@ -67,7 +67,7 @@ public class ResponseCacheReadTests
     [Fact]
     public async Task FreshCacheHit_ReturnsCachedBody()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(FreshCachedEnvelope("https://example.com/api/items", "[1,2,3]"));
 
         var stub = new Fakes.StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
@@ -83,7 +83,7 @@ public class ResponseCacheReadTests
     [Fact]
     public async Task FreshCacheHit_ResponseHeadersRestored()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(FreshCachedEnvelope("https://example.com/api/items", etag: "\"abc123\""));
 
         var stub = new Fakes.StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
@@ -99,7 +99,7 @@ public class ResponseCacheReadTests
     [Fact]
     public async Task StaleCacheHit_CallsNetworkAndUpdatesCache()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(FreshCachedEnvelope("https://example.com/api/items", "old"));
 
         var stub = new Fakes.StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -116,12 +116,12 @@ public class ResponseCacheReadTests
     [Fact]
     public async Task StaleCacheHit_PublishesOnUpdated()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(FreshCachedEnvelope("https://example.com/api/items"));
 
-        var events = new SyncEventStream();
-        SyncEvent? received = null;
-        events.Subscribe(new DelegateObserver<SyncEvent>(e => received = e));
+        var events = new HyperwycEventStream();
+        HyperwycEvent? received = null;
+        events.Subscribe(new DelegateObserver<HyperwycEvent>(e => received = e));
 
         // Zero TTL: the entry cached a moment ago is already stale.
         var options = TestOptions.WithTtl(TimeSpan.Zero);
@@ -140,14 +140,14 @@ public class ResponseCacheReadTests
         await client.GetAsync("https://example.com/api/items");
 
         Assert.NotNull(received);
-        Assert.Equal(SyncEventType.OnUpdated, received!.Type);
+        Assert.Equal(HyperwycEventType.OnUpdated, received!.Type);
     }
 
     // Cache miss: network called, entry stored
     [Fact]
     public async Task CacheMiss_StoresResponseAfterFetch()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var stub = new Fakes.StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new System.Net.Http.StringContent("{\"id\":1}"),
@@ -165,7 +165,7 @@ public class ResponseCacheReadTests
     [Fact]
     public async Task Non2xxResponse_NotCached()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var stub = new Fakes.StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.NotFound));
         using var client = new HttpClient(BuildHandler(store, stub, cacheIsStale: true));
 
@@ -179,7 +179,7 @@ public class ResponseCacheReadTests
     [Fact]
     public async Task OversizedBody_ReturnedToCallerButNotCached()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var bigBody = new string('x', 100);
         var stub = new Fakes.StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
@@ -201,7 +201,7 @@ public class ResponseCacheReadTests
     [Fact]
     public async Task WriteRequest_DoesNotReadOrWriteCache()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var stub = new Fakes.StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new System.Net.Http.StringContent("{}"),

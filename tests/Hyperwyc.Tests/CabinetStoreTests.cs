@@ -5,23 +5,23 @@ using Xunit;
 namespace Hyperwyc.Cabinet.Tests;
 
 /// <summary>
-/// Integration tests for <see cref="CabinetSyncStore"/> using a real Cabinet
+/// Integration tests for <see cref="CabinetStore"/> using a real Cabinet
 /// in-process instance backed by a temporary directory.
 /// </summary>
-public class CabinetSyncStoreTests : IDisposable
+public class CabinetStoreTests : IDisposable
 {
     // A fixed 32-byte test key (NOT for production use).
     private static readonly byte[] TestKey =
         System.Security.Cryptography.SHA256.HashData("Hyperwyc-test"u8.ToArray());
 
     private readonly string _tempDir;
-    private readonly CabinetSyncStore _store;
+    private readonly CabinetStore _store;
 
-    public CabinetSyncStoreTests()
+    public CabinetStoreTests()
     {
         _tempDir = Path.Combine(Path.GetTempPath(), $"Hyperwyc-tests-{Guid.NewGuid()}");
         Directory.CreateDirectory(_tempDir);
-        _store = new CabinetSyncStore(_tempDir, TestKey);
+        _store = new CabinetStore(_tempDir, TestKey);
     }
 
     public void Dispose()
@@ -124,16 +124,16 @@ public class CabinetSyncStoreTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
-    // MarkSyncedAsync
+    // MarkDeliveredAsync
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task MarkSyncedAsync_RemovesEnvelopeFromPendingOutbox()
+    public async Task MarkDeliveredAsync_RemovesEnvelopeFromPendingOutbox()
     {
         var envelope = new Envelope { Url = "https://example.com/api/orders", Method = "POST" };
         await _store.UpsertAsync(envelope);
 
-        await _store.MarkSyncedAsync(envelope.Id);
+        await _store.MarkDeliveredAsync(envelope.Id);
 
         var pending = await _store.GetPendingOutboxAsync();
         Assert.Empty(pending);

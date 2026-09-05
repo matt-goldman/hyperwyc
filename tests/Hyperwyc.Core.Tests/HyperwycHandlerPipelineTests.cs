@@ -50,15 +50,15 @@ public class HyperwycHandlerPipelineTests
     }
 
     private static (HttpClient Client, HeaderInjectingHandler Downstream, StubHttpMessageHandler Transport)
-        BuildPipeline(bool isConnected, InMemorySyncStore? store = null)
+        BuildPipeline(bool isConnected, InMemoryStore? store = null)
     {
         var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         var downstream = new HeaderInjectingHandler("X-Test-Auth", "token-123", transport);
 
         var hyperwyc = new HyperwycHandler(
-            store ?? new InMemorySyncStore(),
+            store ?? new InMemoryStore(),
             new FakeConnectivityService(isConnected),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             new HyperwycOptions())
         {
             InnerHandler = downstream,

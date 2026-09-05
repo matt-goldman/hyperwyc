@@ -5,22 +5,22 @@ using Xunit;
 
 namespace Hyperwyc.Tests;
 
-public class SyncOrchestratorTests
+public class OutboxProcessorTests
 {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
-    private static SyncOrchestrator BuildOrchestrator(
-        InMemorySyncStore store,
+    private static OutboxProcessor BuildOrchestrator(
+        InMemoryStore store,
         StubHttpMessageHandler transport,
-        SyncEventStream? events = null,
+        HyperwycEventStream? events = null,
         bool connected = true)
     {
-        return new SyncOrchestrator(
+        return new OutboxProcessor(
             store,
             new FakeConnectivityService(connected),
-            events ?? new SyncEventStream(),
+            events ?? new HyperwycEventStream(),
             new HyperwycOptions(),
             transport);
     }
@@ -49,7 +49,7 @@ public class SyncOrchestratorTests
     [Fact]
     public async Task FlushAsync_PendingEnvelope_SendsRequest()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(MakeOutboxEnvelope());
 
         var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
@@ -61,9 +61,9 @@ public class SyncOrchestratorTests
     }
 
     [Fact]
-    public async Task FlushAsync_SuccessfulSend_MarksEnvelopeSynced()
+    public async Task FlushAsync_SuccessfulSend_MarksEnvelopeDelivered()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var envelope = MakeOutboxEnvelope();
         await store.UpsertAsync(envelope);
 
@@ -77,14 +77,14 @@ public class SyncOrchestratorTests
     }
 
     [Fact]
-    public async Task FlushAsync_SuccessfulSend_PublishesOnSyncedEvent()
+    public async Task FlushAsync_SuccessfulSend_PublishesOnDeliveredEvent()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(MakeOutboxEnvelope());
 
-        var events = new SyncEventStream();
-        SyncEvent? received = null;
-        events.Subscribe(new DelegateObserver<SyncEvent>(e => received = e));
+        var events = new HyperwycEventStream();
+        HyperwycEvent? received = null;
+        events.Subscribe(new DelegateObserver<HyperwycEvent>(e => received = e));
 
         var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         await using var orchestrator = BuildOrchestrator(store, transport, events: events);
@@ -92,13 +92,13 @@ public class SyncOrchestratorTests
         await orchestrator.FlushAsync();
 
         Assert.NotNull(received);
-        Assert.Equal(SyncEventType.OnSynced, received!.Type);
+        Assert.Equal(HyperwycEventType.OnDelivered, received!.Type);
     }
 
     [Fact]
     public async Task FlushAsync_MultipleEnvelopes_SentInCreatedUtcOrder()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
 
         // Insert in reverse order — flush must sort ascending by CreatedUtc.
         var first  = new Envelope { Url = "https://example.com/a", Method = "POST" };
@@ -128,7 +128,7 @@ public class SyncOrchestratorTests
     [Fact]
     public async Task FlushAsync_NoEnvelopes_DoesNotSendAnything()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         await using var orchestrator = BuildOrchestrator(store, transport);
 
@@ -144,7 +144,7 @@ public class SyncOrchestratorTests
     [Fact]
     public async Task FlushAsync_ConcurrentCall_SecondCallSkips()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(MakeOutboxEnvelope());
 
         // The transport blocks until we let it proceed.
@@ -185,7 +185,7 @@ public class SyncOrchestratorTests
     [Fact]
     public async Task FlushAsync_ReplaysStoredHeadersVerbatim()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var envelope = MakeOutboxEnvelope();
         envelope.RequestHeaders["X-Correlation-Id"] = "abc-123";
         envelope.RequestHeaders["X-Tenant"] = "acme";
@@ -236,7 +236,7 @@ public class SyncOrchestratorTests
     [Fact]
     public async Task FlushAsync_DeadLetteredEnvelope_NotSentAgain()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var envelope = MakeOutboxEnvelope();
         await store.UpsertAsync(envelope);
         await store.MoveToDeadLetterAsync(envelope.Id);

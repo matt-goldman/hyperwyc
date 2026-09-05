@@ -15,8 +15,8 @@ to its backlog item where one exists.
 **Shipped**
 
 - [x] `HyperwycHandler` — core `DelegatingHandler`, online and offline paths ([06](Backlog/Done/06-hyperwyc-handler-online-path.md), [07](Backlog/Done/07-hyperwyc-handler-offline-path.md))
-- [x] `Hyperwyc.Core` package: all interfaces, `IHyperwyc`, `InMemorySyncStore` ([02](Backlog/Done/02-core-interfaces.md), [04](Backlog/Done/04-in-memory-sync-store.md))
-- [x] `CabinetSyncStore`, shipped in the `Hyperwyc` package as the default store ([14](Backlog/Done/14-cabinet-sync-store.md))
+- [x] `Hyperwyc.Core` package: all interfaces, `IHyperwyc`, `InMemoryStore` ([02](Backlog/Done/02-core-interfaces.md), [04](Backlog/Done/04-in-memory-sync-store.md))
+- [x] `CabinetStore`, shipped in the `Hyperwyc` package as the default store ([14](Backlog/Done/14-cabinet-sync-store.md))
 - [x] Request/response envelope model ([03](Backlog/Done/03-envelope-model.md))
 - [x] Response cache with TTL staleness evaluation ([09](Backlog/Done/09-response-cache-read-operations.md))
 - [x] Write-triggered GET cache invalidation on write success ([10](Backlog/Done/10-write-triggered-cache-invalidation.md))
@@ -24,12 +24,12 @@ to its backlog item where one exists.
 - [x] Replay semaphore (single concurrent flush) and connectivity event debounce ([11](Backlog/Done/11-sync-flush-orchestrator.md))
 - [x] Retry and dead-lettering ([12](Backlog/Done/12-polly-retry-dead-letter.md))
 - [x] Connectivity-driven retry model, with persisted retry state ([38](Backlog/Done/38-retry-classification.md), [28](Backlog/Done/28-persisted-retry-state.md)) — one attempt per flush, `4xx` dead-lettered at once, `Polly` no longer needed
-- [x] Reactive sync event stream (`IObservable<SyncEvent>`) ([05](Backlog/Done/05-sync-event-stream.md))
+- [x] Reactive sync event stream (`IObservable<HyperwycEvent>`) ([05](Backlog/Done/05-sync-event-stream.md))
 - [x] `AddHyperwyc()` DI extension for configuration ([15](Backlog/Done/15-di-extension-and-options.md))
 - [x] Cache TTL resolved from policy or options, with a defined precedence ([29](Backlog/Done/29-default-ttl-propagation.md))
 - [x] Configurable policies applied — cache-first, API-first, cache-only and network-only ([27](Backlog/Done/27-cache-strategy-not-applied.md))
 - [x] Orchestrator disposal, synchronous and asynchronous, cancelling in-flight work ([33](Backlog/Done/33-orchestrator-sync-disposal.md))
-- [x] `IHyperwyc.FlushAsync()` for manual sync; `SyncOrchestrator` internal ([36](Backlog/Done/36-public-surface.md))
+- [x] `IHyperwyc.FlushAsync()` for manual sync; `OutboxProcessor` internal ([36](Backlog/Done/36-public-surface.md))
 - [x] Injectable replay transport ([35](Backlog/Done/35-orchestrator-transport-not-injectable.md))
 - [x] Replays sent through the originating client's pipeline, so auth applies to them ([37](Backlog/Done/37-replay-through-pipeline.md))
 - [x] Flush trigger model documented — no app lifecycle wiring required ([34](Backlog/Done/34-app-lifecycle-integration.md))
@@ -41,7 +41,7 @@ to its backlog item where one exists.
 
 **Remaining**
 
-- [x] Surface the outcome of a deferred request ([40](Backlog/Done/40-surface-deferred-outcomes.md)) — events carry a correlation id and a persisted `SyncOutcome`, so a queued write's eventual rejection can be matched to the record that produced it and acted on
+- [x] Surface the outcome of a deferred request ([40](Backlog/Done/40-surface-deferred-outcomes.md)) — events carry a correlation id and a persisted `DeliveryOutcome`, so a queued write's eventual rejection can be matched to the record that produced it and acted on
 - [x] Connectivity documentation ([13](Backlog/Done/13-connectivity-reference-implementation.md)) — README carries the MAUI implementation, the decisions inside it, and how to fake connectivity in your own tests. Nothing ships from core, including test doubles
 - [x] `IHyperwyc.ResetStoreAsync()` ([16](Backlog/Done/16-reset-store-async.md)) — moved onto the orchestrator so it can hold the flush gate; reset discards rather than delivering, and cannot be undone by a flush writing back after the wipe
 - [ ] Sample .NET MAUI app ([19](Backlog/Done/19-poc-maui-app.md)) — offline reads proven on device across an app restart; offline writes and sync UI remain. See [POC.md](POC.md)

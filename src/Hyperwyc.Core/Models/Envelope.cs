@@ -17,7 +17,7 @@ public sealed class Envelope
     public string Id { get; init; }
 
     /// <summary>
-    /// The application's identifier for this write, echoed on every <see cref="SyncEvent"/>
+    /// The application's identifier for this write, echoed on every <see cref="HyperwycEvent"/>
     /// concerning it so a deferred outcome can be matched back to the record that produced it.
     /// </summary>
     /// <remarks>
@@ -96,7 +96,7 @@ public sealed class Envelope
     /// an event cannot. Only failures are retained: a successful envelope leaves the outbox,
     /// so there is nowhere for its outcome to live — see issue 40.
     /// </remarks>
-    public SyncOutcome? LastOutcome { get; set; }
+    public DeliveryOutcome? LastOutcome { get; set; }
 
     /// <summary>
     /// Initialises a new <see cref="Envelope"/> with a generated <see cref="Id"/>
@@ -207,7 +207,7 @@ public sealed class Envelope
     /// <remarks>
     /// <para>
     /// A cache entry is identified by what it caches, so its id is derived rather than
-    /// generated. That is what makes <c>ISyncStore.UpsertAsync</c> — which keys on
+    /// generated. That is what makes <c>IHyperwycStore.UpsertAsync</c> — which keys on
     /// <see cref="Id"/> — <em>replace</em> the previous response for a URL instead of adding
     /// a second one beside it.
     /// </para>

@@ -4,14 +4,14 @@ namespace Hyperwyc;
 
 /// <summary>
 /// A minimal hand-rolled hot observable subject that broadcasts
-/// <see cref="SyncEvent"/> values to all current subscribers.
+/// <see cref="HyperwycEvent"/> values to all current subscribers.
 /// No dependency on <c>System.Reactive</c> is required.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Expose the instance as <see cref="IObservable{SyncEvent}"/> via
-/// <c>IHyperwyc.SyncEvents</c>. Only <c>HyperwycHandler</c> and the sync
-/// orchestrator should call <see cref="Publish"/> — it is marked
+/// Expose the instance as <see cref="IObservable{HyperwycEvent}"/> via
+/// <c>IHyperwyc.Events</c>. Only <c>HyperwycHandler</c> and the sync
+/// processor should call <see cref="Publish"/> — it is marked
 /// <see langword="internal"/>.
 /// </para>
 /// <para>
@@ -19,18 +19,18 @@ namespace Hyperwyc;
 /// they cannot crash the pipeline or affect other subscribers.
 /// </para>
 /// </remarks>
-public sealed class SyncEventStream : IObservable<SyncEvent>, IDisposable
+public sealed class HyperwycEventStream : IObservable<HyperwycEvent>, IDisposable
 {
     private readonly Lock _gate = new();
-    private List<IObserver<SyncEvent>> _observers = [];
+    private List<IObserver<HyperwycEvent>> _observers = [];
     private bool _disposed;
 
     // -------------------------------------------------------------------------
-    // IObservable<SyncEvent>
+    // IObservable<HyperwycEvent>
     // -------------------------------------------------------------------------
 
     /// <inheritdoc/>
-    public IDisposable Subscribe(IObserver<SyncEvent> observer)
+    public IDisposable Subscribe(IObserver<HyperwycEvent> observer)
     {
         ArgumentNullException.ThrowIfNull(observer);
 
@@ -55,9 +55,9 @@ public sealed class SyncEventStream : IObservable<SyncEvent>, IDisposable
     /// <summary>
     /// Broadcasts <paramref name="syncEvent"/> to all current subscribers.
     /// </summary>
-    internal void Publish(SyncEvent syncEvent)
+    internal void Publish(HyperwycEvent syncEvent)
     {
-        List<IObserver<SyncEvent>> snapshot;
+        List<IObserver<HyperwycEvent>> snapshot;
         lock (_gate)
         {
             if (_disposed) return;
@@ -79,7 +79,7 @@ public sealed class SyncEventStream : IObservable<SyncEvent>, IDisposable
     {
         ArgumentNullException.ThrowIfNull(exception);
 
-        List<IObserver<SyncEvent>> snapshot;
+        List<IObserver<HyperwycEvent>> snapshot;
         lock (_gate)
         {
             if (_disposed) return;
@@ -105,7 +105,7 @@ public sealed class SyncEventStream : IObservable<SyncEvent>, IDisposable
     /// </summary>
     public void Dispose()
     {
-        List<IObserver<SyncEvent>> snapshot;
+        List<IObserver<HyperwycEvent>> snapshot;
         lock (_gate)
         {
             if (_disposed) return;
@@ -125,7 +125,7 @@ public sealed class SyncEventStream : IObservable<SyncEvent>, IDisposable
     // Helpers
     // -------------------------------------------------------------------------
 
-    private void Unsubscribe(IObserver<SyncEvent> observer)
+    private void Unsubscribe(IObserver<HyperwycEvent> observer)
     {
         lock (_gate)
         {
@@ -133,7 +133,7 @@ public sealed class SyncEventStream : IObservable<SyncEvent>, IDisposable
         }
     }
 
-    private sealed class Subscription(SyncEventStream stream, IObserver<SyncEvent> observer) : IDisposable
+    private sealed class Subscription(HyperwycEventStream stream, IObserver<HyperwycEvent> observer) : IDisposable
     {
         private int _disposed;
 

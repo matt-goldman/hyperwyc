@@ -2,20 +2,20 @@
 
 ## Summary
 
-Decide how the default `CabinetSyncStore` protects data at rest when the consumer supplies no
+Decide how the default `CabinetStore` protects data at rest when the consumer supplies no
 key. Making Cabinet the zero-configuration default (issue #31) promotes today's path-derived
 key from an explicit opt-in to the setting almost every consumer will silently ship.
 
 ## Background
 
-`CabinetSyncStore`'s single-argument constructor derives an AES-256-GCM key from the store
+`CabinetStore`'s single-argument constructor derives an AES-256-GCM key from the store
 directory path via SHA-256. Its own XML documentation says:
 
 > The derived key is deterministic for a given path but is not cryptographically strong.
 > For production use, supply an explicit key via the two-parameter overload.
 
 That caveat is acceptable while the store is an explicit choice — the developer selecting
-`new CabinetSyncStore("hyperwyc.db")` is at least in a position to read the doc comment. Once
+`new CabinetStore("hyperwyc.db")` is at least in a position to read the doc comment. Once
 issue #31 makes it the default that `AddHyperwyc()` resolves with no arguments, the weak key
 becomes what every consumer gets unless they go looking for a reason not to.
 
@@ -71,7 +71,7 @@ consumers a first-class extension point, and keeps platform APIs out of the core
 - [ ] Zero-configuration `AddHyperwyc()` works with no key-related ceremony.
 - [ ] README documents what protects the store by default, in plain terms, and shows how to
       supply an explicit key — placed where a reader meets it during setup, not in an appendix.
-- [ ] The `CabinetSyncStore` "not cryptographically strong" caveat is surfaced on the path
+- [ ] The `CabinetStore` "not cryptographically strong" caveat is surfaced on the path
       consumers actually take. Today it appears only on a constructor most will never call, so
       after issue #31 the warning would sit on the one code path nobody reads.
 - [ ] Feature descriptions of encryption at rest — README, package description, TECHNICAL_PLAN

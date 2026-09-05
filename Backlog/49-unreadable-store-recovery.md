@@ -37,13 +37,13 @@ Two consequences for the design here:
 - **The catch is not `CryptographicException`.** It is "the store could not be read", which
   includes `JsonException` from a shape change and whatever a future store implementation
   throws. Catching only the crypto case would have missed this entirely.
-- **The `ResetAsync` criterion is not hypothetical.** `CabinetSyncStore.ResetAsync` enumerates
+- **The `ResetAsync` criterion is not hypothetical.** `CabinetStore.ResetAsync` enumerates
   through `GetAllAsync`, so it deserialises before it deletes. On this failure the remedy this
   item recommends is broken by the same thing that broke the app.
 
 ## What happens today
 
-Nothing catches it. `CabinetSyncStore` calls `RecordSet<Envelope>.GetAllAsync`, Cabinet decrypts
+Nothing catches it. `CabinetStore` calls `RecordSet<Envelope>.GetAllAsync`, Cabinet decrypts
 with `AesGcmEncryptionProvider`, and a wrong key fails the AES-GCM authentication tag. There is
 no `catch` for `CryptographicException` anywhere in the codebase.
 
@@ -71,7 +71,7 @@ means Hyperwyc has less to work with; it does not make Hyperwyc responsible for 
 So, on a decryption failure:
 
 1. **Log it**, through an optional `ILogger` if the container has one.
-2. **Publish an event**, so an application watching `SyncEvents` can react.
+2. **Publish an event**, so an application watching `Events` can react.
 3. **Return what can be read**, which may be nothing.
 4. **Nothing else.** No exception, no deletion, no quarantine, no recovery attempt.
 
@@ -167,7 +167,7 @@ so a direct reference costs nothing new. Inject `ILogger<T>?` and no-op when abs
 must stay usable without a container.
 
 The event is the programmatic channel, and is the part that needs design. Every existing
-`SyncEventType` describes one request moving through its lifecycle; this describes the store. See
+`HyperwycEventType` describes one request moving through its lifecycle; this describes the store. See
 Open Questions.
 
 **Report once, not per read.** A latch on the store instance, so an application whose every read
@@ -176,15 +176,15 @@ until the process restarts or the store is reset.
 
 ## Open Questions
 
-1. **What does the event look like?** `SyncEvent` is built around a request — `Url`, `Method`,
-   `CorrelationId`, `RequestBody` are all meaningless here. Options: a new `SyncEventType` with
+1. **What does the event look like?** `HyperwycEvent` is built around a request — `Url`, `Method`,
+   `CorrelationId`, `RequestBody` are all meaningless here. Options: a new `HyperwycEventType` with
    those fields null and the detail in a new field; a separate `IObservable` for store-level
-   events; or logging only, with no event at all. Leaning toward a new `SyncEventType`, accepting
+   events; or logging only, with no event at all. Leaning toward a new `HyperwycEventType`, accepting
    that the stream becomes "things that happened" rather than "things that happened to a request",
    because a second observable is a worse thing to ask a consumer to remember to subscribe to.
 2. ~~**Should `ResetStoreAsync` be able to clear a store it cannot read?**~~ **Answered while
    doing [issue 16](Done/16-reset-store-async.md), and the answer is no.**
-   `CabinetSyncStore.ResetAsync` enumerates through `GetAllAsync` and removes records one at a
+   `CabinetStore.ResetAsync` enumerates through `GetAllAsync` and removes records one at a
    time, so it decrypts before it deletes. An unreadable store cannot be reset.
 
    That is a hole in this issue's own recommendation: reporting the failure and pointing the
@@ -208,7 +208,7 @@ compatibility cost; nothing is released.
 
 ## Acceptance Criteria
 
-- [ ] A decryption failure never escapes `CabinetSyncStore` as a raw `CryptographicException`,
+- [ ] A decryption failure never escapes `CabinetStore` as a raw `CryptographicException`,
       and never escapes through `HttpClient.SendAsync`.
 - [ ] Reads degrade to what can be read — nothing, in the whole-store case — rather than throwing.
 - [ ] The failure is logged through an optional `ILogger`, with a message that distinguishes a
@@ -222,7 +222,7 @@ compatibility cost; nothing is released.
 - [ ] Tests: a store opened with the wrong key reads as empty rather than throwing; the event
       fires; the log is written; it is reported once across several reads; nothing on disk is
       removed; an offline write against an unusable store does **not** receive a `202`.
-- [ ] `ISyncStore.ResetAsync` can clear a store it cannot decrypt — `CabinetSyncStore` currently
+- [ ] `IHyperwycStore.ResetAsync` can clear a store it cannot decrypt — `CabinetStore` currently
       cannot, which makes the recommended remedy unavailable in precisely the case it is for.
 - [ ] README documents the behaviour and names `ResetStoreAsync` as the application's remedy.
 

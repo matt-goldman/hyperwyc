@@ -6,24 +6,24 @@ using Xunit;
 namespace Hyperwyc.Tests;
 
 /// <summary>
-/// Covers <see cref="CacheStrategy"/> resolution on the read paths. Until issue #27
+/// Covers <see cref="SourcePriority"/> resolution on the read paths. Until issue #27
 /// these presets were public no-ops: the handler applied cache-first semantics
-/// regardless of what <see cref="Interfaces.ISyncPolicy.GetStrategy"/> returned.
+/// regardless of the route policy's <see cref="Models.RoutePolicy.SourcePriority"/>.
 /// </summary>
-public class CacheStrategyTests
+public class SourcePriorityTests
 {
     private const string Url = "https://example.com/api/items";
 
     private static HyperwycHandler BuildHandler(
-        InMemorySyncStore store,
+        InMemoryStore store,
         StubHttpMessageHandler inner,
-        CacheStrategy strategy,
+        SourcePriority strategy,
         bool isConnected = true,
         bool cacheIsStale = false) =>
         new(
             store,
             new FakeConnectivityService(isConnected),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             // A zero TTL makes every cached entry stale; CachedEnvelope stamps CachedAt as now.
             OptionsFor(strategy, cacheIsStale))
         { InnerHandler = inner };
@@ -56,10 +56,10 @@ public class CacheStrategyTests
     [Fact]
     public async Task NetworkOnly_IgnoresFreshCache_AndCallsNetwork()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(CachedEnvelope());
         var stub = NetworkReturning();
-        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.NetworkOnly));
+        using var client = new HttpClient(BuildHandler(store, stub, SourcePriority.NetworkOnly));
 
         var response = await client.GetAsync(Url);
 
@@ -70,9 +70,9 @@ public class CacheStrategyTests
     [Fact]
     public async Task NetworkOnly_DoesNotWriteToCache()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var stub = NetworkReturning();
-        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.NetworkOnly));
+        using var client = new HttpClient(BuildHandler(store, stub, SourcePriority.NetworkOnly));
 
         await client.GetAsync(Url);
 
@@ -82,11 +82,11 @@ public class CacheStrategyTests
     [Fact]
     public async Task NetworkOnly_Offline_DoesNotServeCache()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(CachedEnvelope());
         var stub = NetworkReturning();
         using var client = new HttpClient(
-            BuildHandler(store, stub, CacheStrategy.NetworkOnly, isConnected: false));
+            BuildHandler(store, stub, SourcePriority.NetworkOnly, isConnected: false));
 
         var response = await client.GetAsync(Url);
 
@@ -105,10 +105,10 @@ public class CacheStrategyTests
     [Fact]
     public async Task NetworkFirst_CallsNetwork_EvenWhenCacheIsFresh()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(CachedEnvelope());
         var stub = NetworkReturning();
-        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.NetworkFirst));
+        using var client = new HttpClient(BuildHandler(store, stub, SourcePriority.NetworkFirst));
 
         var response = await client.GetAsync(Url);
 
@@ -119,10 +119,10 @@ public class CacheStrategyTests
     [Fact]
     public async Task NetworkFirst_FallsBackToCache_WhenNetworkThrows()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(CachedEnvelope());
         var stub = NetworkFailing();
-        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.NetworkFirst));
+        using var client = new HttpClient(BuildHandler(store, stub, SourcePriority.NetworkFirst));
 
         var response = await client.GetAsync(Url);
 
@@ -132,9 +132,9 @@ public class CacheStrategyTests
     [Fact]
     public async Task NetworkFirst_NetworkThrowsAndNoCache_PropagatesException()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var stub = NetworkFailing();
-        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.NetworkFirst));
+        using var client = new HttpClient(BuildHandler(store, stub, SourcePriority.NetworkFirst));
 
         await Assert.ThrowsAsync<HttpRequestException>(() => client.GetAsync(Url));
     }
@@ -142,9 +142,9 @@ public class CacheStrategyTests
     [Fact]
     public async Task NetworkFirst_PopulatesCache_SoTheFallbackHasSomethingToServe()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var stub = NetworkReturning();
-        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.NetworkFirst));
+        using var client = new HttpClient(BuildHandler(store, stub, SourcePriority.NetworkFirst));
 
         await client.GetAsync(Url);
 
@@ -160,10 +160,10 @@ public class CacheStrategyTests
     [Fact]
     public async Task CacheFirst_ServesFreshCache_WithoutCallingNetwork()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(CachedEnvelope());
         var stub = NetworkReturning();
-        using var client = new HttpClient(BuildHandler(store, stub, CacheStrategy.CacheFirst));
+        using var client = new HttpClient(BuildHandler(store, stub, SourcePriority.CacheFirst));
 
         var response = await client.GetAsync(Url);
 
@@ -174,11 +174,11 @@ public class CacheStrategyTests
     [Fact]
     public async Task CacheFirst_StaleCache_CallsNetwork()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(CachedEnvelope());
         var stub = NetworkReturning();
         using var client = new HttpClient(
-            BuildHandler(store, stub, CacheStrategy.CacheFirst, cacheIsStale: true));
+            BuildHandler(store, stub, SourcePriority.CacheFirst, cacheIsStale: true));
 
         var response = await client.GetAsync(Url);
 
@@ -189,11 +189,11 @@ public class CacheStrategyTests
     [Fact]
     public async Task CacheFirst_NetworkThrows_DoesNotFallBackToCache()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(CachedEnvelope());
         var stub = NetworkFailing();
         using var client = new HttpClient(
-            BuildHandler(store, stub, CacheStrategy.CacheFirst, cacheIsStale: true));
+            BuildHandler(store, stub, SourcePriority.CacheFirst, cacheIsStale: true));
 
         // Fallback-on-failure is NetworkFirst's contract, not CacheFirst's. CacheFirst
         // already had its chance to serve the cache and judged it stale.
@@ -204,12 +204,12 @@ public class CacheStrategyTests
     /// Strategy and TTL now both come from the resolved <see cref="RoutePolicy"/>, so a test
     /// that wants a strategy sets the route map's default rather than passing a policy object.
     /// </summary>
-    private static HyperwycOptions OptionsFor(CacheStrategy strategy, bool cacheIsStale)
+    private static HyperwycOptions OptionsFor(SourcePriority strategy, bool cacheIsStale)
     {
         var options = new HyperwycOptions();
         options.Routes.Default = new RoutePolicy
         {
-            Strategy = strategy,
+            SourcePriority = strategy,
             Ttl = cacheIsStale ? TimeSpan.Zero : TimeSpan.FromMinutes(5),
         };
         return options;

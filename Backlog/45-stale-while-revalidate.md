@@ -7,7 +7,7 @@ refresh it in the background so the next read is current.
 
 ## The problem
 
-`CacheStrategy` currently offers `CacheFirst`, `ApiFirst`, `CacheOnly` and `NetworkOnly` — Workbox's
+`SourcePriority` currently offers `CacheFirst`, `ApiFirst`, `CacheOnly` and `NetworkOnly` — Workbox's
 set minus `StaleWhileRevalidate`, which is the one its documentation reaches for most often, and
 the best fit for the screen a user looks at most.
 
@@ -28,7 +28,7 @@ stale-while-revalidate` is standardised in RFC 5861, which makes the naming fami
 
 ## Behaviour
 
-On a read with `CacheStrategy.StaleWhileRevalidate`:
+On a read with `SourcePriority.StaleWhileRevalidate`:
 
 1. A cached entry exists — return it immediately, **regardless of staleness**, and start a
    background fetch.
@@ -74,7 +74,7 @@ whether anything differs will train consumers to ignore it.
 
 ## Acceptance Criteria
 
-- [ ] `CacheStrategy.StaleWhileRevalidate` added and honoured on the read path.
+- [ ] `SourcePriority.StaleWhileRevalidate` added and honoured on the read path.
 - [ ] A cached entry is returned immediately regardless of staleness.
 - [ ] The refresh happens in the background and never blocks or faults the caller.
 - [ ] A failed background refresh leaves the cached entry intact and does not surface as an error.

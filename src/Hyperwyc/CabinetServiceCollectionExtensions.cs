@@ -10,7 +10,7 @@ namespace Hyperwyc;
 public static class CabinetServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers Hyperwyc with <see cref="CabinetSyncStore"/> as the backing store.
+    /// Registers Hyperwyc with <see cref="CabinetStore"/> as the backing store.
     /// This is the entry point for most applications: called with no arguments it
     /// produces a working, durable configuration.
     /// </summary>
@@ -53,6 +53,6 @@ public static class CabinetServiceCollectionExtensions
 
         // Registered by type so the container owns construction and disposal, and so
         // no directory is touched unless the store is actually resolved.
-        return services.AddHyperwycCore<CabinetSyncStore>(configure);
+        return services.AddHyperwycCore<CabinetStore>(configure);
     }
 }

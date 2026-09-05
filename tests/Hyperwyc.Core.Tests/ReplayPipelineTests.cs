@@ -52,7 +52,7 @@ public class ReplayPipelineTests
     }
 
     private static ServiceProvider BuildProvider(
-        InMemorySyncStore store,
+        InMemoryStore store,
         RecordingTransport transport,
         FakeConnectivityService connectivity,
         Func<string>? tokenFactory = null,
@@ -82,7 +82,7 @@ public class ReplayPipelineTests
     [Fact]
     public async Task ReplayedRequest_CarriesTokenAppliedAtReplayTime_NotQueueTime()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var transport = new RecordingTransport();
         var connectivity = new FakeConnectivityService(isConnected: false);
         var token = "stale-token";
@@ -112,7 +112,7 @@ public class ReplayPipelineTests
     [Fact]
     public async Task ReplayedRequest_ReachesHandlersRegisteredAfterHyperwyc()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var transport = new RecordingTransport();
         var connectivity = new FakeConnectivityService(isConnected: false);
 
@@ -132,9 +132,9 @@ public class ReplayPipelineTests
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task Replay_DoesNotPublishDuplicateSyncedEvents()
+    public async Task Replay_DoesNotPublishDuplicateDeliveredEvents()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var transport = new RecordingTransport();
         var connectivity = new FakeConnectivityService(isConnected: false);
 
@@ -143,20 +143,20 @@ public class ReplayPipelineTests
         await client.PostAsync(Url, new StringContent("{}"));
 
         var hyperwyc = sp.GetRequiredService<IHyperwyc>();
-        var synced = new List<SyncEvent>();
-        using var subscription = hyperwyc.SyncEvents.Subscribe(new CollectingObserver(synced));
+        var synced = new List<HyperwycEvent>();
+        using var subscription = hyperwyc.Events.Subscribe(new CollectingObserver(synced));
 
         connectivity.IsConnected = true;
         await hyperwyc.FlushAsync();
 
         // The orchestrator owns the outcome; the handler must not also report it.
-        Assert.Single(synced, e => e.Type == SyncEventType.OnSynced);
+        Assert.Single(synced, e => e.Type == HyperwycEventType.OnDelivered);
     }
 
     [Fact]
     public async Task Replay_IsNotQueuedAgainWhenConnectivityDropsMidFlush()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var transport = new RecordingTransport();
 
         // Still reporting offline while the flush runs: without the replay marker the
@@ -180,7 +180,7 @@ public class ReplayPipelineTests
     [Fact]
     public async Task EachEnvelope_ReplaysThroughItsOwnClientPipeline()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var ordersTransport = new RecordingTransport();
         var profileTransport = new RecordingTransport();
         var connectivity = new FakeConnectivityService(isConnected: false);
@@ -214,7 +214,7 @@ public class ReplayPipelineTests
     [Fact]
     public async Task QueuedEnvelope_RecordsTheClientItCameFrom()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var connectivity = new FakeConnectivityService(isConnected: false);
 
         using var sp = BuildProvider(store, new RecordingTransport(), connectivity, clientName: "OrdersApi");
@@ -240,7 +240,7 @@ public class ReplayPipelineTests
     [Fact]
     public async Task TypedClient_QueuesWithItsNameAndReplaysThroughItsPipeline()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var transport = new RecordingTransport();
         var connectivity = new FakeConnectivityService(isConnected: false);
 
@@ -279,7 +279,7 @@ public class ReplayPipelineTests
     [Fact]
     public async Task HandlerRegisteredWithoutAName_FallsBackToReplayTransport()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var fallback = new RecordingTransport();
         var connectivity = new FakeConnectivityService(isConnected: false);
 
@@ -308,9 +308,9 @@ public class ReplayPipelineTests
         Assert.Single(fallback.Requests);
     }
 
-    private sealed class CollectingObserver(List<SyncEvent> collected) : IObserver<SyncEvent>
+    private sealed class CollectingObserver(List<HyperwycEvent> collected) : IObserver<HyperwycEvent>
     {
-        public void OnNext(SyncEvent value) => collected.Add(value);
+        public void OnNext(HyperwycEvent value) => collected.Add(value);
         public void OnError(Exception error) { }
         public void OnCompleted() { }
     }

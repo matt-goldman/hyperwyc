@@ -6,7 +6,7 @@ Provide a read-only diagnostics surface so developers (and end users) can inspec
 
 ## Background
 
-Without visibility into the store, it is hard to debug sync problems. A diagnostics view exposes the data already in the store in a consumable form, without requiring direct access to the underlying `ISyncStore`.
+Without visibility into the store, it is hard to debug sync problems. A diagnostics view exposes the data already in the store in a consumable form, without requiring direct access to the underlying `IHyperwycStore`.
 
 ## `IHyperwyc` Extensions
 
@@ -22,11 +22,11 @@ Where:
 ```csharp
 public record PendingItem(
     string Id, string CorrelationId, string Method, string Url,
-    DateTimeOffset CreatedUtc, int RetryCount, SyncOutcome? LastOutcome);
+    DateTimeOffset CreatedUtc, int RetryCount, DeliveryOutcome? LastOutcome);
 
 public record DeadLetteredItem(
     string Id, string CorrelationId, string Method, string Url,
-    DateTimeOffset CreatedUtc, int RetryCount, SyncOutcome? LastOutcome);
+    DateTimeOffset CreatedUtc, int RetryCount, DeliveryOutcome? LastOutcome);
 ```
 
 ## MAUI Sample View
@@ -41,7 +41,7 @@ This page is for developer reference and POC validation; it does not need to be 
 ## Acceptance Criteria
 
 - [ ] `GetPendingOutboxAsync()` and `GetDeadLetteredAsync()` added to `IHyperwyc` (or a diagnostics interface).
-- [ ] Implemented by the concrete Hyperwyc service, delegating to `ISyncStore`.
+- [ ] Implemented by the concrete Hyperwyc service, delegating to `IHyperwycStore`.
 - [ ] `PendingItem` and `DeadLetteredItem` record types defined, carrying `CorrelationId` and
       `LastOutcome` from [issue 40](Done/40-surface-deferred-outcomes.md).
 - [ ] A read path exists for dead-lettered envelopes, which is what turns 40's persisted failure

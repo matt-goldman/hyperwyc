@@ -4,7 +4,7 @@ namespace Hyperwyc;
 /// Defines the strategy used to resolve a request — whether to prefer a cached
 /// response, always hit the network, or fall back gracefully when offline.
 /// </summary>
-public enum CacheStrategy
+public enum SourcePriority
 {
     /// <summary>
     /// Return a cached response when available; only call the API if the cache

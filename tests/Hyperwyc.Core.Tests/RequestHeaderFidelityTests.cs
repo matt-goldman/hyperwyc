@@ -23,32 +23,32 @@ public class RequestHeaderFidelityTests
     private const string IdempotencyKeyHeader = "Idempotency-Key";
 
     private static (HyperwycHandler handler, StubHttpMessageHandler stub) BuildOnlineHandler(
-        InMemorySyncStore? store = null)
+        InMemoryStore? store = null)
     {
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         var handler = new HyperwycHandler(
-            store ?? new InMemorySyncStore(),
+            store ?? new InMemoryStore(),
             new FakeConnectivityService(isConnected: true),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             new HyperwycOptions())
         { InnerHandler = stub };
         return (handler, stub);
     }
 
-    private static HyperwycHandler BuildOfflineHandler(InMemorySyncStore store) =>
+    private static HyperwycHandler BuildOfflineHandler(InMemoryStore store) =>
         new(
             store,
             new FakeConnectivityService(isConnected: false),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             new HyperwycOptions())
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
 
-    private static SyncOrchestrator BuildOrchestrator(
-        InMemorySyncStore store, HttpMessageHandler transport) =>
+    private static OutboxProcessor BuildOrchestrator(
+        InMemoryStore store, HttpMessageHandler transport) =>
         new(
             store,
             new FakeConnectivityService(isConnected: true),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             new HyperwycOptions(),
             transport);
 
@@ -66,7 +66,7 @@ public class RequestHeaderFidelityTests
     [Fact]
     public async Task QueuedWrite_CapturesTheContentType()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using var client = new HttpClient(BuildOfflineHandler(store));
 
         await client.PostAsJsonAsync("https://example.com/api/sales", new { quantity = 3 });
@@ -80,7 +80,7 @@ public class RequestHeaderFidelityTests
     [Fact]
     public async Task ReplayedWrite_KeepsTheContentType()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using (var client = new HttpClient(BuildOfflineHandler(store)))
             await client.PostAsJsonAsync("https://example.com/api/sales", new { quantity = 3 });
 
@@ -98,7 +98,7 @@ public class RequestHeaderFidelityTests
         // StringContent stamps text/plain of its own accord, and TryAddWithoutValidation
         // appends rather than replaces — so without clearing it the replay would send
         // "text/plain; charset=utf-8, application/json", which is not a media type.
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using (var client = new HttpClient(BuildOfflineHandler(store)))
             await client.PostAsJsonAsync("https://example.com/api/sales", new { quantity = 3 });
 
@@ -116,7 +116,7 @@ public class RequestHeaderFidelityTests
     {
         // Content-Length is computed from the body actually attached, not replayed from
         // capture, so it cannot contradict what is being sent.
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using (var client = new HttpClient(BuildOfflineHandler(store)))
             await client.PostAsJsonAsync("https://example.com/api/sales", new { quantity = 3 });
 
@@ -135,7 +135,7 @@ public class RequestHeaderFidelityTests
     public async Task ReplayedWrite_KeepsACustomContentHeader()
     {
         // Not just Content-Type: the fallback covers every content header the caller set.
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using (var client = new HttpClient(BuildOfflineHandler(store)))
         {
             var request = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api/sales")
@@ -205,7 +205,7 @@ public class RequestHeaderFidelityTests
     [Fact]
     public async Task QueuedWrite_StoresNoIdempotencyKey()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using var client = new HttpClient(BuildOfflineHandler(store));
 
         await client.PostAsync("https://example.com/api/items", new StringContent("{}"));
@@ -217,7 +217,7 @@ public class RequestHeaderFidelityTests
     [Fact]
     public async Task Replay_AddsNoIdempotencyKey()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using (var client = new HttpClient(BuildOfflineHandler(store)))
             await client.PostAsync("https://example.com/api/items", new StringContent("{}"));
 
@@ -238,7 +238,7 @@ public class RequestHeaderFidelityTests
     [Fact]
     public async Task EnvelopeId_IsNotDerivedFromAnyRequestHeader()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using var client = new HttpClient(BuildOfflineHandler(store));
 
         var request = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api/items")
@@ -283,7 +283,7 @@ public class RequestHeaderFidelityTests
     [Fact]
     public async Task CallerSuppliedIdempotencyKey_SurvivesQueueingAndEveryReplayAttempt()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using (var client = new HttpClient(BuildOfflineHandler(store)))
         {
             var request = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api/items")

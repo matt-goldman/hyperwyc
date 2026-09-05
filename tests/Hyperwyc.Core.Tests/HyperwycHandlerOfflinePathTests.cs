@@ -13,14 +13,14 @@ public class HyperwycHandlerOfflinePathTests
     // -------------------------------------------------------------------------
 
     private static HyperwycHandler BuildOfflineHandler(
-        InMemorySyncStore store,
-        SyncEventStream? events = null,
+        InMemoryStore store,
+        HyperwycEventStream? events = null,
         HyperwycOptions? options = null)
     {
         var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: false),
-            events ?? new SyncEventStream(),
+            events ?? new HyperwycEventStream(),
             options ?? new HyperwycOptions())
         {
             // Inner handler should never be reached when offline.
@@ -49,7 +49,7 @@ public class HyperwycHandlerOfflinePathTests
     [Fact]
     public async Task OfflineWrite_AddsEnvelopeToOutbox()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using var client = new HttpClient(BuildOfflineHandler(store));
 
         await client.PostAsync("https://example.com/api/orders",
@@ -64,7 +64,7 @@ public class HyperwycHandlerOfflinePathTests
     [Fact]
     public async Task OfflineWrite_EnvelopeIsNotSynced()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using var client = new HttpClient(BuildOfflineHandler(store));
 
         await client.PostAsync("https://example.com/api/orders", content: null);
@@ -76,23 +76,23 @@ public class HyperwycHandlerOfflinePathTests
     [Fact]
     public async Task OfflineWrite_PublishesOnQueuedEvent()
     {
-        var store = new InMemorySyncStore();
-        var events = new SyncEventStream();
-        SyncEvent? received = null;
-        events.Subscribe(new DelegateObserver<SyncEvent>(e => received = e));
+        var store = new InMemoryStore();
+        var events = new HyperwycEventStream();
+        HyperwycEvent? received = null;
+        events.Subscribe(new DelegateObserver<HyperwycEvent>(e => received = e));
 
         using var client = new HttpClient(BuildOfflineHandler(store, events));
         await client.PostAsync("https://example.com/api/orders", content: null);
 
         Assert.NotNull(received);
-        Assert.Equal(SyncEventType.OnQueued, received!.Type);
+        Assert.Equal(HyperwycEventType.OnQueued, received!.Type);
         Assert.Equal("https://example.com/api/orders", received.Url);
     }
 
     [Fact]
     public async Task OfflineWrite_ReturnsSyntheticQueuedResponse()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using var client = new HttpClient(BuildOfflineHandler(store));
 
         var response = await client.PostAsync("https://example.com/api/orders", content: null);
@@ -110,7 +110,7 @@ public class HyperwycHandlerOfflinePathTests
     [InlineData("DELETE")]
     public async Task OfflineWrite_AllWriteMethods_AreQueued(string method)
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using var client = new HttpClient(BuildOfflineHandler(store));
 
         await client.SendAsync(new HttpRequestMessage(new HttpMethod(method),
@@ -127,7 +127,7 @@ public class HyperwycHandlerOfflinePathTests
     [Fact]
     public async Task OfflineRead_CacheAvailable_ReturnsCachedResponse()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", "[1,2,3]"));
 
         using var client = new HttpClient(BuildOfflineHandler(store));
@@ -141,7 +141,7 @@ public class HyperwycHandlerOfflinePathTests
     [Fact]
     public async Task OfflineRead_CacheAvailable_DoesNotAddToOutbox()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items"));
 
         using var client = new HttpClient(BuildOfflineHandler(store));
@@ -154,13 +154,13 @@ public class HyperwycHandlerOfflinePathTests
     [Fact]
     public async Task OfflineRead_ServesCachedResponseWithinItsTtl()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", "cached-data"));
 
         var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: false),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             TestOptions.WithTtl(TimeSpan.FromMinutes(5)))
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
         using var client = new HttpClient(handler);
@@ -174,7 +174,7 @@ public class HyperwycHandlerOfflinePathTests
     [Fact]
     public async Task OfflineRead_PastItsTtl_ServesNothingRatherThanSomethingTooOld()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", "too-old"));
 
         // The TTL means the same thing offline as online: how old a stored response may be and
@@ -183,7 +183,7 @@ public class HyperwycHandlerOfflinePathTests
         var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: false),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             TestOptions.WithTtl(TimeSpan.Zero))
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
         using var client = new HttpClient(handler);
@@ -202,7 +202,7 @@ public class HyperwycHandlerOfflinePathTests
     [Fact]
     public async Task OfflineRead_NoCacheAvailable_ReturnsSyntheticOfflineResponse()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using var client = new HttpClient(BuildOfflineHandler(store));
 
         var response = await client.GetAsync("https://example.com/api/items");
@@ -216,7 +216,7 @@ public class HyperwycHandlerOfflinePathTests
     [Fact]
     public async Task OfflineRead_NoCacheAvailable_DoesNotAddToOutbox()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using var client = new HttpClient(BuildOfflineHandler(store));
 
         await client.GetAsync("https://example.com/api/items");

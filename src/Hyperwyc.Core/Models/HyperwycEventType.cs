@@ -2,16 +2,16 @@ namespace Hyperwyc.Models;
 
 /// <summary>
 /// Discriminates the kind of sync lifecycle event emitted on
-/// <see cref="Interfaces.IHyperwyc.SyncEvents"/>.
+/// <see cref="Interfaces.IHyperwyc.Events"/>.
 /// </summary>
-public enum SyncEventType
+public enum HyperwycEventType
 {
     /// <summary>A write request has been queued in the outbox.</summary>
     OnQueued,
 
 
     /// <summary>A queued request was successfully synced to the server.</summary>
-    OnSynced,
+    OnDelivered,
 
     /// <summary>
     /// A queued request failed permanently and has been moved to the dead-letter

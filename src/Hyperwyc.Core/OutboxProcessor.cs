@@ -15,15 +15,15 @@ namespace Hyperwyc;
 /// There is no retry budget, no backoff and no scheduled follow-up: a write the server refuses
 /// is dead-lettered, and anything else stays in the outbox for the next flush.
 /// </remarks>
-internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
+internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
 {
     /// <summary>
     /// Ceiling on a computed backoff, so a generous retry budget cannot schedule an
     /// attempt absurdly far out — or overflow the arithmetic getting there.
     /// </summary>
-    private readonly ISyncStore _store;
+    private readonly IHyperwycStore _store;
     private readonly IConnectivityService _connectivity;
-    private readonly SyncEventStream _events;
+    private readonly HyperwycEventStream _events;
     private readonly HyperwycOptions _options;
     private readonly HttpMessageInvoker _fallbackInvoker;
     private readonly IHttpClientFactory? _httpClientFactory;
@@ -40,7 +40,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     private bool _disposed;
 
     /// <summary>
-    /// Initialises a new <see cref="SyncOrchestrator"/>.
+    /// Initialises a new <see cref="OutboxProcessor"/>.
     /// </summary>
     /// <param name="store">The sync store backing the outbox.</param>
     /// <param name="connectivity">The connectivity service to subscribe to.</param>
@@ -49,7 +49,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     /// <param name="transport">
     /// The <see cref="HttpMessageHandler"/> used to send outbox requests. This must
     /// bypass <see cref="HyperwycHandler"/>, or a replay would be queued again.
-    /// Never disposed by the orchestrator — see
+    /// Never disposed by the processor — see
     /// <see cref="HyperwycOptions.ReplayTransport"/> for ownership.
     /// </param>
     /// <param name="httpClientFactory">
@@ -57,10 +57,10 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     /// downstream handlers such as auth apply to replays. When absent, or when an
     /// envelope carries no client name, <paramref name="transport"/> is used instead.
     /// </param>
-    public SyncOrchestrator(
-        ISyncStore store,
+    public OutboxProcessor(
+        IHyperwycStore store,
         IConnectivityService connectivity,
-        SyncEventStream events,
+        HyperwycEventStream events,
         HyperwycOptions options,
         HttpMessageHandler transport,
         IHttpClientFactory? httpClientFactory = null)
@@ -101,7 +101,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        // Link the caller's token with the orchestrator's lifetime so that disposal
+        // Link the caller's token with the processor's lifetime so that disposal
         // stops a flush no matter how it was started — including a manual "sync now"
         // that passed no token of its own.
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _lifetimeCts.Token);
@@ -143,13 +143,13 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     /// <remarks>
     /// <para>
     /// Lives here rather than on <c>HyperwycService</c> because it needs two things only the
-    /// orchestrator has: the flush gate, and the scheduled follow-up.
+    /// processor has: the flush gate, and the scheduled follow-up.
     /// </para>
     /// <para>
     /// The gate is acquired <em>blocking</em>, unlike <see cref="FlushAsync"/>'s
     /// try-acquire. A flush that is mid-loop holds a list of envelopes read before the wipe
     /// and keeps acting on them: it would go on sending writes the caller just asked to
-    /// discard, and — worse — <c>RecordOutcomeAsync</c> and <c>MarkSyncedAsync</c> write back, so a
+    /// discard, and — worse — <c>RecordOutcomeAsync</c> and <c>MarkDeliveredAsync</c> write back, so a
     /// transiently-failing envelope would be <em>re-inserted</em> into a store that had just
     /// been emptied. On the logout this method exists for, that resurrects the previous
     /// user's data.
@@ -189,7 +189,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     private enum SendOutcome
     {
         /// <summary>Delivered; the envelope is out of the outbox.</summary>
-        Synced,
+        Delivered,
 
         /// <summary>Rejected or out of budget; the envelope will not be attempted again.</summary>
         DeadLettered,
@@ -235,10 +235,10 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
                 // resource — server-assigned ids, normalised values — which the caller never
                 // saw and may want to reconcile against.
                 var succeeded = await OutcomeFromAsync(
-                    response, envelope, SyncOutcomeKind.Succeeded, ct).ConfigureAwait(false);
+                    response, envelope, DeliveryOutcomeKind.Succeeded, ct).ConfigureAwait(false);
 
                 await MarkDeliveredAsync(envelope, succeeded, ct).ConfigureAwait(false);
-                return SendOutcome.Synced;
+                return SendOutcome.Delivered;
             }
 
             // A 4xx describes the request, not the connection. Replaying it unchanged
@@ -248,7 +248,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
             if (IsPermanentFailure(response.StatusCode))
             {
                 var rejected = await OutcomeFromAsync(
-                    response, envelope, SyncOutcomeKind.Rejected, ct).ConfigureAwait(false);
+                    response, envelope, DeliveryOutcomeKind.Rejected, ct).ConfigureAwait(false);
 
                 await DeadLetterAsync(envelope, rejected, ct).ConfigureAwait(false);
                 return SendOutcome.DeadLettered;
@@ -257,7 +257,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
             // The server answered, and not with a refusal. Nothing is charged and nothing is
             // scheduled: the envelope keeps its place and the next flush tries again.
             var transient = await OutcomeFromAsync(
-                response, envelope, SyncOutcomeKind.TransientFailure, ct).ConfigureAwait(false);
+                response, envelope, DeliveryOutcomeKind.TransientFailure, ct).ConfigureAwait(false);
 
             await RecordOutcomeAsync(envelope, transient, ct).ConfigureAwait(false);
             return SendOutcome.Deferred;
@@ -272,17 +272,17 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     // outcome delivered only as an event is an outcome nobody hears about. See issue 40.
     // -------------------------------------------------------------------------
 
-    /// <summary>Builds a <see cref="SyncOutcome"/> from a response, reading a capped body.</summary>
-    private async Task<SyncOutcome> OutcomeFromAsync(
+    /// <summary>Builds a <see cref="DeliveryOutcome"/> from a response, reading a capped body.</summary>
+    private async Task<DeliveryOutcome> OutcomeFromAsync(
         HttpResponseMessage response,
         Envelope envelope,
-        SyncOutcomeKind kind,
+        DeliveryOutcomeKind kind,
         CancellationToken ct)
     {
         var (body, truncated) = await ReadCappedBodyAsync(
             response.Content, _options.MaxOutcomeBodyBytes, ct).ConfigureAwait(false);
 
-        return new SyncOutcome
+        return new DeliveryOutcome
         {
             Kind = kind,
             StatusCode = (int)response.StatusCode,
@@ -293,10 +293,10 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
         };
     }
 
-    private static SyncOutcome TransportOutcome(HttpRequestException ex) =>
+    private static DeliveryOutcome TransportOutcome(HttpRequestException ex) =>
         new()
         {
-            Kind = SyncOutcomeKind.TransportFailure,
+            Kind = DeliveryOutcomeKind.TransportFailure,
             Error = ex.Message,
             OccurredUtc = DateTimeOffset.UtcNow,
         };
@@ -343,13 +343,13 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     }
 
     /// <summary>Persists <paramref name="outcome"/> against the envelope.</summary>
-    private async Task RecordOutcomeAsync(Envelope envelope, SyncOutcome outcome, CancellationToken ct)
+    private async Task RecordOutcomeAsync(Envelope envelope, DeliveryOutcome outcome, CancellationToken ct)
     {
         envelope.LastOutcome = outcome;
         await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
     }
 
-    private static SyncEvent EventFor(SyncEventType type, Envelope envelope, SyncOutcome? outcome) =>
+    private static HyperwycEvent EventFor(HyperwycEventType type, Envelope envelope, DeliveryOutcome? outcome) =>
         new(type,
             envelope.Url,
             envelope.Method,
@@ -374,14 +374,14 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     /// own growth and eviction problem. A consumer that must reconcile after being killed
     /// mid-flush can re-read the resource — see issue 40.
     /// </remarks>
-    private async Task MarkDeliveredAsync(Envelope envelope, SyncOutcome outcome, CancellationToken ct)
+    private async Task MarkDeliveredAsync(Envelope envelope, DeliveryOutcome outcome, CancellationToken ct)
     {
-        await _store.MarkSyncedAsync(envelope.Id, ct).ConfigureAwait(false);
+        await _store.MarkDeliveredAsync(envelope.Id, ct).ConfigureAwait(false);
 
-        _events.Publish(EventFor(SyncEventType.OnSynced, envelope, outcome));
+        _events.Publish(EventFor(HyperwycEventType.OnDelivered, envelope, outcome));
 
         using var request = BuildRequest(envelope);
-        if (_options.Routes.Resolve(request.RequestUri).InvalidateCacheOnWrite)
+        if (_options.Routes.PolicyFor(request.RequestUri).InvalidateCacheOnWrite)
         {
             var prefix = HyperwycHandler.DeriveInvalidationPrefix(request.RequestUri);
             await _store.InvalidateCacheForPrefixAsync(prefix, ct).ConfigureAwait(false);
@@ -390,18 +390,18 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
 
     /// <remarks>
     /// The outcome is written before the move rather than as part of it, which keeps
-    /// <see cref="ISyncStore"/> unchanged. The two writes are not atomic: a crash between them
+    /// <see cref="IHyperwycStore"/> unchanged. The two writes are not atomic: a crash between them
     /// leaves the envelope carrying its outcome but still in the outbox, so it is retried and
     /// — classification being deterministic on the status code — reaches the same verdict. A
     /// retry that should have been terminal, once, on a crash. That is a better trade than a
     /// breaking change to a public interface.
     /// </remarks>
-    private async Task DeadLetterAsync(Envelope envelope, SyncOutcome outcome, CancellationToken ct)
+    private async Task DeadLetterAsync(Envelope envelope, DeliveryOutcome outcome, CancellationToken ct)
     {
         await RecordOutcomeAsync(envelope, outcome, ct).ConfigureAwait(false);
         await _store.MoveToDeadLetterAsync(envelope.Id, ct).ConfigureAwait(false);
 
-        _events.Publish(EventFor(SyncEventType.OnFailed, envelope, envelope.LastOutcome));
+        _events.Publish(EventFor(HyperwycEventType.OnFailed, envelope, envelope.LastOutcome));
     }
 
 
@@ -491,7 +491,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Stops the orchestrator without waiting for an in-flight flush to unwind.
+    /// Stops the processor without waiting for an in-flight flush to unwind.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -511,7 +511,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     public void Dispose() => Shutdown();
 
     /// <summary>
-    /// Stops the orchestrator and waits for an in-flight flush to observe
+    /// Stops the processor and waits for an in-flight flush to observe
     /// cancellation before returning.
     /// </summary>
     /// <remarks>
@@ -540,7 +540,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// The teardown both disposal paths share: stop listening, cancel everything
-    /// in flight, and mark the orchestrator disposed.
+    /// in flight, and mark the processor disposed.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -572,7 +572,7 @@ internal sealed class SyncOrchestrator : IDisposable, IAsyncDisposable
     // Nested observer
     // -------------------------------------------------------------------------
 
-    private sealed class ConnectivityObserver(SyncOrchestrator owner) : IObserver<bool>
+    private sealed class ConnectivityObserver(OutboxProcessor owner) : IObserver<bool>
     {
         public void OnNext(bool connected)
         {

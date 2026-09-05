@@ -4,7 +4,7 @@ using Hyperwyc.Models;
 namespace Hyperwyc;
 
 /// <summary>
-/// An in-process, non-persistent <see cref="ISyncStore"/> backed by a
+/// An in-process, non-persistent <see cref="IHyperwycStore"/> backed by a
 /// thread-safe in-memory dictionary. Suitable for testing and for scenarios
 /// where durability is not required.
 /// </summary>
@@ -12,7 +12,7 @@ namespace Hyperwyc;
 /// All state is lost when the process exits. For durable persistence use
 /// <c>Hyperwyc.Cabinet</c> instead.
 /// </remarks>
-public sealed class InMemorySyncStore : ISyncStore
+public sealed class InMemoryStore : IHyperwycStore
 {
     private readonly Dictionary<string, Envelope> _store = new();
     private readonly SemaphoreSlim _lock = new(1, 1);
@@ -65,7 +65,7 @@ public sealed class InMemorySyncStore : ISyncStore
     }
 
     /// <inheritdoc/>
-    public async Task MarkSyncedAsync(string id, CancellationToken ct = default)
+    public async Task MarkDeliveredAsync(string id, CancellationToken ct = default)
     {
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try

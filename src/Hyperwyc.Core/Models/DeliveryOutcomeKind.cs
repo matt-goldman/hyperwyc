@@ -4,7 +4,7 @@ namespace Hyperwyc.Models;
 /// What happened on a delivery attempt. <see cref="Succeeded"/> and <see cref="Rejected"/> are
 /// final; the other two leave the envelope in the outbox for the next flush.
 /// </summary>
-public enum SyncOutcomeKind
+public enum DeliveryOutcomeKind
 {
     /// <summary>The server accepted the request and answered with a success status.</summary>
     Succeeded,

@@ -1,7 +1,7 @@
 namespace Hyperwyc.Cabinet;
 
 /// <summary>
-/// Configuration for the Cabinet-backed <see cref="CabinetSyncStore"/>.
+/// Configuration for the Cabinet-backed <see cref="CabinetStore"/>.
 /// </summary>
 /// <remarks>
 /// Storage-specific settings live here rather than on <see cref="HyperwycOptions"/>,

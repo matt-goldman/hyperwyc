@@ -21,13 +21,13 @@ public class SyntheticResponseBodyTests
     private sealed record Product(int Id, string? Name);
 
     private static HyperwycHandler BuildHandler(
-        InMemorySyncStore? store = null,
+        InMemoryStore? store = null,
         bool isConnected = false,
-        CacheStrategy strategy = CacheStrategy.CacheFirst) =>
+        SourcePriority strategy = SourcePriority.CacheFirst) =>
         new(
-            store ?? new InMemorySyncStore(),
+            store ?? new InMemoryStore(),
             new FakeConnectivityService(isConnected),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             OptionsFor(strategy))
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
 
@@ -60,7 +60,7 @@ public class SyntheticResponseBodyTests
     [Fact]
     public async Task QueuedWrite_DeserialisesToNullRatherThanThrowing()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using var client = new HttpClient(BuildHandler(store));
 
         var response = await client.PostAsJsonAsync(
@@ -108,7 +108,7 @@ public class SyntheticResponseBodyTests
     [Fact]
     public async Task CachedResponse_IsUnaffected()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var envelope = new Envelope { Url = "https://example.com/api/products", Method = "GET" };
         envelope.Response = new CachedResponse
         {
@@ -127,10 +127,10 @@ public class SyntheticResponseBodyTests
         Assert.Equal("Bucket Tooth", Assert.Single(products!).Name);
     }
 
-    private static HyperwycOptions OptionsFor(CacheStrategy strategy)
+    private static HyperwycOptions OptionsFor(SourcePriority strategy)
     {
         var options = new HyperwycOptions();
-        options.Routes.Default = new Models.RoutePolicy { Strategy = strategy };
+        options.Routes.Default = new Models.RoutePolicy { SourcePriority = strategy };
         return options;
     }
 }

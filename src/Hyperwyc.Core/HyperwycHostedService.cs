@@ -9,14 +9,14 @@ namespace Hyperwyc;
 /// and the device is currently online.
 /// </summary>
 internal sealed class HyperwycHostedService(
-    SyncOrchestrator orchestrator,
+    OutboxProcessor processor,
     IConnectivityService connectivity) : IHostedService
 {
     /// <inheritdoc/>
     public Task StartAsync(CancellationToken cancellationToken)
     {
         if (connectivity.IsConnected)
-            return orchestrator.FlushAsync(cancellationToken);
+            return processor.FlushAsync(cancellationToken);
 
         return Task.CompletedTask;
     }

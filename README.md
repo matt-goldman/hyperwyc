@@ -61,7 +61,7 @@ services.AddHyperwyc(options =>
 | Package | Use it when |
 |---|---|
 | `Hyperwyc` | Almost always. Includes durable [Cabinet](https://github.com/mattgoldman/cabinet)-backed storage and works with no configuration |
-| `Hyperwyc.Core` | You are supplying your own `ISyncStore`. No storage dependency; call `AddHyperwycCore<TStore>()` instead |
+| `Hyperwyc.Core` | You are supplying your own `IHyperwycStore`. No storage dependency; call `AddHyperwycCore<TStore>()` instead |
 
 The store is a type parameter on `AddHyperwycCore<TStore>()` rather than a setting, so forgetting it is a compile error rather than a silent fall back to in-memory storage that loses everything on restart:
 
@@ -129,7 +129,7 @@ instead of it.
 Hyperwyc sits in your `HttpClient` pipeline as a `DelegatingHandler` — the same interception point that a Service Worker occupies for browser `fetch()`. It transparently handles all outgoing requests:
 
 - **Online:** Requests are sent immediately. Responses are optionally cached according to your staleness policy.
-- **Offline writes:** Requests are serialised and queued locally. The caller receives a `202 Accepted` (by default) with an `X-Hyperwyc-Status: Queued` header. When connectivity is restored, the queue is replayed in order. `202` is used rather than `200` because the request has been accepted for later processing but not yet performed against the origin server. The eventual outcome arrives on [`SyncEvents`](#sync-events), correlated back to the write that produced it.
+- **Offline writes:** Requests are serialised and queued locally. The caller receives a `202 Accepted` (by default) with an `X-Hyperwyc-Status: Queued` header. When connectivity is restored, the queue is replayed in order. `202` is used rather than `200` because the request has been accepted for later processing but not yet performed against the origin server. The eventual outcome arrives on [`Events`](#events), correlated back to the write that produced it.
 - **Offline reads:** Served from cache if available (even if stale — any data is better than no data offline). If no cache exists, the caller receives a `200 OK` with `X-Hyperwyc-Status: Offline` and a body of `null`.
 - **Online reads (GET/HEAD/OPTIONS):** Served from cache if fresh; fetched from the API if stale or missing.
 
@@ -307,12 +307,12 @@ access, by supplying a stub. Hyperwyc never disposes it; one you provide stays y
 
 ---
 
-## Sync Events
+## Events
 
-Subscribe to `IObservable<SyncEvent>` to observe requests moving through the sync lifecycle:
+Subscribe to `IObservable<HyperwycEvent>` to observe requests moving through the sync lifecycle:
 
 ```csharp
-hyperwyc.SyncEvents.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
+hyperwyc.Events.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
 ```
 
 | Event | Meaning |
@@ -320,7 +320,7 @@ hyperwyc.SyncEvents.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
 | Event | Meaning | Carries an outcome |
 |-------|---------|---|
 | `OnQueued` | Request persisted to local queue (offline) | No — nothing has been attempted |
-| `OnSynced` | Request successfully delivered | Yes |
+| `OnDelivered` | Request successfully delivered | Yes |
 | `OnFailed` | Request dead-lettered — the server refused it | Yes |
 | `OnUpdated` | Cached response refreshed | No |
 
@@ -363,16 +363,16 @@ keep a copy.
 
 ### Reading the outcome
 
-`SyncOutcome` is what the server — or the network — actually said:
+`DeliveryOutcome` is what the server — or the network — actually said:
 
 ```csharp
-hyperwyc.SyncEvents
-    .Where(e => e.Type == SyncEventType.OnFailed)
+hyperwyc.Events
+    .Where(e => e.Type == HyperwycEventType.OnFailed)
     .Subscribe(e =>
     {
         var outcome = e.Outcome!;
 
-        if (outcome.Kind == SyncOutcomeKind.Rejected)
+        if (outcome.Kind == DeliveryOutcomeKind.Rejected)
         {
             // The server refused it. outcome.StatusCode is 409, and the reason is in the body.
             var detail = outcome.GetBodyAsText();
@@ -393,7 +393,7 @@ hyperwyc.SyncEvents
 | `Body`, `GetBodyAsText()`, `BodyTruncated` | The response body, up to `MaxOutcomeBodyBytes` (16 KB by default), clipped rather than dropped if longer |
 | `Error` | The transport failure message. A string rather than an exception, because this record is persisted |
 
-`OnSynced` carries an outcome too. A replayed `POST` may answer with the created resource —
+`OnDelivered` carries an outcome too. A replayed `POST` may answer with the created resource —
 server-assigned ids, normalised values — which the caller never saw, so this is how you reconcile
 your local record with what was actually stored.
 
@@ -680,7 +680,7 @@ you need the stream to emit — reach for your mocking library's observable supp
 `Subject<bool>` from `System.Reactive` in the test project only. And if a test is simply online
 throughout, `AlwaysOnlineConnectivityService` is already the fake you want.
 
-## When Hyperwyc Syncs
+## When Hyperwyc Delivers
 
 Queued writes are flushed on exactly two triggers:
 

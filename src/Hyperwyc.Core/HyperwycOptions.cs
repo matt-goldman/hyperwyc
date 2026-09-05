@@ -3,7 +3,7 @@ using Hyperwyc.Interfaces;
 namespace Hyperwyc;
 
 /// <summary>
-/// Configuration options for <see cref="HyperwycHandler"/> and <see cref="SyncOrchestrator"/>.
+/// Configuration options for <see cref="HyperwycHandler"/> and <see cref="OutboxProcessor"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -13,7 +13,7 @@ namespace Hyperwyc;
 /// Hyperwyc with a .NET DI container.
 /// </para>
 /// <para>
-/// The <see cref="ISyncStore"/> is deliberately absent from this class. It is supplied
+/// The <see cref="IHyperwycStore"/> is deliberately absent from this class. It is supplied
 /// as a type parameter to <c>AddHyperwycCore&lt;TStore&gt;()</c> so that a missing store
 /// is a compile-time error rather than a silent fall back to non-durable storage.
 /// </para>
@@ -113,9 +113,9 @@ public sealed class HyperwycOptions
     public int MaxCachedResponseBodyBytes { get; set; } = 512 * 1024;
 
     /// <summary>
-    /// Maximum response body size (in bytes) captured onto a <see cref="Models.SyncOutcome"/>
+    /// Maximum response body size (in bytes) captured onto a <see cref="Models.DeliveryOutcome"/>
     /// when a queued write is delivered or rejected. Longer bodies are clipped and flagged
-    /// with <see cref="Models.SyncOutcome.BodyTruncated"/>. Defaults to 16 384 bytes (16 KB).
+    /// with <see cref="Models.DeliveryOutcome.BodyTruncated"/>. Defaults to 16 384 bytes (16 KB).
     /// Set to zero to capture no bodies at all.
     /// </summary>
     /// <remarks>
@@ -133,7 +133,7 @@ public sealed class HyperwycOptions
 
 
     /// <summary>
-    /// When <see langword="true"/>, the <see cref="SyncOrchestrator"/> triggers
+    /// When <see langword="true"/>, the <see cref="OutboxProcessor"/> triggers
     /// an outbox flush immediately on startup if the device is currently online.
     /// Defaults to <see langword="true"/>.
     /// </summary>

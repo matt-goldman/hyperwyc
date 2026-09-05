@@ -22,7 +22,7 @@ The consequences run from wasteful to wrong:
 
 `no-store` is the serious one. An endpoint returning something the server has explicitly said not
 to retain — a one-time token, a payment detail, a document under a retention policy — ends up in
-`CabinetSyncStore` on the device, protected only by the default derived key
+`CabinetStore` on the device, protected only by the default derived key
 ([issue 32](32-default-encryption-key.md)).
 
 ## Why this is Hyperwyc's problem, and why the Service Worker precedent does not excuse it

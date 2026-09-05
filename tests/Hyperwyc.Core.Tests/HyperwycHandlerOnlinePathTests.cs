@@ -12,7 +12,7 @@ public class HyperwycHandlerOnlinePathTests
     // -------------------------------------------------------------------------
 
     private static HyperwycHandler BuildHandler(
-        InMemorySyncStore store,
+        InMemoryStore store,
         StubHttpMessageHandler inner,
         bool shouldInvalidate = true,
         bool cacheIsStale = true)
@@ -20,7 +20,7 @@ public class HyperwycHandlerOnlinePathTests
         var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: true),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             Options(shouldInvalidate, cacheIsStale))
         {
             InnerHandler = inner,
@@ -53,7 +53,7 @@ public class HyperwycHandlerOnlinePathTests
     [Fact]
     public async Task OnlineWrite_2xx_InvalidatesCacheForUrl()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/orders"));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
@@ -66,12 +66,12 @@ public class HyperwycHandlerOnlinePathTests
     }
 
     [Fact]
-    public async Task OnlineWrite_2xx_PublishesOnSyncedEvent()
+    public async Task OnlineWrite_2xx_PublishesOnDeliveredEvent()
     {
-        var store = new InMemorySyncStore();
-        var events = new SyncEventStream();
-        SyncEvent? received = null;
-        events.Subscribe(new DelegateObserver<SyncEvent>(e => received = e));
+        var store = new InMemoryStore();
+        var events = new HyperwycEventStream();
+        HyperwycEvent? received = null;
+        events.Subscribe(new DelegateObserver<HyperwycEvent>(e => received = e));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.Created));
         var handler = new HyperwycHandler(
@@ -85,13 +85,13 @@ public class HyperwycHandlerOnlinePathTests
         await client.PostAsync("https://example.com/api/orders", content: null);
 
         Assert.NotNull(received);
-        Assert.Equal(SyncEventType.OnSynced, received!.Type);
+        Assert.Equal(HyperwycEventType.OnDelivered, received!.Type);
     }
 
     [Fact]
     public async Task OnlineWrite_2xx_WithInvalidationDisabled_DoesNotClearCache()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/orders"));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
@@ -106,7 +106,7 @@ public class HyperwycHandlerOnlinePathTests
     [Fact]
     public async Task OnlineWrite_2xx_ReturnsResponseToCallerWithCorrectStatusCode()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.Created));
         using var client = MakeClient(BuildHandler(store, stub));
 
@@ -118,7 +118,7 @@ public class HyperwycHandlerOnlinePathTests
     [Fact]
     public async Task OnlineWrite_2xx_NumericId_InvalidatesCollectionAndResourceCache()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         // Both the collection and the specific resource are cached.
         await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/orders"));
         await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/orders/42"));
@@ -137,7 +137,7 @@ public class HyperwycHandlerOnlinePathTests
     [Fact]
     public async Task OnlineWrite_2xx_GuidId_InvalidatesCollectionCache()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var id = "550e8400-e29b-41d4-a716-446655440000";
         await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/notes"));
         await store.UpsertAsync(SeedCachedEnvelope($"https://example.com/api/notes/{id}"));
@@ -182,7 +182,7 @@ public class HyperwycHandlerOnlinePathTests
     [Fact]
     public async Task OnlineWrite_Non2xx_DoesNotInvalidateCache()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/orders"));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.InternalServerError));
@@ -195,12 +195,12 @@ public class HyperwycHandlerOnlinePathTests
     }
 
     [Fact]
-    public async Task OnlineWrite_Non2xx_DoesNotPublishOnSyncedEvent()
+    public async Task OnlineWrite_Non2xx_DoesNotPublishOnDeliveredEvent()
     {
-        var store = new InMemorySyncStore();
-        var events = new SyncEventStream();
-        var received = new List<SyncEvent>();
-        events.Subscribe(new DelegateObserver<SyncEvent>(received.Add));
+        var store = new InMemoryStore();
+        var events = new HyperwycEventStream();
+        var received = new List<HyperwycEvent>();
+        events.Subscribe(new DelegateObserver<HyperwycEvent>(received.Add));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.BadRequest));
         var handler = new HyperwycHandler(
@@ -219,7 +219,7 @@ public class HyperwycHandlerOnlinePathTests
     [Fact]
     public async Task OnlineWrite_Non2xx_ReturnsErrorResponseToCaller()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
         using var client = MakeClient(BuildHandler(store, stub));
 
@@ -235,7 +235,7 @@ public class HyperwycHandlerOnlinePathTests
     [Fact]
     public async Task OnlineRead_FreshCache_DoesNotCallNetwork()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", body: "[1,2,3]"));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
@@ -249,7 +249,7 @@ public class HyperwycHandlerOnlinePathTests
     [Fact]
     public async Task OnlineRead_FreshCache_ReturnsCachedStatusAndBody()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", body: "[1,2,3]", statusCode: 200));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.InternalServerError));
@@ -269,7 +269,7 @@ public class HyperwycHandlerOnlinePathTests
     [Fact]
     public async Task OnlineRead_StaleCache_CallsNetworkAndReturnsFreshResponse()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", body: "[\"stale\"]"));
 
         var freshResponse = new HttpResponseMessage(HttpStatusCode.OK)
@@ -289,7 +289,7 @@ public class HyperwycHandlerOnlinePathTests
     [Fact]
     public async Task OnlineRead_NoCache_CallsNetworkAndStoresResponse()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{\"id\":1}"),
@@ -306,10 +306,10 @@ public class HyperwycHandlerOnlinePathTests
     [Fact]
     public async Task OnlineRead_NetworkSuccess_PublishesOnUpdatedEvent()
     {
-        var store = new InMemorySyncStore();
-        var events = new SyncEventStream();
-        SyncEvent? received = null;
-        events.Subscribe(new DelegateObserver<SyncEvent>(e => received = e));
+        var store = new InMemoryStore();
+        var events = new HyperwycEventStream();
+        HyperwycEvent? received = null;
+        events.Subscribe(new DelegateObserver<HyperwycEvent>(e => received = e));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
@@ -326,13 +326,13 @@ public class HyperwycHandlerOnlinePathTests
         await client.GetAsync("https://example.com/api/items");
 
         Assert.NotNull(received);
-        Assert.Equal(SyncEventType.OnUpdated, received!.Type);
+        Assert.Equal(HyperwycEventType.OnUpdated, received!.Type);
     }
 
     [Fact]
     public async Task OnlineRead_Non2xxNetwork_DoesNotStoreResponse()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.NotFound));
         using var client = MakeClient(BuildHandler(store, stub));
 

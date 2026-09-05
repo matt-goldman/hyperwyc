@@ -11,7 +11,7 @@ namespace Hyperwyc.Interfaces;
 /// <b>Implementations must be safe for concurrent use, including concurrent writes.</b>
 /// This is a requirement rather than a nicety: <c>HyperwycHandler</c> is registered transient
 /// and runs on whatever thread its caller used, so two overlapping HTTP requests reach the
-/// store at the same time, and an orchestrator flush runs on a background task alongside
+/// store at the same time, and an processor flush runs on a background task alongside
 /// them. A store that serialises nothing will interleave read-modify-write sequences and,
 /// if it persists to a file, can corrupt or lose writes outright.
 /// </para>
@@ -21,7 +21,7 @@ namespace Hyperwyc.Interfaces;
 /// finer-grained locking of its own is welcome to do better, but it must not do less.
 /// </para>
 /// </remarks>
-public interface ISyncStore
+public interface IHyperwycStore
 {
     /// <summary>
     /// Returns the most-recently cached response envelope for <paramref name="url"/>,
@@ -44,7 +44,7 @@ public interface ISyncStore
     /// Marks the envelope identified by <paramref name="id"/> as successfully
     /// synced and removes it from the outbox.
     /// </summary>
-    Task MarkSyncedAsync(string id, CancellationToken ct = default);
+    Task MarkDeliveredAsync(string id, CancellationToken ct = default);
 
     /// <summary>
     /// Moves the envelope identified by <paramref name="id"/> to the dead-letter

@@ -66,7 +66,7 @@ public class BinaryBodyTests
     [Fact]
     public async Task QueuedBinaryRequest_IsCapturedByteForByte()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var payload = PngBytes();
 
         using var client = new HttpClient(OfflineHandler(store));
@@ -81,7 +81,7 @@ public class BinaryBodyTests
     [Fact]
     public async Task ReplayedBinaryRequest_ArrivesByteForByte()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var payload = PngBytes();
 
         using (var client = new HttpClient(OfflineHandler(store)))
@@ -105,7 +105,7 @@ public class BinaryBodyTests
     {
         const string Json = """{"quantity":60,"note":"café — naïve ☕"}""";
 
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         using (var client = new HttpClient(OfflineHandler(store)))
         {
             await client.PostAsync(Url, new StringContent(Json, Encoding.UTF8, "application/json"));
@@ -127,7 +127,7 @@ public class BinaryBodyTests
     [Fact]
     public async Task CachedBinaryResponse_IsServedByteForByte()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var payload = PngBytes();
 
         var networkContent = new ByteArrayContent(payload);
@@ -151,7 +151,7 @@ public class BinaryBodyTests
     [Fact]
     public async Task CachedGzipResponse_KeepsItsBytesAndContentEncoding()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var compressed = Gzip("""{"products":[{"id":1}]}""");
 
         var networkContent = new ByteArrayContent(compressed);
@@ -182,7 +182,7 @@ public class BinaryBodyTests
     {
         const string Json = """{"name":"café — naïve ☕"}""";
 
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(Json, Encoding.UTF8, "application/json"),
@@ -205,7 +205,7 @@ public class BinaryBodyTests
     [Fact]
     public async Task OversizedBinaryResponse_IsNotCached()
     {
-        var store = new InMemorySyncStore();
+        var store = new InMemoryStore();
         var big = new byte[4096];
         Random.Shared.NextBytes(big);
 
@@ -217,7 +217,7 @@ public class BinaryBodyTests
         var handler = new HyperwycHandler(
             store,
             new FakeConnectivityService(isConnected: true),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             new HyperwycOptions { MaxCachedResponseBodyBytes = 1024 })
         { InnerHandler = stub };
 
@@ -231,24 +231,24 @@ public class BinaryBodyTests
     // Helpers
     // -------------------------------------------------------------------------
 
-    private static HyperwycHandler OfflineHandler(InMemorySyncStore store) =>
+    private static HyperwycHandler OfflineHandler(InMemoryStore store) =>
         new(store,
             new FakeConnectivityService(isConnected: false),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             new HyperwycOptions())
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
 
-    private static HyperwycHandler OnlineHandler(InMemorySyncStore store, HttpMessageHandler inner) =>
+    private static HyperwycHandler OnlineHandler(InMemoryStore store, HttpMessageHandler inner) =>
         new(store,
             new FakeConnectivityService(isConnected: true),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             new HyperwycOptions())
         { InnerHandler = inner };
 
-    private static SyncOrchestrator Orchestrator(InMemorySyncStore store, HttpMessageHandler transport) =>
+    private static OutboxProcessor Orchestrator(InMemoryStore store, HttpMessageHandler transport) =>
         new(store,
             new FakeConnectivityService(isConnected: true),
-            new SyncEventStream(),
+            new HyperwycEventStream(),
             new HyperwycOptions(),
             transport);
 
