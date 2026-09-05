@@ -9,6 +9,10 @@ Hyperwyc answers a request itself in exactly two cases:
 | A write was queued for later delivery | `202 Accepted` | `Queued` |
 | A read had nothing to serve | `200 OK` | `Offline` |
 
+A write is queued either because the connectivity service reported offline, or because it was
+attempted and [the transport could not establish a connection](offline-writes.md). Both produce
+the identical response — the caller cannot tell which happened, and does not need to.
+
 Everything else your caller sees — including a cache hit — is a real server response, returned
 unchanged.
 
@@ -72,9 +76,10 @@ usually an `HttpRequestException`, exactly as if Hyperwyc were not installed:
 
 | Case | Why |
 |---|---|
-| An offline **write** to a [`NetworkOnly`](caching.md) route | The route declared that deferring is the wrong answer, so Hyperwyc does not take custody |
+| A **write** to a [`NetworkOnly`](caching.md) route, offline or on a failed transport | The route declared that deferring is the wrong answer, so Hyperwyc does not take custody |
 | The store could not be written | Nothing is holding the write, so answering `202` would promise something nobody is keeping |
 | The store could not be read at all | Hyperwyc [steps aside for the session](storage.md) |
+| A write whose transport failed **after** a connection was made | The server may have processed it; see [offline writes](offline-writes.md) |
 
 An offline **read** on a `NetworkOnly` route is the exception: it gets the `200`/`Offline`
 response, because there is nothing to pass through to.

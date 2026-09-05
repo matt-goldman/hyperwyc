@@ -295,8 +295,14 @@ API is reachable is a request to your API.** Hyperwyc makes that test on every f
 is a hint about which path to try first; the transport is what actually knows.
 
 **`AlwaysOnlineConnectivityService`** reports connected, always. Legitimate for a host that
-genuinely is — or when you want the response cache and nothing else. **Nothing is ever queued
-or replayed under it**, so don't reach for it just to get past the startup error.
+genuinely is — or when you want the response cache and nothing else.
+
+It is not as destructive as it once was: a write attempted under it against a dead network now
+fails at the transport and is [queued from there](offline-writes.md), so writes are not lost.
+What you give up is everything that depends on *knowing* — every offline read pays a full
+transport timeout before degrading, nothing is replayed automatically because no connectivity
+signal ever fires, and a `CacheFirst` route with a stale entry throws rather than serving. Choose
+it because your host really is always connected, not to get past the startup error.
 
 ## Faking connectivity in your own tests
 

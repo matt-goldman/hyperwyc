@@ -126,17 +126,43 @@ public sealed class HyperwycHandler : DelegatingHandler
         if (Policy(request).SourcePriority == SourcePriority.NetworkOnly)
             return await base.SendAsync(request, ct).ConfigureAwait(false);
 
+        var queued = await TryQueueWriteAsync(request, ct).ConfigureAwait(false);
+        if (queued is not null)
+            return queued;
+
+        // Nothing is holding this write, so pass it through rather than answer 202 for a
+        // request nobody is keeping.
+        return await base.SendAsync(request, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Persists a write to the outbox and builds its <c>202</c>, or returns
+    /// <see langword="null"/> if it could not be taken into custody.
+    /// </summary>
+    /// <remarks>
+    /// Shared by both routes into the outbox: a write made while the connectivity service
+    /// reports offline, and one whose transport failed before reaching the API. They are the
+    /// same situation reached by different means, so they produce the same response.
+    /// </remarks>
+    private async Task<HttpResponseMessage?> TryQueueWriteAsync(HttpRequestMessage request, CancellationToken ct)
+    {
         // Buffer content before the synchronous read inside Envelope.ForRequest.
         if (request.Content is not null)
-            await request.Content.LoadIntoBufferAsync(ct).ConfigureAwait(false);
+        {
+            try
+            {
+                await request.Content.LoadIntoBufferAsync(ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // A body that cannot be read is a write that cannot be replayed.
+                return null;
+            }
+        }
 
         var envelope = Envelope.ForRequest(request, _clientName);
         if (!await TryStoreAsync(() => _store.UpsertAsync(envelope, ct)).ConfigureAwait(false))
-        {
-            // The store failed on the way in, so there is nothing holding this write. Pass it
-            // through rather than answer 202 for a request nobody is keeping.
-            return await base.SendAsync(request, ct).ConfigureAwait(false);
-        }
+            return null;
 
         _events.Publish(new HyperwycEvent(
             HyperwycEventType.OnQueued,
@@ -186,7 +212,27 @@ public sealed class HyperwycHandler : DelegatingHandler
         HttpRequestMessage request,
         CancellationToken ct)
     {
-        var response = await base.SendAsync(request, ct).ConfigureAwait(false);
+        HttpResponseMessage response;
+
+        try
+        {
+            response = await base.SendAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex) when (NeverReachedTheApi(ex)
+            && Policy(request).SourcePriority != SourcePriority.NetworkOnly)
+        {
+            // The connectivity service said online; the transport disagreed, and the transport
+            // is the one that knows. No connection was established, so nothing was sent — this
+            // is an offline write arrived at by a different route, and it gets the same answer.
+            //
+            // Without this, a wrong connectivity answer costs the write rather than an attempt,
+            // which would make correctness rest on the one thing Hyperwyc cannot verify.
+            var queued = await TryQueueWriteAsync(request, ct).ConfigureAwait(false);
+            if (queued is not null)
+                return queued;
+
+            throw;
+        }
 
         if (response.IsSuccessStatusCode)
         {
@@ -282,6 +328,31 @@ public sealed class HyperwycHandler : DelegatingHandler
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Whether a transport failure means the request never left the device.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Only these four say the connection was never established, so no part of the request was
+    /// transmitted and replaying it cannot duplicate anything. They are also the failures a
+    /// later network change could plausibly fix, which matters because a connectivity signal is
+    /// the only thing that will cause the outbox to be tried again.
+    /// </para>
+    /// <para>
+    /// Deliberately excluded: <see cref="HttpRequestError.InvalidResponse"/>,
+    /// <see cref="HttpRequestError.ResponseEnded"/> and
+    /// <see cref="HttpRequestError.HttpProtocolError"/> mean a connection was made and the
+    /// server may well have processed the request; <see cref="HttpRequestError.Unknown"/>
+    /// cannot be reasoned about; and the remainder are client configuration faults that no
+    /// amount of connectivity will resolve.
+    /// </para>
+    /// </remarks>
+    private static bool NeverReachedTheApi(HttpRequestException ex) =>
+        ex.HttpRequestError is HttpRequestError.NameResolutionError
+                            or HttpRequestError.ConnectionError
+                            or HttpRequestError.SecureConnectionError
+                            or HttpRequestError.ProxyTunnelError;
 
     private static HttpResponseMessage BuildResponseFromEnvelope(Envelope envelope)
     {

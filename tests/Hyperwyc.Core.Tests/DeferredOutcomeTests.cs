@@ -215,11 +215,11 @@ public class DeferredOutcomeTests
     }
 
     [Fact]
-    public async Task ServerErrorAndRejection_AreDistinguishable()
+    public async Task ServerErrorAndRejection_AreBothFinal_AndCarryTheirOwnStatus()
     {
-        // There is no retry budget to exhaust (ADR 0004), so the distinction a consumer needs
-        // is between "the server refused this" and "the server was unwell" — the first is
-        // final, the second leaves the write queued for the next flush.
+        // Both are answers, so both are final: the request reached the API either way. What a
+        // consumer needs is not a retry distinction Hyperwyc cannot honour, but the status the
+        // server actually gave, so the application can decide what to do about it.
         var store = new InMemoryStore();
         await store.UpsertAsync(Outbox("refused", body: "refused"));
         await store.UpsertAsync(Outbox("unwell", body: "unwell"));
@@ -239,14 +239,19 @@ public class DeferredOutcomeTests
         await using var orchestrator = Orchestrator(store, transport, stream);
         await orchestrator.FlushAsync();
 
-        var failed = Assert.Single(events, e => e.Type == HyperwycEventType.OnFailed);
-        Assert.Equal("refused", failed.CorrelationId);
-        Assert.Equal(DeliveryOutcomeKind.Rejected, failed.Outcome?.Kind);
+        var failures = events.Where(e => e.Type == HyperwycEventType.OnFailed).ToList();
+        Assert.Equal(2, failures.Count);
 
-        // The unwell one is still queued, and says why.
-        var pending = Assert.Single(await store.GetPendingOutboxAsync());
-        Assert.Equal("unwell", pending.CorrelationId);
-        Assert.Equal(DeliveryOutcomeKind.TransientFailure, pending.LastOutcome?.Kind);
+        var refused = Assert.Single(failures, e => e.CorrelationId == "refused");
+        Assert.Equal(DeliveryOutcomeKind.Rejected, refused.Outcome?.Kind);
+        Assert.Equal(409, refused.Outcome?.StatusCode);
+
+        var unwell = Assert.Single(failures, e => e.CorrelationId == "unwell");
+        Assert.Equal(DeliveryOutcomeKind.Rejected, unwell.Outcome?.Kind);
+        Assert.Equal(503, unwell.Outcome?.StatusCode);
+
+        // Neither is left in the outbox waiting for a flush that may never come.
+        Assert.Empty(await store.GetPendingOutboxAsync());
     }
 
 

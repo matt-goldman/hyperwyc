@@ -2,7 +2,7 @@ namespace Hyperwyc.Models;
 
 /// <summary>
 /// What happened on a delivery attempt. <see cref="Succeeded"/> and <see cref="Rejected"/> are
-/// final; the other two leave the envelope in the outbox for the next flush.
+/// final; only <see cref="TransportFailure"/> leaves the envelope in the outbox.
 /// </summary>
 public enum DeliveryOutcomeKind
 {
@@ -10,16 +10,11 @@ public enum DeliveryOutcomeKind
     Succeeded,
 
     /// <summary>
-    /// The server rejected the request outright — a 4xx other than 408 or 429. Replaying it
-    /// unchanged produces the same answer, so it is never retried.
+    /// The server answered with a non-success status. Any answer means the request reached the
+    /// API, so Hyperwyc's work is done and the outcome is final — whether to try again is the
+    /// application's decision, on information Hyperwyc does not have.
     /// </summary>
     Rejected,
-
-    /// <summary>
-    /// The server answered, but with something worth trying again: a 5xx, a 408, or a 429.
-    /// The envelope stays in the outbox and is attempted again on the next flush.
-    /// </summary>
-    TransientFailure,
 
     /// <summary>
     /// No response was received — the connection failed, DNS did not resolve, or a captive

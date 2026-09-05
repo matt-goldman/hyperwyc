@@ -214,16 +214,13 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
         /// <summary>Rejected or out of budget; the envelope will not be attempted again.</summary>
         DeadLettered,
 
-        /// <summary>Transient failure; the envelope stays queued for a later attempt.</summary>
-        Deferred,
-
         /// <summary>The network is unreachable, so the rest of the flush is pointless.</summary>
         ConnectivityLost,
     }
 
     /// <summary>
-    /// Makes a single delivery attempt. Retrying is not this method's job — a failed
-    /// attempt either dead-letters or is deferred to a later flush.
+    /// Makes a single delivery attempt. An envelope stays in the outbox only when no response
+    /// was received; any answer from the server is a final outcome.
     /// </summary>
     private async Task<SendOutcome> SendAsync(Envelope envelope, CancellationToken ct)
     {
@@ -261,26 +258,21 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
                 return SendOutcome.Delivered;
             }
 
-            // A 4xx describes the request, not the connection. Replaying it unchanged
-            // produces the same answer, and any failure the application knows how to
-            // resolve — a token refresh, say — has already had its turn further down the
-            // pipeline. Retrying here would only delay an outcome already known.
-            if (IsPermanentFailure(response.StatusCode))
-            {
-                var rejected = await OutcomeFromAsync(
-                    response, envelope, DeliveryOutcomeKind.Rejected, ct).ConfigureAwait(false);
+            // The server answered. Whatever it said, the request reached the API — which was
+            // Hyperwyc's whole job, and it is done. What the answer means is the
+            // application's business, not a network condition for Hyperwyc to retry.
+            //
+            // Retrying a 5xx here would be a worse retry than the one that already ran: the
+            // replay traverses the application's pipeline, so its own resilience handler has
+            // had its turn, on a schedule that tracks the failure. Hyperwyc's only trigger is
+            // a connectivity change, which is uncorrelated with a server recovering — and for
+            // a device that never goes offline again, never arrives at all. A write kept on
+            // that promise is a write kept forever. See ADR 0001.
+            var rejected = await OutcomeFromAsync(
+                response, envelope, DeliveryOutcomeKind.Rejected, ct).ConfigureAwait(false);
 
-                await DeadLetterAsync(envelope, rejected, ct).ConfigureAwait(false);
-                return SendOutcome.DeadLettered;
-            }
-
-            // The server answered, and not with a refusal. Nothing is charged and nothing is
-            // scheduled: the envelope keeps its place and the next flush tries again.
-            var transient = await OutcomeFromAsync(
-                response, envelope, DeliveryOutcomeKind.TransientFailure, ct).ConfigureAwait(false);
-
-            await RecordOutcomeAsync(envelope, transient, ct).ConfigureAwait(false);
-            return SendOutcome.Deferred;
+            await DeadLetterAsync(envelope, rejected, ct).ConfigureAwait(false);
+            return SendOutcome.DeadLettered;
         }
     }
 
@@ -378,15 +370,6 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
             RequestId: envelope.Id,
             RequestBody: envelope.RequestBody,
             Outcome: outcome);
-
-    /// <summary>
-    /// Whether <paramref name="statusCode"/> means "this request will never succeed",
-    /// as opposed to "not right now".
-    /// </summary>
-    private static bool IsPermanentFailure(HttpStatusCode statusCode) =>
-        (int)statusCode is >= 400 and < 500
-        && statusCode is not HttpStatusCode.RequestTimeout       // 408 — worth another go
-        && statusCode is not HttpStatusCode.TooManyRequests;     // 429 — explicitly "later"
 
     /// <remarks>
     /// The outcome is published but not persisted. A delivered envelope leaves the outbox, so

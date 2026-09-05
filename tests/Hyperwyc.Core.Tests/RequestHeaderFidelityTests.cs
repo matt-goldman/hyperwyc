@@ -298,23 +298,27 @@ public class RequestHeaderFidelityTests
         var queued = Assert.Single(await store.GetPendingOutboxAsync());
         Assert.Equal("order-42", queued.RequestHeaders[IdempotencyKeyHeader]);
 
-        // Fail the first attempt so the envelope is retried, then confirm the second
+        // Fail the first attempt at the transport, which is the only failure that leaves an
+        // envelope queued — any answer from the server is final. Then confirm the second
         // attempt carries the identical key rather than a fresh one.
         var keysSeen = new List<string>();
         var attempt = 0;
-        var transport = new StubHttpMessageHandler(req =>
+        var transport = new StubHttpMessageHandler((Func<HttpRequestMessage, HttpResponseMessage>)(req =>
         {
             attempt++;
             keysSeen.Add(req.Headers.GetValues(IdempotencyKeyHeader).Single());
-            return new HttpResponseMessage(
-                attempt == 1 ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.OK);
-        });
+
+            if (attempt == 1)
+                throw new HttpRequestException(HttpRequestError.ConnectionError, "unreachable");
+
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }));
 
         await using var orchestrator = BuildOrchestrator(store, transport);
         await orchestrator.FlushAsync();
 
-        var deferred = Assert.Single(await store.GetPendingOutboxAsync());
-        await store.UpsertAsync(deferred);
+        var stillQueued = Assert.Single(await store.GetPendingOutboxAsync());
+        await store.UpsertAsync(stillQueued);
 
         await orchestrator.FlushAsync();
 

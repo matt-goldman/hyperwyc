@@ -11,9 +11,9 @@ namespace Hyperwyc.Tests;
 /// ADR 0004 then removed the retry apparatus that had survived it.
 /// </summary>
 /// <remarks>
-/// There is no retry budget, no backoff and no scheduled follow-up. A write the server refuses
-/// is dead-lettered on the first attempt; anything else stays in the outbox and is tried again
-/// on the next flush, which happens on connectivity restored or application start.
+/// There is no retry budget, no backoff and no scheduled follow-up. Any answer from the server
+/// is a final outcome — the request reached the API, which was the job. Only a transport
+/// failure, where no response came back at all, leaves the envelope in the outbox.
 /// </remarks>
 public class DeliveryFailureTests
 {
@@ -138,57 +138,72 @@ public class DeliveryFailureTests
     }
 
     // -------------------------------------------------------------------------
-    // Transient failures stay in the outbox
+    // Any answer from the server is final
     // -------------------------------------------------------------------------
 
-    [Fact]
-    public async Task TransientFailure_LeavesTheEnvelopeQueuedForTheNextFlush()
+    [Theory]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]   // 503 — the server is unwell
+    [InlineData(HttpStatusCode.InternalServerError)]  // 500
+    [InlineData(HttpStatusCode.RequestTimeout)]       // 408 — once carved out as retryable
+    [InlineData(HttpStatusCode.TooManyRequests)]      // 429 — likewise
+    public async Task AnyResponse_IsFinal_EvenOnesThatLookRetryable(HttpStatusCode status)
     {
         var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
-        var transport = new CountingTransport(HttpStatusCode.ServiceUnavailable);
+        var transport = new CountingTransport(status);
         await using var orchestrator = BuildOrchestrator(store, transport);
 
         await orchestrator.FlushAsync();
 
+        // The server answered, so the request reached the API and Hyperwyc's job is done.
+        // Whether to try again needs information Hyperwyc does not have, and its only retry
+        // trigger — a connectivity change — has nothing to do with a server recovering.
         Assert.Equal(1, transport.CallCount);
-
-        var pending = Assert.Single(await store.GetPendingOutboxAsync());
-        Assert.False(pending.IsDeadLettered);
-
-        // The server answered, and not with a refusal — so the write is still live, and the
-        // outcome recorded against it says why it has not gone yet.
-        Assert.Equal(DeliveryOutcomeKind.TransientFailure, pending.LastOutcome?.Kind);
-        Assert.Equal(503, pending.LastOutcome?.StatusCode);
+        Assert.Empty(await store.GetPendingOutboxAsync());
     }
 
     [Fact]
-    public async Task TransientFailure_IsRetriedByTheNextFlush_WithNoBudgetToExhaust()
+    public async Task ServerError_IsNotAttemptedAgainByALaterFlush()
     {
         var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
         var failing = new CountingTransport(HttpStatusCode.ServiceUnavailable);
 
-        // Well past what the old five-attempt budget allowed. Nothing is counted, so nothing
-        // runs out: Hyperwyc keeps the write until the server takes it or the app discards it.
         await using (var orchestrator = BuildOrchestrator(store, failing))
         {
             for (var i = 0; i < 8; i++)
                 await orchestrator.FlushAsync();
         }
 
-        Assert.Equal(8, failing.CallCount);
-        Assert.Single(await store.GetPendingOutboxAsync());
-
-        var working = new CountingTransport(HttpStatusCode.OK);
-        await using (var orchestrator = BuildOrchestrator(store, working))
-            await orchestrator.FlushAsync();
-
+        // One attempt, not eight. Keeping it queued would promise a retry on an event that may
+        // never come — a device that never goes offline again never flushes again.
+        Assert.Equal(1, failing.CallCount);
         Assert.Empty(await store.GetPendingOutboxAsync());
     }
 
     [Fact]
-    public async Task TransientFailure_DoesNotDelayTheNextEnvelopeInTheFlush()
+    public async Task ServerError_RecordsTheOutcomeItDeadLetteredOn()
+    {
+        var store = new InMemoryStore();
+        await store.UpsertAsync(Outbox());
+        var events = new HyperwycEventStream();
+        var received = new List<HyperwycEvent>();
+        events.Subscribe(new DelegateObserver<HyperwycEvent>(received.Add));
+
+        await using var orchestrator = BuildOrchestrator(
+            store, new CountingTransport(HttpStatusCode.ServiceUnavailable), events: events);
+
+        await orchestrator.FlushAsync();
+
+        // Dead-lettering is not discarding: the status the server gave is reported, because it
+        // is what the application needs in order to decide whether to raise it again itself.
+        var failed = Assert.Single(received, e => e.Type == HyperwycEventType.OnFailed);
+        Assert.Equal(DeliveryOutcomeKind.Rejected, failed.Outcome?.Kind);
+        Assert.Equal(503, failed.Outcome?.StatusCode);
+    }
+
+    [Fact]
+    public async Task ServerError_DoesNotStopTheFlush()
     {
         var store = new InMemoryStore();
         await store.UpsertAsync(Outbox("https://example.com/api/flaky"));
@@ -204,11 +219,10 @@ public class DeliveryFailureTests
 
         await orchestrator.FlushAsync();
 
+        // A server answering at all proves the network is up, so the rest of the flush stands.
+        // Only a transport failure ends it.
         Assert.Equal(2, transport.CallCount);
-
-        // The good one is gone; the flaky one is deferred, not dead-lettered.
-        var pending = Assert.Single(await store.GetPendingOutboxAsync());
-        Assert.Contains("flaky", pending.Url);
+        Assert.Empty(await store.GetPendingOutboxAsync());
     }
 
 

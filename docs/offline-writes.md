@@ -33,18 +33,29 @@ Durability comes from the outbox being persistent, not from tidying up at exit.
 
 ## When a write fails
 
-Not every failure means the same thing, so Hyperwyc doesn't treat them the same way:
+One distinction decides everything: **did the server answer?**
 
 | Failure | What happens |
 |---|---|
-| `4xx` — the server rejected it | Dead-lettered immediately. Sending the identical request again cannot change the answer |
-| `5xx`, `408`, `429` — the server is struggling | Left queued, and attempted again on the next flush. There is no attempt budget: Hyperwyc keeps the write until the server takes it or you discard it |
-| Can't reach the network at all | The flush stops and nothing is held against the queued writes — the network being down says nothing about them |
+| The server answered, with anything other than success | Dead-lettered, and the status reported on [`Events`](events.md). The request reached the API, which was the job |
+| No response at all — the connection failed | Left queued. The flush stops and nothing is held against the remaining writes; the network being down says nothing about them |
 
-Hyperwyc's job is getting writes out once the network allows it, so that is the failure it
-retries. Anything your own handlers already deal with — refreshing a token, tripping a circuit
-breaker, retrying a flaky endpoint — has run before Hyperwyc sees the result, and it doesn't
-second-guess them.
+**Any answer is a final outcome, including a `500`, a `429` or a `503`.** That looks harsh until
+you ask what a retry here would actually be. Hyperwyc has exactly three triggers — application
+start, connectivity restored, and an explicit `FlushAsync()` — and none of them correlates with a
+server recovering. Requeuing a `503` schedules a retry on an unrelated event, and for a device
+that never goes offline again it schedules one that never arrives. A write kept on that promise
+is kept forever.
+
+Your own pipeline has already had the better attempt. A replay traverses it (see
+[Pipeline placement](pipeline.md)), so a resilience handler retries on a schedule that tracks the
+actual failure, with backoff and `Retry-After`, before Hyperwyc ever sees the result. Hyperwyc
+adding a second, worse retry on top would be duplicating a job that has an owner — see
+[ADR 0001](decisions/0001-idempotency-is-not-hyperwycs-remit.md).
+
+Dead-lettered is not discarded. The status, reason phrase and response body are recorded against
+the envelope and published, so the application can decide what to do with information Hyperwyc
+does not have.
 
 ## Duplicate writes
 
@@ -74,6 +85,26 @@ matters to you, approaches people use include:
 
 These are things people do, not a recommendation from Hyperwyc. Which one fits, or whether the
 concern applies at all, depends on your API.
+
+## Writes are queued on transport failure too, not just when you are offline
+
+Hyperwyc does not only queue when `IConnectivityService` says offline. If a write is attempted
+because the device reports connected, and **the transport cannot establish a connection at all**,
+that write is queued and answered with the same `202` as if it had been made offline.
+
+This matters because every connectivity implementation is wrong sometimes — a captive portal, a
+VPN interface that looks like a network, a signal that drops between the check and the send, or
+`AlwaysOnlineConnectivityService` on a device that is not. Without this, being wrong would cost
+the write. With it, being wrong costs an attempt.
+
+> **Only when nothing was sent.** Hyperwyc queues on the transport errors that mean no connection
+> was ever established — DNS failure, connection refused, TLS handshake failure, proxy tunnel
+> failure. If a connection *was* made and the failure came later, the request is not queued and
+> the exception reaches you: the server may have processed it, and quietly replaying it would
+> risk a duplicate on a guess. Those are also failures no connectivity change would fix.
+
+The same rule the rest of the library follows: connectivity is a hint about which path to try
+first, and the transport is what actually knows.
 
 ## Interrupted deliveries
 
