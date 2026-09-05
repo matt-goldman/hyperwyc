@@ -74,7 +74,7 @@ Two things follow:
   the more exposed they are to the replay hazard.** That inversion is the thing to document.
 - It is a defect in its own right, independent of backup: any iOS reinstall-with-restore silently
   loses the store. Needs verifying on device, then recording against 32.
-- What Hyperwyc *does* on encountering that store is [issue 49](49-unreadable-store-recovery.md),
+- What Hyperwyc *does* on encountering that store is [issue 49](Done/49-unreadable-store-recovery.md),
   which is a real defect rather than documentation: today it throws a raw `CryptographicException`
   from wherever the store is first read. 49 settles on reporting it and degrading to an empty
   store — Hyperwyc does not delete the files or refuse to start, since neither is a

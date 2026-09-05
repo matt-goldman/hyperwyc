@@ -1,3 +1,4 @@
+using static Hyperwyc.Tests.TestHealthFactory;
 using System.Net;
 using Hyperwyc.Models;
 using Hyperwyc.Tests.Fakes;
@@ -28,7 +29,7 @@ public class ResponseCacheReadTests
             store,
             new Fakes.FakeConnectivityService(isConnected: true),
             new HyperwycEventStream(),
-            options)
+            options, TestHealth())
         { InnerHandler = inner };
     }
 
@@ -129,7 +130,7 @@ public class ResponseCacheReadTests
             store,
             new Fakes.FakeConnectivityService(),
             events,
-            options)
+            options, TestHealth())
         {
             InnerHandler = new Fakes.StubHttpMessageHandler(
                 new HttpResponseMessage(HttpStatusCode.OK)

@@ -1,3 +1,4 @@
+using static Hyperwyc.Tests.TestHealthFactory;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -378,7 +379,7 @@ public class DeferredOutcomeTests
             new FakeConnectivityService(isConnected: true),
             events,
             options ?? new HyperwycOptions(),
-            transport);
+            transport, TestHealth());
 
     private static ServiceProvider BuildOfflineClient(
         InMemoryStore store, out IHttpClientFactory factory)

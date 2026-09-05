@@ -1,3 +1,4 @@
+using static Hyperwyc.Tests.TestHealthFactory;
 using System.Net;
 using Hyperwyc.Models;
 using Hyperwyc.Tests.Fakes;
@@ -20,12 +21,12 @@ public class DeliveryFailureTests
         InMemoryStore store,
         HttpMessageHandler transport,
         HyperwycEventStream? events = null) =>
-        new(
-            store,
+        new(            store,
             new FakeConnectivityService(isConnected: true),
             events ?? new HyperwycEventStream(),
             new HyperwycOptions(),
-            transport);
+            transport,
+            TestHealth());
 
     private static Envelope Outbox(string url = "https://example.com/api/orders") =>
         new() { Url = url, Method = "POST" };

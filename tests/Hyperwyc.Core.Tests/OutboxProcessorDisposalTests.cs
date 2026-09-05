@@ -1,3 +1,4 @@
+using static Hyperwyc.Tests.TestHealthFactory;
 using System.Diagnostics;
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,12 +19,12 @@ public class OutboxProcessorDisposalTests
     private static OutboxProcessor BuildOrchestrator(
         InMemoryStore store,
         HttpMessageHandler transport) =>
-        new(
-            store,
+        new(            store,
             new FakeConnectivityService(isConnected: true),
             new HyperwycEventStream(),
             new HyperwycOptions(),
-            transport);
+            transport,
+            TestHealth());
 
     private static Envelope OutboxEnvelope(string url = "https://example.com/api/orders") =>
         new() { Url = url, Method = "POST" };

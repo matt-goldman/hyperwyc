@@ -43,6 +43,7 @@ public sealed class HyperwycHandler : DelegatingHandler
     private readonly IConnectivityService _connectivity;
     private readonly HyperwycEventStream _events;
     private readonly HyperwycOptions _options;
+    private readonly StoreHealth _health;
     private readonly string? _clientName;
 
     /// <summary>
@@ -52,6 +53,7 @@ public sealed class HyperwycHandler : DelegatingHandler
     /// <param name="connectivity">Reports whether the device is online.</param>
     /// <param name="events">Stream on which sync lifecycle events are published.</param>
     /// <param name="options">Runtime configuration options.</param>
+    /// <param name="health">Shared state tracking whether the store can be read.</param>
     /// <param name="clientName">
     /// The name of the <see cref="HttpClient"/> this handler is registered on, stamped
     /// onto queued envelopes so a replay can be sent back through the same pipeline.
@@ -64,17 +66,20 @@ public sealed class HyperwycHandler : DelegatingHandler
         IConnectivityService connectivity,
         HyperwycEventStream events,
         HyperwycOptions options,
+        StoreHealth health,
         string? clientName = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(connectivity);
         ArgumentNullException.ThrowIfNull(events);
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(health);
 
         _store = store;
         _connectivity = connectivity;
         _events = events;
         _options = options;
+        _health = health;
         _clientName = clientName;
     }
 
@@ -85,6 +90,13 @@ public sealed class HyperwycHandler : DelegatingHandler
     {
         // A replay from the outbox: step aside so the rest of the pipeline runs.
         if (request.Options.TryGetValue(ReplayMarker, out var isReplay) && isReplay)
+            return base.SendAsync(request, cancellationToken);
+
+        // Nothing Hyperwyc does is possible without a readable store: it cannot serve a cached
+        // response, and it must not accept a write it may be unable to persist. So it steps
+        // aside entirely and the request behaves as it would without Hyperwyc installed — which
+        // is the truth, and is recoverable, where a 202 promising later delivery would not be.
+        if (!_health.IsUsable)
             return base.SendAsync(request, cancellationToken);
 
         if (_connectivity.IsConnected)
@@ -119,7 +131,12 @@ public sealed class HyperwycHandler : DelegatingHandler
             await request.Content.LoadIntoBufferAsync(ct).ConfigureAwait(false);
 
         var envelope = Envelope.ForRequest(request, _clientName);
-        await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
+        if (!await TryStoreAsync(() => _store.UpsertAsync(envelope, ct)).ConfigureAwait(false))
+        {
+            // The store failed on the way in, so there is nothing holding this write. Pass it
+            // through rather than answer 202 for a request nobody is keeping.
+            return await base.SendAsync(request, ct).ConfigureAwait(false);
+        }
 
         _events.Publish(new HyperwycEvent(
             HyperwycEventType.OnQueued,
@@ -149,7 +166,7 @@ public sealed class HyperwycHandler : DelegatingHandler
         // may be and still be served, not when to go looking for a fresher one. Past it, the
         // caller gets the offline response as though nothing were cached — which is the point,
         // because an application can act on "no data" and cannot detect "quietly too old".
-        var cached = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
+        var cached = await TryReadAsync(() => _store.GetCachedResponseAsync(url, ct)).ConfigureAwait(false);
         if (cached is not null && !IsStale(cached, policy.Ttl))
             return BuildResponseFromEnvelope(cached);
 
@@ -178,7 +195,8 @@ public sealed class HyperwycHandler : DelegatingHandler
             if (Policy(request).InvalidateCacheOnWrite)
             {
                 var prefix = DeriveInvalidationPrefix(request.RequestUri);
-                await _store.InvalidateCacheForPrefixAsync(prefix, ct).ConfigureAwait(false);
+                await TryStoreAsync(() => _store.InvalidateCacheForPrefixAsync(prefix, ct))
+                    .ConfigureAwait(false);
             }
 
             _events.Publish(new HyperwycEvent(
@@ -205,7 +223,7 @@ public sealed class HyperwycHandler : DelegatingHandler
         // NetworkFirst always goes to the network, and consults the cache only on failure.
         if (strategy == SourcePriority.CacheFirst)
         {
-            var cached = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
+            var cached = await TryReadAsync(() => _store.GetCachedResponseAsync(url, ct)).ConfigureAwait(false);
             if (cached is not null && !IsStale(cached, policy.Ttl))
                 return BuildResponseFromEnvelope(cached);
         }
@@ -219,7 +237,7 @@ public sealed class HyperwycHandler : DelegatingHandler
         {
             // Reachable when IConnectivityService reports online but the API is not
             // actually reachable — a captive portal, DNS failure or transient outage.
-            var fallback = await _store.GetCachedResponseAsync(url, ct).ConfigureAwait(false);
+            var fallback = await TryReadAsync(() => _store.GetCachedResponseAsync(url, ct)).ConfigureAwait(false);
             if (fallback is not null && !IsStale(fallback, policy.Ttl))
                 return BuildResponseFromEnvelope(fallback);
 
@@ -254,7 +272,8 @@ public sealed class HyperwycHandler : DelegatingHandler
             return;
 
         var envelope = Envelope.ForCachedResponse(request, response, _clientName);
-        await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
+        if (!await TryStoreAsync(() => _store.UpsertAsync(envelope, ct)).ConfigureAwait(false))
+            return;
 
         _events.Publish(new HyperwycEvent(
             HyperwycEventType.OnUpdated, url, request.Method.Method, DateTimeOffset.UtcNow));
@@ -283,6 +302,39 @@ public sealed class HyperwycHandler : DelegatingHandler
         }
 
         return response;
+    }
+
+    /// <summary>
+    /// Runs a store read, degrading to <see langword="null"/> if the store cannot be read.
+    /// </summary>
+    private async Task<Envelope?> TryReadAsync(Func<Task<Envelope?>> read)
+    {
+        try
+        {
+            return await read().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (StoreHealth.IsStoreFailure(ex))
+        {
+            _health.ReportUnreadable(ex, _options.UsesDerivedEncryptionKey);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Runs a store write, reporting and returning <see langword="false"/> if it fails.
+    /// </summary>
+    private async Task<bool> TryStoreAsync(Func<Task> write)
+    {
+        try
+        {
+            await write().ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex) when (StoreHealth.IsStoreFailure(ex))
+        {
+            _health.ReportUnreadable(ex, _options.UsesDerivedEncryptionKey);
+            return false;
+        }
     }
 
     /// <summary>The policy for this request, resolved from the route map.</summary>

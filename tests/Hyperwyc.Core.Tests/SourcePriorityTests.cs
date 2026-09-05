@@ -1,3 +1,4 @@
+using static Hyperwyc.Tests.TestHealthFactory;
 using System.Net;
 using Hyperwyc.Models;
 using Hyperwyc.Tests.Fakes;
@@ -25,7 +26,7 @@ public class SourcePriorityTests
             new FakeConnectivityService(isConnected),
             new HyperwycEventStream(),
             // A zero TTL makes every cached entry stale; CachedEnvelope stamps CachedAt as now.
-            OptionsFor(strategy, cacheIsStale))
+            OptionsFor(strategy, cacheIsStale), TestHealth())
         { InnerHandler = inner };
 
     private static Envelope CachedEnvelope(string body = "cached")

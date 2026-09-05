@@ -1,3 +1,4 @@
+using static Hyperwyc.Tests.TestHealthFactory;
 using System.Net;
 using Hyperwyc.Models;
 using Hyperwyc.Tests.Fakes;
@@ -22,7 +23,7 @@ public class OutboxProcessorTests
             new FakeConnectivityService(connected),
             events ?? new HyperwycEventStream(),
             new HyperwycOptions(),
-            transport);
+            transport, TestHealth());
     }
 
     private static Envelope MakeOutboxEnvelope(string url = "https://example.com/api/orders",

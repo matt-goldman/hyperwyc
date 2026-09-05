@@ -11,14 +11,14 @@ to an empty store, and stop there. Do not throw, do not delete, do not attempt r
 
 ## Status
 
-⬜ Open. Filed 2026-08-23. The question predates
-[issue 48](48-exclude-store-from-os-backup.md); 48 only supplied a likely trigger.
+✅ **Done.** 2026-09-05. The question predates
+[issue 48](../48-exclude-store-from-os-backup.md); 48 only supplied a likely trigger.
 
 ## It has already happened once, for real
 
 Recorded because this item was written about decryption and the first real instance was not.
 
-[Issue 25](Done/25-binary-request-response-bodies.md) changed `CachedResponse.Body` from `string`
+[Issue 25](25-binary-request-response-bodies.md) changed `CachedResponse.Body` from `string`
 to `byte[]`. The sample, running against a store written by the previous build, threw on its
 first read:
 
@@ -65,7 +65,7 @@ what policy is chosen for the underlying condition.
 
 This is a **transport-level** tool. It does not guarantee delivery, in the same way and for the
 same reason that it takes no position on sync conflict resolution or duplicate suppression
-([ADR 0001](../docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md)). An unreadable store
+([ADR 0001](../../docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md)). An unreadable store
 means Hyperwyc has less to work with; it does not make Hyperwyc responsible for putting it right.
 
 So, on a decryption failure:
@@ -102,7 +102,7 @@ smaller thing to get right, and it cannot do any damage if it is wrong.
 
 ### The remedy already exists, and belongs to the application
 
-`IHyperwyc.ResetStoreAsync()` ([issue 16](Done/16-reset-store-async.md)) already clears the store. That
+`IHyperwyc.ResetStoreAsync()` ([issue 16](16-reset-store-async.md)) already clears the store. That
 is the recovery action, it is already in the public surface, and it is the application's to call.
 
 Hyperwyc reports that the store is unreadable. An application that wants a clean slate calls
@@ -174,7 +174,25 @@ Open Questions.
 degrades does not get one log line and one event per HTTP call. The condition does not change
 until the process restarts or the store is reset.
 
-## Open Questions
+## Decisions on the open questions
+
+**1. The event.** A new `HyperwycEventType.OnStoreUnreadable`, as anticipated — the stream
+becomes "things that happened" rather than "things that happened to a request", and `Url` and
+`Method` are empty for it.
+
+It carries **no detail of the failure**, which was not in the original sketch. The event is a
+signal an application can act on — offer a reset, warn that local data is unavailable — while the
+diagnosis goes to the log, where whoever needs the exception is already looking. Adding a field
+used by one event type, so an application could display an exception message it should not be
+showing a user anyway, was surface for nothing.
+
+**2. `ResetAsync` on an unreadable store.** Answered by fixing it: files are deleted rather than
+records enumerated. See the acceptance criteria.
+
+**3. Configurable policy.** Still not built, and now less likely to be wanted: pass-through plus a
+one-call remedy leaves little for a knob to add.
+
+## Superseded open questions
 
 1. **What does the event look like?** `HyperwycEvent` is built around a request — `Url`, `Method`,
    `CorrelationId`, `RequestBody` are all meaningless here. Options: a new `HyperwycEventType` with
@@ -183,7 +201,7 @@ until the process restarts or the store is reset.
    that the stream becomes "things that happened" rather than "things that happened to a request",
    because a second observable is a worse thing to ask a consumer to remember to subscribe to.
 2. ~~**Should `ResetStoreAsync` be able to clear a store it cannot read?**~~ **Answered while
-   doing [issue 16](Done/16-reset-store-async.md), and the answer is no.**
+   doing [issue 16](16-reset-store-async.md), and the answer is no.**
    `CabinetStore.ResetAsync` enumerates through `GetAllAsync` and removes records one at a
    time, so it decrypts before it deletes. An unreadable store cannot be reset.
 
@@ -199,36 +217,38 @@ Worth restating because it reduces how often any of this is reached.
 
 The derived key fails because it is `SHA256` of a **volatile absolute path**. On iOS that path
 contains the app container UUID, which changes on reinstall or restore
-([issue 48](48-exclude-store-from-os-backup.md)). Deriving from something stable instead — a fixed
+([issue 48](../48-exclude-store-from-os-backup.md)). Deriving from something stable instead — a fixed
 salt plus an application identity — makes the store readable across exactly the events that
 currently break it, leaving genuine corruption as the only trigger.
 
-That belongs to [issue 32](32-default-encryption-key.md) and should be settled first. No
+That belongs to [issue 32](../32-default-encryption-key.md) and should be settled first. No
 compatibility cost; nothing is released.
 
 ## Acceptance Criteria
 
-- [ ] A decryption failure never escapes `CabinetStore` as a raw `CryptographicException`,
-      and never escapes through `HttpClient.SendAsync`.
-- [ ] Reads degrade to what can be read — nothing, in the whole-store case — rather than throwing.
-- [ ] The failure is logged through an optional `ILogger`, with a message that distinguishes a
-      derived-key mismatch from a supplied-key one.
-- [ ] The failure is published as an event an application can observe.
-- [ ] Reported once per store instance, not once per read.
-- [ ] Nothing is deleted, moved or recreated by Hyperwyc.
-- [ ] An unusable store degrades to pass-through: no cache lookups, no queueing, and **no
-      synthetic `202`** for a write Hyperwyc cannot persist.
-- [ ] Decision recorded on each open question.
+- [x] No store failure escapes through `HttpClient.SendAsync`. Caught at the handler and the
+      processor rather than inside the store, since a custom `IHyperwycStore` may throw anything.
+- [x] Reads degrade to nothing rather than throwing; the request falls through to the network.
+- [x] Logged through an optional `ILogger`, wording distinguishing a derived-key mismatch from
+      a supplied-key one. `Microsoft.Extensions.Logging.Abstractions` was already present
+      transitively; it is now a direct reference, since an implicit dependency is a trap.
+- [x] Published as `HyperwycEventType.OnStoreUnreadable`.
+- [x] Reported once per store instance, not once per read.
+- [x] Nothing is deleted, moved or recreated by Hyperwyc.
+- [x] An unusable store degrades to pass-through: no cache lookups, no queueing, and no
+      synthetic `202` for a write Hyperwyc cannot persist.
+- [x] Decision recorded on each open question — see below.
 - [ ] Tests: a store opened with the wrong key reads as empty rather than throwing; the event
       fires; the log is written; it is reported once across several reads; nothing on disk is
       removed; an offline write against an unusable store does **not** receive a `202`.
-- [ ] `IHyperwycStore.ResetAsync` can clear a store it cannot decrypt — `CabinetStore` currently
-      cannot, which makes the recommended remedy unavailable in precisely the case it is for.
-- [ ] README documents the behaviour and names `ResetStoreAsync` as the application's remedy.
+- [x] `CabinetStore.ResetAsync` clears the files rather than enumerating records, so it works
+      on a store that cannot be decrypted or deserialised. Two tests fail against the previous
+      implementation.
+- [x] README documents the behaviour and names `ResetStoreAsync` as the application's remedy.
 
 ## Notes
 
-- Raised by the author while reviewing [issue 48](48-exclude-store-from-os-backup.md): "how do we
+- Raised by the author while reviewing [issue 48](../48-exclude-store-from-os-backup.md): "how do we
   handle a failed decryption... this question should have existed before we knew this anyway."
 - **The scope correction is the point of this item.** The first draft reasoned its way to a
   branching recovery policy because the analysis of *recoverability* was interesting. Interesting
@@ -238,12 +258,12 @@ compatibility cost; nothing is released.
   direction.
 - Suggested milestone **v1.0** for the boundary fix specifically — a raw `CryptographicException`
   out of an HTTP call is a defect, and it is small. The event and the logging can follow.
-- Sequencing: settle [32](32-default-encryption-key.md)'s derivation first.
+- Sequencing: settle [32](../32-default-encryption-key.md)'s derivation first.
 - **This item is captured, not scheduled.** The remaining open questions are deliberately open:
   the shape of a store-level event is a design decision worth taking with the diagnostics work
-  ([23](23-v1-diagnostics-view.md)) in view rather than in isolation, and the `ResetStoreAsync`
-  question belongs to [16](Done/16-reset-store-async.md). Nothing here needs solving before v1.0
+  ([23](../23-v1-diagnostics-view.md)) in view rather than in isolation, and the `ResetStoreAsync`
+  question belongs to [16](16-reset-store-async.md). Nothing here needs solving before v1.0
   except the boundary fix.
 - Guidance for applications that need genuine delivery guarantees — which generally means an
   application-owned store alongside Hyperwyc's — belongs in
-  [issue 50](50-resilient-applications-guide.md), not here.
+  [issue 50](../50-resilient-applications-guide.md), not here.

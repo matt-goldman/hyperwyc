@@ -1,3 +1,4 @@
+using static Hyperwyc.Tests.TestHealthFactory;
 using System.Net;
 using System.Net.Http.Json;
 using Hyperwyc.Models;
@@ -28,7 +29,7 @@ public class SyntheticResponseBodyTests
             store ?? new InMemoryStore(),
             new FakeConnectivityService(isConnected),
             new HyperwycEventStream(),
-            OptionsFor(strategy))
+            OptionsFor(strategy), TestHealth())
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
 
     // -------------------------------------------------------------------------

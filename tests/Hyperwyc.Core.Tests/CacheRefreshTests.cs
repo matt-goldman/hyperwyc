@@ -1,3 +1,4 @@
+using static Hyperwyc.Tests.TestHealthFactory;
 using System.Net;
 using System.Text;
 using Hyperwyc.Interfaces;
@@ -46,7 +47,7 @@ public class CacheRefreshTests
         new(store,
             new FakeConnectivityService(connected),
             new HyperwycEventStream(),
-            TestOptions.WithTtl(connected ? TimeSpan.Zero : TimeSpan.FromMinutes(5)))
+            TestOptions.WithTtl(connected ? TimeSpan.Zero : TimeSpan.FromMinutes(5)), TestHealth())
         { InnerHandler = inner };
 
     [Fact]

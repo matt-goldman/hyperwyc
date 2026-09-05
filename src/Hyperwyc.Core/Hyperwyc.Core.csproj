@@ -13,5 +13,8 @@
     <!-- Replays are sent through the originating named client's pipeline, so the
          orchestrator needs IHttpClientFactory. See issue #37. -->
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <!-- Already present transitively via Hosting.Abstractions; referenced directly because
+         StoreHealth takes an optional ILogger and an implicit dependency is a trap. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
   </ItemGroup>
 </Project>

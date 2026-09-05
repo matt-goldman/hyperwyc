@@ -106,7 +106,7 @@ Two consequences for this issue:
   also removes the accidental protection against a restored outbox replaying delivered writes.
   The two issues want reading together.
 
-## Decide the derivation before [issue 49](49-unreadable-store-recovery.md)
+## Decide the derivation before [issue 49](Done/49-unreadable-store-recovery.md)
 
 49 covers what Hyperwyc does with a store it cannot decrypt. How much of that machinery is worth
 building depends on how often the path is reached, which this issue controls.

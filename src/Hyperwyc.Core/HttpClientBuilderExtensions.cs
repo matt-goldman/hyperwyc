@@ -46,6 +46,7 @@ public static class HttpClientBuilderExtensions
             sp.GetRequiredService<IConnectivityService>(),
             sp.GetRequiredService<HyperwycEventStream>(),
             sp.GetRequiredService<HyperwycOptions>(),
+            sp.GetRequiredService<StoreHealth>(),
             clientName));
     }
 }

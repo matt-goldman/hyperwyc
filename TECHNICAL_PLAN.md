@@ -353,6 +353,40 @@ Each request/response pair is persisted as a single document:
 }
 ```
 
+#### An Unreadable Store
+
+`StoreHealth` is a shared singleton tracking whether the store can be read. `HyperwycHandler` is
+transient and `OutboxProcessor` is a singleton, so a flag on either would not do; and it is
+load-bearing rather than a log-volume optimisation, because the handler consults it to decide
+whether it may still take custody of a write.
+
+On the first failure it latches, logs through an optional `ILogger`, and publishes
+`OnStoreUnreadable` once. Every request after that passes straight through. Nothing is deleted
+and nothing is thrown: Hyperwyc is transport-level and has no standing to decide what a damaged
+store is worth, and neither destroying it nor refusing to start is its call to make.
+
+**The catch is deliberately broad** — anything that is not `OperationCanceledException`. The
+store is a consumer-supplied implementation, and the failures seen so far are already
+`CryptographicException` from a key mismatch and `JsonException` from a persisted shape that
+changed. Enumerating the known ones would only mean the next unfamiliar failure escapes into an
+application's HTTP call, which is the thing this exists to prevent.
+
+**Offline writes are declined rather than accepted.** A `202` is a promise of later delivery, and
+with no store holding the envelope there is nothing to deliver from. Passing through to fail at
+the transport is the truth, and it is recoverable where a lost `202` is not.
+
+**`CabinetStore.ResetAsync` deletes files rather than enumerating records**, then calls
+`RecordSet.RefreshAsync` to drop the in-memory copy. Enumerating means decrypting and
+deserialising, so the recommended remedy would have been unavailable in the only case that needs
+it — which had already been demonstrated, when a change to the persisted shape left a store on a
+device that threw on every read and could not be cleared. Reset also clears the latch, so caching
+and queueing resume rather than staying off for the life of the process.
+
+`HyperwycOptions.UsesDerivedEncryptionKey` is set by the storage package and changes nothing but
+the wording of the log line. A derived key that stops matching usually means the directory moved
+or the shape changed; a supplied key that does not match is a different conversation. Neither
+entitles Hyperwyc to destroy anything, so the behaviour is identical.
+
 #### Route Policies
 
 `RoutePolicyMap` maps URL patterns to `RoutePolicy` values. Both the handler and

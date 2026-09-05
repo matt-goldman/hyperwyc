@@ -17,6 +17,7 @@ namespace Hyperwyc.Cabinet;
 public sealed class CabinetStore : IHyperwycStore
 {
     private readonly RecordSet<Envelope> _records;
+    private readonly string _root;
 
     // Every operation is serialised. Cabinet's FileOfflineStore saves by writing
     // "Envelope.dat.tmp" and then File.Move-ing it over "Envelope.dat", so two saves in
@@ -87,6 +88,8 @@ public sealed class CabinetStore : IHyperwycStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dbDirectory);
         ArgumentNullException.ThrowIfNull(encryptionKey);
+
+        _root = dbDirectory;
 
         var crypto = new AesGcmEncryptionProvider(encryptionKey);
         var store = new FileOfflineStore(dbDirectory, crypto, null);
@@ -215,9 +218,22 @@ public sealed class CabinetStore : IHyperwycStore
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
-            foreach (var envelope in all.ToList())
-                await _records.RemoveAsync(envelope.Id, ct).ConfigureAwait(false);
+            // Deletes the files rather than enumerating records and removing them one by one.
+            // Enumerating means decrypting and deserialising, which is precisely what a store
+            // worth resetting cannot do — the remedy would have been unavailable in the only
+            // case that needs it. See issue #49.
+            foreach (var directory in new[] { "records", "attachments", "index" })
+            {
+                var path = Path.Combine(_root, directory);
+                if (!Directory.Exists(path)) continue;
+
+                foreach (var file in Directory.GetFiles(path))
+                    File.Delete(file);
+            }
+
+            // The RecordSet holds its own in-memory copy, which the file deletion knows nothing
+            // about. Refreshing drops it so the next read loads from an empty directory.
+            await _records.RefreshAsync(ct).ConfigureAwait(false);
         }
         finally
         {

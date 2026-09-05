@@ -17,7 +17,7 @@ Placeholder. Captured so the idea is not lost, not specified.
 Hyperwyc is transport-level and says so repeatedly — no duplicate suppression
 ([ADR 0001](../docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md)), no conflict
 resolution, no delivery guarantee, and an unreadable store is reported rather than repaired
-([issue 49](49-unreadable-store-recovery.md)).
+([issue 49](Done/49-unreadable-store-recovery.md)).
 
 Each of those is right on its own and correctly documented where it arises. The gap is that a
 reader assembling them into an actual application has to do that assembly themselves, from a
@@ -97,7 +97,7 @@ Not a specification — a list of what has accumulated and would belong here.
 ## Notes
 
 - Author's idea, captured 2026-08-23 while closing out
-  [issue 49](49-unreadable-store-recovery.md): "In the back of my mind I have a 'Designing
+  [issue 49](Done/49-unreadable-store-recovery.md): "In the back of my mind I have a 'Designing
   resilient applications with Hyperwyc' doc that comes somewhere later, with guidance for how to
   handle the injected headers and respond to events when you need guaranteed delivery. Which
   typically means an application owned store in addition to what Hyperwyc caches for you."

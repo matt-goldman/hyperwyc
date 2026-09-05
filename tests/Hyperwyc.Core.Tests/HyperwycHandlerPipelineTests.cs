@@ -1,3 +1,4 @@
+using static Hyperwyc.Tests.TestHealthFactory;
 using System.Net;
 using Hyperwyc.Models;
 using Hyperwyc.Tests.Fakes;
@@ -59,7 +60,7 @@ public class HyperwycHandlerPipelineTests
             store ?? new InMemoryStore(),
             new FakeConnectivityService(isConnected),
             new HyperwycEventStream(),
-            new HyperwycOptions())
+            new HyperwycOptions(), TestHealth())
         {
             InnerHandler = downstream,
         };

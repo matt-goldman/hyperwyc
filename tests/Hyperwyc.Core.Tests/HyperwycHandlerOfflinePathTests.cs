@@ -1,3 +1,4 @@
+using static Hyperwyc.Tests.TestHealthFactory;
 using System.Net;
 using System.Text;
 using Hyperwyc.Models;
@@ -21,7 +22,7 @@ public class HyperwycHandlerOfflinePathTests
             store,
             new FakeConnectivityService(isConnected: false),
             events ?? new HyperwycEventStream(),
-            options ?? new HyperwycOptions())
+            options ?? new HyperwycOptions(), TestHealth())
         {
             // Inner handler should never be reached when offline.
             InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)),
@@ -161,7 +162,7 @@ public class HyperwycHandlerOfflinePathTests
             store,
             new FakeConnectivityService(isConnected: false),
             new HyperwycEventStream(),
-            TestOptions.WithTtl(TimeSpan.FromMinutes(5)))
+            TestOptions.WithTtl(TimeSpan.FromMinutes(5)), TestHealth())
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
         using var client = new HttpClient(handler);
 
@@ -184,7 +185,7 @@ public class HyperwycHandlerOfflinePathTests
             store,
             new FakeConnectivityService(isConnected: false),
             new HyperwycEventStream(),
-            TestOptions.WithTtl(TimeSpan.Zero))
+            TestOptions.WithTtl(TimeSpan.Zero), TestHealth())
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
         using var client = new HttpClient(handler);
 

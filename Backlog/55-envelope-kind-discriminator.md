@@ -68,5 +68,5 @@ complicate `IHyperwycStore` more than the clarity is worth.
 - **Do not fold this into a rename.** It surfaced during one and was deliberately excluded:
   mixing a model change into a mechanical pass is how a rename hides a bug. That reasoning holds
   for whoever picks this up next to something else.
-- Sequence after [49](49-unreadable-store-recovery.md) rather than before — 49 is a real defect,
+- Sequence after [49](Done/49-unreadable-store-recovery.md) rather than before — 49 is a real defect,
   this is a clarity problem with no known failure attached.

@@ -80,7 +80,7 @@ The sample now resets *then* clears the token, and does not flush.
 
 `CabinetSyncStore.ResetAsync` enumerates via `GetAllAsync` and removes records one by one, so it
 **decrypts before it deletes**. A store that cannot be read therefore cannot be reset — which
-answers the open question in [issue 49](../49-unreadable-store-recovery.md), and answers it badly:
+answers the open question in [issue 49](49-unreadable-store-recovery.md), and answers it badly:
 `ResetStoreAsync` is the remedy 49 recommends for an unreadable store, and it does not work in
 exactly that case. Deleting the files rather than the records would fix it. Recorded against 49
 rather than fixed here, since it belongs with that item's decision.

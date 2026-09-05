@@ -211,7 +211,7 @@ including concurrent writes, with the reason given so it does not read as boiler
   responses is two hundred write-temp-and-move cycles. Not the cause of this crash, but a
   latent performance problem and a collision source. Clearing the files in one operation would
   fix it, and would also satisfy
-  [issue 49](../49-unreadable-store-recovery.md)'s requirement that a reset work on a store that
+  [issue 49](49-unreadable-store-recovery.md)'s requirement that a reset work on a store that
   cannot be decrypted.
 - **Hyperwyc is registered inside the resilience handler in the sample**, contrary to the
   README's "register first" guidance. That means each resilience retry is a separate pass

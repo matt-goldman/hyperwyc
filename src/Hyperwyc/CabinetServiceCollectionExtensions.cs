@@ -51,6 +51,16 @@ public static class CabinetServiceCollectionExtensions
 
         services.TryAddSingleton(storeOptions);
 
+        // Only affects the wording of the log line if the store turns out to be unreadable
+        // (issue #49) — a derived key that stops matching usually means the directory moved or
+        // the persisted shape changed, which is a different conversation from a wrong key.
+        var callerConfigure = configure;
+        configure = options =>
+        {
+            options.UsesDerivedEncryptionKey = storeOptions.EncryptionKey is null;
+            callerConfigure?.Invoke(options);
+        };
+
         // Registered by type so the container owns construction and disposal, and so
         // no directory is touched unless the store is actually resolved.
         return services.AddHyperwycCore<CabinetStore>(configure);

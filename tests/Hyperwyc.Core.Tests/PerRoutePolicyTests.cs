@@ -1,3 +1,4 @@
+using static Hyperwyc.Tests.TestHealthFactory;
 using System.Net;
 using System.Text;
 using Hyperwyc.Models;
@@ -17,7 +18,7 @@ public class PerRoutePolicyTests
 
     private static HyperwycHandler Handler(
         InMemoryStore store, HttpMessageHandler inner, HyperwycOptions options, bool connected) =>
-        new(store, new FakeConnectivityService(connected), new HyperwycEventStream(), options)
+        new(store, new FakeConnectivityService(connected), new HyperwycEventStream(), options, TestHealth())
         { InnerHandler = inner };
 
     private static Envelope Cached(string url, string body)
@@ -162,7 +163,7 @@ public class PerRoutePolicyTests
             new FakeConnectivityService(isConnected: true),
             new HyperwycEventStream(),
             options,
-            new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)));
+            new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)), TestHealth());
 
         await orchestrator.FlushAsync();
 

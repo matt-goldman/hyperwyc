@@ -25,6 +25,7 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     private readonly IConnectivityService _connectivity;
     private readonly HyperwycEventStream _events;
     private readonly HyperwycOptions _options;
+    private readonly StoreHealth _health;
     private readonly HttpMessageInvoker _fallbackInvoker;
     private readonly IHttpClientFactory? _httpClientFactory;
 
@@ -46,6 +47,7 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// <param name="connectivity">The connectivity service to subscribe to.</param>
     /// <param name="events">The event stream to publish lifecycle events on.</param>
     /// <param name="options">Runtime configuration options.</param>
+    /// <param name="health">Shared state tracking whether the store can be read.</param>
     /// <param name="transport">
     /// The <see cref="HttpMessageHandler"/> used to send outbox requests. This must
     /// bypass <see cref="HyperwycHandler"/>, or a replay would be queued again.
@@ -63,6 +65,7 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
         HyperwycEventStream events,
         HyperwycOptions options,
         HttpMessageHandler transport,
+        StoreHealth health,
         IHttpClientFactory? httpClientFactory = null)
     {
         ArgumentNullException.ThrowIfNull(store);
@@ -70,11 +73,13 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
         ArgumentNullException.ThrowIfNull(events);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(transport);
+        ArgumentNullException.ThrowIfNull(health);
 
         _store = store;
         _connectivity = connectivity;
         _events = events;
         _options = options;
+        _health = health;
         _fallbackInvoker = new HttpMessageInvoker(transport, disposeHandler: false);
         _httpClientFactory = httpClientFactory;
 
@@ -113,7 +118,18 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
 
         try
         {
-            var ready = await _store.GetPendingOutboxAsync(token).ConfigureAwait(false);
+            IReadOnlyList<Envelope> ready;
+            try
+            {
+                ready = await _store.GetPendingOutboxAsync(token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (StoreHealth.IsStoreFailure(ex))
+            {
+                // Nothing to flush if the outbox cannot be read, and nothing to be done about
+                // it here — reported once, and the handler stops queueing from now on.
+                _health.ReportUnreadable(ex, _options.UsesDerivedEncryptionKey);
+                return;
+            }
 
             foreach (var envelope in ready)
             {
@@ -171,6 +187,10 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
         try
         {
             await _store.ResetAsync(token).ConfigureAwait(false);
+
+            // Whatever made the store unreadable is gone with its contents, so caching and
+            // queueing resume rather than staying disabled for the life of the process.
+            _health.Recovered();
         }
         finally
         {

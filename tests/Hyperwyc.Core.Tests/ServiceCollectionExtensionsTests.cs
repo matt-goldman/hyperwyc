@@ -1,3 +1,4 @@
+using static Hyperwyc.Tests.TestHealthFactory;
 using Microsoft.Extensions.DependencyInjection;
 using Hyperwyc.Interfaces;
 using Hyperwyc.Models;

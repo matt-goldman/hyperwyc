@@ -1,3 +1,4 @@
+using static Hyperwyc.Tests.TestHealthFactory;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -30,7 +31,7 @@ public class RequestHeaderFidelityTests
             store ?? new InMemoryStore(),
             new FakeConnectivityService(isConnected: true),
             new HyperwycEventStream(),
-            new HyperwycOptions())
+            new HyperwycOptions(), TestHealth())
         { InnerHandler = stub };
         return (handler, stub);
     }
@@ -40,7 +41,7 @@ public class RequestHeaderFidelityTests
             store,
             new FakeConnectivityService(isConnected: false),
             new HyperwycEventStream(),
-            new HyperwycOptions())
+            new HyperwycOptions(), TestHealth())
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
 
     private static OutboxProcessor BuildOrchestrator(
@@ -50,7 +51,7 @@ public class RequestHeaderFidelityTests
             new FakeConnectivityService(isConnected: true),
             new HyperwycEventStream(),
             new HyperwycOptions(),
-            transport);
+            transport, TestHealth());
 
     // -------------------------------------------------------------------------
     // Content headers survive the round trip

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Hyperwyc.Interfaces;
 
@@ -121,6 +122,13 @@ public static class ServiceCollectionExtensions
         // Core singletons.
         services.TryAddSingleton<HyperwycEventStream>();
 
+        // Shared because the handler is transient and the processor is a singleton, and they
+        // have to agree about whether the store can be read. Logging is optional: Hyperwyc must
+        // work in a container that has none.
+        services.TryAddSingleton(sp => new StoreHealth(
+            sp.GetRequiredService<HyperwycEventStream>(),
+            sp.GetService<ILogger<StoreHealth>>()));
+
         services.TryAddSingleton<IHyperwyc>(sp => new HyperwycService(
             sp.GetRequiredService<HyperwycEventStream>(),
             sp.GetRequiredService<OutboxProcessor>()));
@@ -134,6 +142,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<HyperwycEventStream>(),
             sp.GetRequiredService<HyperwycOptions>(),
             options.ReplayTransport ?? new HttpClientHandler(),
+            sp.GetRequiredService<StoreHealth>(),
             sp.GetService<IHttpClientFactory>()));
 
         // HyperwycHandler is transient — each named HTTP client pipeline gets its own instance.

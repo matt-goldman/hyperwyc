@@ -139,4 +139,17 @@ public sealed class HyperwycOptions
     /// </summary>
     public bool FlushOnStartup { get; set; } = true;
 
+    /// <summary>
+    /// Whether the store's encryption key was derived by Hyperwyc rather than supplied by the
+    /// consumer. Set by the storage package; not something to configure.
+    /// </summary>
+    /// <remarks>
+    /// Affects nothing but the wording of one log line, when the store turns out to be
+    /// unreadable (issue #49). A derived key that no longer matches usually means the store
+    /// directory moved or its persisted shape changed; a supplied key that does not match is a
+    /// different conversation. The behaviour is identical either way — neither case entitles
+    /// Hyperwyc to destroy anything.
+    /// </remarks>
+    public bool UsesDerivedEncryptionKey { get; set; }
+
 }

@@ -1,3 +1,4 @@
+using static Hyperwyc.Tests.TestHealthFactory;
 using System.Net;
 using Hyperwyc.Models;
 using Hyperwyc.Tests.Fakes;
@@ -21,7 +22,7 @@ public class HyperwycHandlerOnlinePathTests
             store,
             new FakeConnectivityService(isConnected: true),
             new HyperwycEventStream(),
-            Options(shouldInvalidate, cacheIsStale))
+            Options(shouldInvalidate, cacheIsStale), TestHealth())
         {
             InnerHandler = inner,
         };
@@ -78,7 +79,7 @@ public class HyperwycHandlerOnlinePathTests
             store,
             new FakeConnectivityService(),
             events,
-            new HyperwycOptions())
+            new HyperwycOptions(), TestHealth())
         { InnerHandler = stub };
         using var client = new HttpClient(handler);
 
@@ -207,7 +208,7 @@ public class HyperwycHandlerOnlinePathTests
             store,
             new FakeConnectivityService(),
             events,
-            new HyperwycOptions())
+            new HyperwycOptions(), TestHealth())
         { InnerHandler = stub };
         using var client = new HttpClient(handler);
 
@@ -319,7 +320,7 @@ public class HyperwycHandlerOnlinePathTests
             store,
             new FakeConnectivityService(),
             events,
-            new HyperwycOptions())
+            new HyperwycOptions(), TestHealth())
         { InnerHandler = stub };
         using var client = new HttpClient(handler);
 

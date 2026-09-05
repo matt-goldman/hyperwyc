@@ -88,6 +88,32 @@ Losing that key means losing access to everything already stored.
 
 ---
 
+### When the store can't be read
+
+A local store can become unreadable — a wrong encryption key, a directory that moved, files
+damaged. Hyperwyc's response is to **report it and get out of the way**:
+
+- it logs, through an `ILogger` if your container has one;
+- it publishes `OnStoreUnreadable` once — not once per request;
+- and every request from then on passes straight through, as though Hyperwyc weren't installed.
+
+Nothing is deleted and nothing is thrown. A damaged store is still your data, and deleting it is
+irreversible; refusing to start is a decision your application might reasonably make but Hyperwyc
+has no standing to make for you.
+
+**Offline writes are declined rather than accepted.** With no store to hold them, a `202` would
+promise delivery Hyperwyc cannot keep, so the request goes to the transport and fails as it would
+without Hyperwyc there. That failure is visible and recoverable; a lost `202` is neither.
+
+The remedy is yours to apply, and it's one call:
+
+```csharp
+await hyperwyc.ResetStoreAsync();   // discards the store; caching and queueing resume
+```
+
+That works even when the store cannot be read — it clears the files rather than enumerating
+records, which would need to decrypt them first.
+
 ## When to Use
 
 - You want a **service-worker-like** drop-in resilience layer for .NET HTTP clients
@@ -323,6 +349,7 @@ hyperwyc.Events.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
 | `OnDelivered` | Request successfully delivered | Yes |
 | `OnFailed` | Request dead-lettered — the server refused it | Yes |
 | `OnUpdated` | Cached response refreshed | No |
+| `OnStoreUnreadable` | The local store could not be read; caching and queueing are off for the rest of the session | No |
 
 These are Hyperwyc's own events, not your app's lifecycle — see below for how the two relate.
 

@@ -1,3 +1,4 @@
+using static Hyperwyc.Tests.TestHealthFactory;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
@@ -218,7 +219,7 @@ public class BinaryBodyTests
             store,
             new FakeConnectivityService(isConnected: true),
             new HyperwycEventStream(),
-            new HyperwycOptions { MaxCachedResponseBodyBytes = 1024 })
+            new HyperwycOptions { MaxCachedResponseBodyBytes = 1024 }, TestHealth())
         { InnerHandler = stub };
 
         using var client = new HttpClient(handler);
@@ -235,14 +236,14 @@ public class BinaryBodyTests
         new(store,
             new FakeConnectivityService(isConnected: false),
             new HyperwycEventStream(),
-            new HyperwycOptions())
+            new HyperwycOptions(), TestHealth())
         { InnerHandler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)) };
 
     private static HyperwycHandler OnlineHandler(InMemoryStore store, HttpMessageHandler inner) =>
         new(store,
             new FakeConnectivityService(isConnected: true),
             new HyperwycEventStream(),
-            new HyperwycOptions())
+            new HyperwycOptions(), TestHealth())
         { InnerHandler = inner };
 
     private static OutboxProcessor Orchestrator(InMemoryStore store, HttpMessageHandler transport) =>
@@ -250,7 +251,7 @@ public class BinaryBodyTests
             new FakeConnectivityService(isConnected: true),
             new HyperwycEventStream(),
             new HyperwycOptions(),
-            transport);
+            transport, TestHealth());
 
     /// <summary>Reads what reached the wire before the request message is disposed.</summary>
     private sealed class CapturingTransport : HttpMessageHandler
