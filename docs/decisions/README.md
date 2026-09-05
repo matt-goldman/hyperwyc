@@ -11,6 +11,7 @@ reversed.
 | [0003](0003-default-what-you-can-decide-correctly.md) | Default what you can decide correctly; require what you cannot | Accepted |
 | [0004](0004-default-to-removal.md) | Default to removal | Accepted |
 | [0005](0005-vocabulary.md) | Name things for the purpose, not the mechanism | Accepted |
+| [0006](0006-a-shipped-implementation-is-not-a-default.md) | A shipped implementation is not a default | Accepted |
 
 ## What belongs here
 
@@ -64,12 +65,12 @@ Some of that is deliberate borrowing and some is convergence, both worth knowing
 | Hyperwyc | Web equivalent |
 |---|---|
 | `HyperwycHandler` in the `HttpClient` pipeline | The `fetch` event and `respondWith` |
-| `CacheStrategy` — cache-first, API-first, cache-only, network-only | Workbox's strategies, one for one |
-| `DefaultCacheTtl`, `MaxCachedResponseBodyBytes` | Workbox's `ExpirationPlugin`, `CacheableResponsePlugin` |
+| `SourcePriority` — cache-first, network-first, network-only | Workbox's strategies |
+| `RoutePolicy.Ttl`, `MaxCachedResponseBodyBytes` | Workbox's `ExpirationPlugin`, `CacheableResponsePlugin` |
 | Outbox, and replay on connectivity change | Background Sync, and Workbox's `BackgroundSyncPlugin` queue |
-| `IObservable<SyncEvent>` | `clients.postMessage`, and `BroadcastUpdatePlugin` for cache updates |
+| `IObservable<HyperwycEvent>` | `clients.postMessage`, and `BroadcastUpdatePlugin` for cache updates |
 | Prefetch on boot (v2.0) | Precaching |
-| Background sync scheduler (v2.0) | Periodic Background Sync |
+| Scheduled background replay (v2.0) | Periodic Background Sync |
 
 Two of those were arrived at independently and only recognised afterwards, which is reassuring
 rather than embarrassing: the retry model in
@@ -129,6 +130,9 @@ scope test: given that Hyperwyc should do this, should it have a default?
 3. Could a wrong default quietly produce the failure the library exists to prevent? Then never.
 4. If it must be required, is the fix short and obvious? Ship something to point at, and make
    sure requiring a decision has not quietly required an *ordering* as well.
+5. Would this default be equally right everywhere Hyperwyc runs? An implementation good on one
+   host and unreliable on another can ship, but must be named — see
+   [ADR 0006](0006-a-shipped-implementation-is-not-a-default.md).
 
 ## The standing removal test
 
