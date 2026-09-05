@@ -9,9 +9,10 @@ Hyperwyc answers a request itself in exactly two cases:
 | A write was queued for later delivery | `202 Accepted` | `Queued` |
 | A read had nothing to serve | `200 OK` | `Offline` |
 
-A write is queued either because the connectivity service reported offline, or because it was
-attempted and [the transport could not establish a connection](offline-writes.md). Both produce
-the identical response — the caller cannot tell which happened, and does not need to.
+Either can arise two ways: the connectivity service reported offline, or the request was
+attempted and [the transport could not answer](offline-writes.md). Both produce the identical
+response — the caller cannot tell which happened, and does not need to. That is the point: a
+connectivity implementation that is wrong costs latency, never correctness.
 
 Everything else your caller sees — including a cache hit — is a real server response, returned
 unchanged.

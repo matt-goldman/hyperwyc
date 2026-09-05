@@ -263,11 +263,12 @@ real, and useless.
 `NetworkInterfaceType` is not portable either: a Wi-Fi adapter reports as `Ethernet` on Linux,
 not `Wireless80211`, so filtering by type does not rescue this.
 
-In practice that costs less than it sounds like. Connectivity is a hint about which path to
-take; a false positive means the request goes out and fails at the transport, which Hyperwyc
-already handles by abandoning the flush and waiting for the next signal. You lose a wasted
-attempt and some latency, not correctness. It's a reasonable choice for a desktop or server
-host, and a reasonable starting point on mobile until you write the platform version.
+In practice that costs less than it sounds like, because **connectivity cannot affect
+correctness.** A false positive means the request goes out and the transport fails: a read is
+then answered from the store exactly as if Hyperwyc had known it was offline, and a write is
+queued exactly as if it had. You lose an attempt and some latency, nothing else. It's a
+reasonable choice for a desktop or server host, and a reasonable starting point on mobile until
+you write the platform version.
 
 ### Why not just probe the API?
 

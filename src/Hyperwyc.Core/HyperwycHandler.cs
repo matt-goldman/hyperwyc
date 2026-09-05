@@ -176,22 +176,37 @@ public sealed class HyperwycHandler : DelegatingHandler
         return HyperwycResponseFactory.Queued(envelope.CorrelationId);
     }
 
-    private async Task<HttpResponseMessage> HandleOfflineReadAsync(
+    private Task<HttpResponseMessage> HandleOfflineReadAsync(
         HttpRequestMessage request,
+        CancellationToken ct) =>
+        ServeReadWithoutNetworkAsync(Policy(request), request.RequestUri?.ToString() ?? string.Empty, ct);
+
+    /// <summary>
+    /// Answers a read without the network: the stored response if it is still within its TTL,
+    /// otherwise the <c>Offline</c> response.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Shared by both routes into the offline state — the connectivity service reporting
+    /// offline, and a transport that could not answer. They are the same situation, so a caller
+    /// gets the same response either way and cannot tell which occurred.
+    /// </para>
+    /// <para>
+    /// The TTL applies here exactly as it does online: it says how old a stored response may be
+    /// and still be served, not when to go looking for a fresher one. Past it, the caller gets
+    /// the offline response as though nothing were cached — which is the point, because an
+    /// application can act on "no data" and cannot detect "quietly too old".
+    /// </para>
+    /// </remarks>
+    private async Task<HttpResponseMessage> ServeReadWithoutNetworkAsync(
+        RoutePolicy policy,
+        string url,
         CancellationToken ct)
     {
-        var policy = Policy(request);
-
         // NetworkOnly opts out of the store entirely, so there is nothing to serve.
         if (policy.SourcePriority == SourcePriority.NetworkOnly)
             return HyperwycResponseFactory.Offline();
 
-        var url = request.RequestUri?.ToString() ?? string.Empty;
-
-        // The TTL applies offline exactly as it does online: it says how old a stored response
-        // may be and still be served, not when to go looking for a fresher one. Past it, the
-        // caller gets the offline response as though nothing were cached — which is the point,
-        // because an application can act on "no data" and cannot detect "quietly too old".
         var cached = await TryReadAsync(() => _store.GetCachedResponseAsync(url, ct)).ConfigureAwait(false);
         if (cached is not null && !IsStale(cached, policy.Ttl))
             return BuildResponseFromEnvelope(cached);
@@ -260,11 +275,6 @@ public sealed class HyperwycHandler : DelegatingHandler
         var strategy = policy.SourcePriority;
         var url = request.RequestUri?.ToString() ?? string.Empty;
 
-        // NetworkOnly neither reads nor writes the cache.
-        if (strategy == SourcePriority.NetworkOnly)
-            return await base.SendAsync(request, ct).ConfigureAwait(false);
-
-
         // CacheFirst serves a fresh cached response without touching the network.
         // NetworkFirst always goes to the network, and consults the cache only on failure.
         if (strategy == SourcePriority.CacheFirst)
@@ -279,18 +289,25 @@ public sealed class HyperwycHandler : DelegatingHandler
         {
             response = await base.SendAsync(request, ct).ConfigureAwait(false);
         }
-        catch (HttpRequestException) when (strategy == SourcePriority.NetworkFirst)
+        catch (HttpRequestException)
         {
-            // Reachable when IConnectivityService reports online but the API is not
-            // actually reachable — a captive portal, DNS failure or transient outage.
-            var fallback = await TryReadAsync(() => _store.GetCachedResponseAsync(url, ct)).ConfigureAwait(false);
-            if (fallback is not null && !IsStale(fallback, policy.Ttl))
-                return BuildResponseFromEnvelope(fallback);
-
-            throw;
+            // The connectivity service said online and no answer came back. Whatever the
+            // cause, this read has no network, so it gets the answer a read with no network
+            // gets — rather than an exception, which is what the caller would have been
+            // spared had the connectivity service happened to be right.
+            //
+            // Unlike a write, this needs no judgement about how far the request got: a read
+            // can always be degraded safely, because both possible answers — a valid cached
+            // response, or "no data" — are ones the caller already handles. A write cannot be
+            // replayed safely on the same evidence, which is why NeverReachedTheApi guards
+            // that path and not this one.
+            return await ServeReadWithoutNetworkAsync(policy, url, ct).ConfigureAwait(false);
         }
 
-        await CacheResponseIfEligibleAsync(request, response, url, ct).ConfigureAwait(false);
+        // NetworkOnly neither reads nor writes the store, so there is nothing to record.
+        if (strategy != SourcePriority.NetworkOnly)
+            await CacheResponseIfEligibleAsync(request, response, url, ct).ConfigureAwait(false);
+
         return response;
     }
 

@@ -131,13 +131,17 @@ public class SourcePriorityTests
     }
 
     [Fact]
-    public async Task NetworkFirst_NetworkThrowsAndNoCache_PropagatesException()
+    public async Task NetworkFirst_NetworkThrowsAndNoCache_AnswersOffline()
     {
         var store = new InMemoryStore();
         var stub = NetworkFailing();
         using var client = new HttpClient(BuildHandler(store, stub, SourcePriority.NetworkFirst));
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => client.GetAsync(Url));
+        // No answer from the transport is the offline case, however the connectivity service
+        // described it — so the caller gets "no data", not an exception.
+        var response = await client.GetAsync(Url);
+
+        Assert.Equal("Offline", response.Headers.GetValues("X-Hyperwyc-Status").Single());
     }
 
     [Fact]
@@ -188,7 +192,7 @@ public class SourcePriorityTests
     }
 
     [Fact]
-    public async Task CacheFirst_NetworkThrows_DoesNotFallBackToCache()
+    public async Task CacheFirst_NetworkThrows_DoesNotServeTheStaleCache()
     {
         var store = new InMemoryStore();
         await store.UpsertAsync(CachedEnvelope());
@@ -196,9 +200,13 @@ public class SourcePriorityTests
         using var client = new HttpClient(
             BuildHandler(store, stub, SourcePriority.CacheFirst, cacheIsStale: true));
 
-        // Fallback-on-failure is NetworkFirst's contract, not CacheFirst's. CacheFirst
-        // already had its chance to serve the cache and judged it stale.
-        await Assert.ThrowsAsync<HttpRequestException>(() => client.GetAsync(Url));
+        // The TTL is a validity bound, so a stale copy is not served here either — CacheFirst
+        // already had its chance and judged it stale. What the caller gets is the offline
+        // answer rather than an exception: the failure is the absence of data, not a fault.
+        var response = await client.GetAsync(Url);
+
+        Assert.Equal("Offline", response.Headers.GetValues("X-Hyperwyc-Status").Single());
+        Assert.Equal("null", await response.Content.ReadAsStringAsync());
     }
 
     /// <summary>

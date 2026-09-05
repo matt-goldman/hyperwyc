@@ -141,17 +141,17 @@ public class OnlineWriteTransportFailureTests
     }
 
     [Fact]
-    public async Task Read_IsUnaffected()
+    public async Task Read_IsNotQueued()
     {
-        // Reads have their own answer to this — serve the cache, or report no data. A GET must
-        // not end up in the outbox.
+        // Reads have their own answer to this — serve the cache, or report no data. Either
+        // way a GET must never end up in the outbox. See ReadTransportFailureTests.
         var store = new InMemoryStore();
         using var client = new HttpClient(
             BuildHandler(store, Throwing(HttpRequestError.ConnectionError)));
 
-        await Assert.ThrowsAsync<HttpRequestException>(() =>
-            client.GetAsync("https://example.com/api/orders"));
+        var response = await client.GetAsync("https://example.com/api/orders");
 
+        Assert.Equal("Offline", response.Headers.GetValues("X-Hyperwyc-Status").Single());
         Assert.Empty(await store.GetPendingOutboxAsync());
     }
 
