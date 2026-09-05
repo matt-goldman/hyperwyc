@@ -17,6 +17,7 @@ offline, and replays them when the network returns. Your calling code does not c
 |---|---|
 | **[Caching and route policies](caching.md)** | Where a response comes from, how long it stays usable, and how to vary both per route |
 | **[Offline writes](offline-writes.md)** | Queueing, replay, and what happens when a write fails |
+| **[Synthetic responses](responses.md)** | The status codes and headers Hyperwyc returns when it answers instead of the server |
 | **[Events](events.md)** | Finding out what the server eventually said about a deferred write |
 | **[Pipeline placement](pipeline.md)** | Where the handler sits, and what that means for auth |
 | **[Storage](storage.md)** | Location, encryption at rest, and what happens when the store cannot be read |

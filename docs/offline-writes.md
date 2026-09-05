@@ -53,9 +53,10 @@ already committed, the retry looks identical to a first attempt. This is true of
 handler, a user double-tapping a button, or a proxy replaying a request. Hyperwyc's retry carries
 the same risk and no more.
 
-**Hyperwyc takes no position on it.** It adds no headers and asks nothing of your API; duplicate
-suppression is between your application and your backend. If it matters to you, approaches people
-use include:
+**Hyperwyc takes no position on it.** It sends no headers of its own on the wire and asks nothing
+of your API — the [two it adds](responses.md#headers) go on responses it synthesises, which your
+server never sees. Duplicate suppression is between your application and your backend. If it
+matters to you, approaches people use include:
 
 - **Client-generated domain identity** — the record carries an id chosen by the client, so a
   repeated write updates rather than duplicates. Idempotent by construction, and nothing in the

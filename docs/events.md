@@ -40,7 +40,7 @@ await client.SendAsync(request);
 ```
 
 If you don't, Hyperwyc generates one and returns it on the `202` as
-`X-Hyperwyc-Correlation-Id`, so you can record the association at the moment you queue:
+[`X-Hyperwyc-Correlation-Id`](responses.md#headers), so you can record the association at the moment you queue:
 
 ```csharp
 var response = await client.PostAsJsonAsync("/sales", sale);
