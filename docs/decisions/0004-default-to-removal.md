@@ -85,10 +85,33 @@ foreclose it: `Hyperwyc.Core` plus a consumer-supplied `ISyncStore` is the seam 
 anything deleted can be re-added by whoever actually needs it. That is what makes aggressive
 removal safe rather than reckless.
 
-## What the audit actually removed
+## The test this establishes
 
-Recorded here rather than as its own document, because it is not a separate decision — it is what
-this one cost and saved when applied.
+1. **What can come out?** Ask before asking what goes in. If the answer to a problem is a new
+   type, an option or a mechanism, that is the answer requiring justification.
+2. **Does a decision we have already taken orphan this?** Declining a responsibility invalidates
+   the code that served it. Go and collect it.
+3. **Is this removing complexity or relocating it?** Both can be correct —
+   [issue 47](../../Backlog/Done/47-connectivity-is-required.md) deliberately moved a decision to
+   the consumer, where the knowledge lives. But relocation is not reduction, and calling it one is
+   how a surface grows while everyone believes it is shrinking.
+4. **Is this machinery around the promise, or the promise?** Durability, header fidelity, buffering
+   before a synchronous read: these look like complexity and are the product. Deleting them
+   deletes the thing. Everything else is negotiable.
+
+## Held loosely
+
+This is a default, not a conviction, and it is not a position to be defended. It is cheap when
+wrong — a removal proposal that turns out to be load-bearing is rejected in one exchange — and
+valuable when right, because the common failure is a system that is too complicated rather than
+one that is missing a part. Start there; be talked out of it readily.
+
+---
+
+## Addendum 1 — 2026-09-05: what the audit removed
+
+*Appended after acceptance. Nothing above is altered; an accepted decision is immutable. This
+records what applying it produced, which is evidence for the decision rather than a change to it.*
 
 Recorded because absence is invisible: someone reading this document should not have to work out
 from silence that these were considered and taken out.
@@ -130,24 +153,3 @@ through which any of it can be re-added by whoever actually needs it, which is w
 it safe rather than reckless.
 
 ---
-
-## The test this establishes
-
-1. **What can come out?** Ask before asking what goes in. If the answer to a problem is a new
-   type, an option or a mechanism, that is the answer requiring justification.
-2. **Does a decision we have already taken orphan this?** Declining a responsibility invalidates
-   the code that served it. Go and collect it.
-3. **Is this removing complexity or relocating it?** Both can be correct —
-   [issue 47](../../Backlog/Done/47-connectivity-is-required.md) deliberately moved a decision to
-   the consumer, where the knowledge lives. But relocation is not reduction, and calling it one is
-   how a surface grows while everyone believes it is shrinking.
-4. **Is this machinery around the promise, or the promise?** Durability, header fidelity, buffering
-   before a synchronous read: these look like complexity and are the product. Deleting them
-   deletes the thing. Everything else is negotiable.
-
-## Held loosely
-
-This is a default, not a conviction, and it is not a position to be defended. It is cheap when
-wrong — a removal proposal that turns out to be load-bearing is rejected in one exchange — and
-valuable when right, because the common failure is a system that is too complicated rather than
-one that is missing a part. Start there; be talked out of it readily.

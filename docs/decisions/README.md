@@ -43,6 +43,15 @@ again.
   where it is with its status updated; the reasoning that turned out to be wrong is often the
   most useful part.
 - Link to the backlog item that implemented it, so the *what* is one hop away.
+- **An accepted ADR is immutable.** Its body is a record of what was decided and why, at the time
+  it was decided — editing it destroys the thing the record exists for, and quietly makes past
+  reasoning look better informed than it was. Anything to add or clarify goes in a numbered,
+  dated **addendum** appended below the body, which says plainly that it does not alter the
+  decision. Anything that changes the decision is a new ADR that supersedes this one.
+
+  Two things are not edits and are fine: repairing a link whose target moved, and correcting a
+  statement of fact that was wrong when written — the second should say so in an addendum if
+  anyone might have relied on it.
 
 ## Reference models
 
