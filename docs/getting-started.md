@@ -25,9 +25,10 @@ desktop or a server, wrong often enough on a phone to be worth replacing:
 services.AddSingleton<IConnectivityService, MauiConnectivityService>();
 ```
 
-That is an optimisation, not a repair. Nothing is lost when the fallback is wrong: a read is
-served from the store and a write is queued, exactly as if the device had been known to be
-offline. What you save is a doomed request each time. [Connectivity](connectivity.md) has an
+That is an optimisation, not a repair. The fallback errs toward reporting connected, and that
+direction costs nothing but the failed request: a read is then served from the store and a write
+is queued, exactly as if the device had been known to be offline. What you save is the doomed
+request each time — which on a phone is worth saving. [Connectivity](connectivity.md) has an
 implementation to copy for MAUI and for Windows.
 
 Everything else has a working default, and is there when you want it:

@@ -3,16 +3,29 @@
 Hyperwyc uses connectivity to decide which path to try first. It has a working fallback, so you
 do not have to supply one — but on mobile you should, and this page is about why and how.
 
-**Connectivity cannot cost you correctness.** Whatever an implementation claims, the transport
-gets the last word: a read it cannot answer is served from the store or reported as no data, and
-a write it never delivered is queued and replayed later. So a poor connectivity source costs a
-doomed request and some latency, never a lost write and never an exception you would not
-otherwise have seen. That was not always true — see
-[ADR 0007](decisions/0007-connectivity-cannot-cost-correctness.md) for what changed and why the
-docs used to say the opposite.
+**The transport gets the last word, but only when it is asked** — and which way an
+implementation errs decides whether it is asked at all. The two directions are not symmetrical,
+and the difference is the thing worth understanding on this page.
 
-What a good one buys you is the doomed request you did not make, and — more importantly — a
-signal when the network comes back, which is what causes queued writes to go out.
+| It reports | Reality | What happens |
+|---|---|---|
+| Online | Offline | The request is attempted and the transport fails. A read is served from the store or reported as no data; a write is queued and replayed later. **Self-correcting** — it costs a doomed request |
+| Offline | Online | Hyperwyc never touches the transport, so nothing contradicts it. A read is served from the store, or reported as no data if the stored copy is past its TTL; a write is queued and answered `202`. **Not self-correcting** — it costs freshness, and delays the write |
+
+Nothing is lost in either direction. But the second one is quiet: the caller is told everything
+is fine, and the data it received is older than it needed to be. A write queued this way goes out
+on the next connectivity *change* — so an implementation that is briefly wrong costs a delay, and
+one that is **stuck** reporting offline never raises that change and never drains the outbox,
+while returning `202`s that look like success.
+
+That is worth knowing when you write your own. It is not a hazard of the fallback:
+`GetIsNetworkAvailable()` reports false only when no ordinary interface is up at all, so its
+characteristic error is the first row — the harmless one. Erring toward "online" is the safe
+direction, which is also why [probing](#why-not-just-probe-the-api) is the wrong instinct.
+
+What a good implementation buys you, then, is the doomed request you did not make, fresher reads
+— and, most of all, a prompt signal when the network returns, because that is what sends queued
+writes.
 
 ## If you supply nothing
 
@@ -277,12 +290,11 @@ real, and useless.
 `NetworkInterfaceType` is not portable either: a Wi-Fi adapter reports as `Ethernet` on Linux,
 not `Wireless80211`, so filtering by type does not rescue this.
 
-In practice that costs less than it sounds like, because **connectivity cannot affect
-correctness.** A false positive means the request goes out and the transport fails: a read is
-then answered from the store exactly as if Hyperwyc had known it was offline, and a write is
-queued exactly as if it had. You lose an attempt and some latency, nothing else. It's a
-reasonable choice for a desktop or server host, and a reasonable starting point on mobile until
-you write the platform version.
+In practice that costs less than it sounds like, because it errs in the safe direction. A false
+positive means the request goes out and the transport fails: a read is then answered from the
+store exactly as if Hyperwyc had known it was offline, and a write is queued exactly as if it
+had. You lose an attempt and some latency, nothing else. It's a reasonable choice for a desktop
+or server host, and a reasonable starting point on mobile until you write the platform version.
 
 ### Why not just probe the API?
 
@@ -312,8 +324,14 @@ to redirect you, so resolution *succeeds* behind one. Against the case that moti
 resolving is less reliable than the link check it was meant to improve on.
 
 Which leaves the conclusion the design already assumes: **the only reliable test of whether your
-API is reachable is a request to your API.** Hyperwyc makes that test on every flush. Connectivity
-is a hint about which path to try first; the transport is what actually knows.
+API is reachable is a request to your API.** Hyperwyc makes that test on every flush.
+
+And there is a second reason not to reach for it, which is the one that settles it. A prober's
+characteristic failure is reporting *offline* when you are not — a cached `NXDOMAIN`, a blocked
+port, a slow resolver. That is the direction Hyperwyc cannot correct, because it is the direction
+in which the transport is never consulted. A link check errs the other way, toward attempting a
+request that fails, which costs an attempt and fixes itself. **Trading a self-correcting error
+for a silent one is a bad trade even when the second error is rarer.**
 
 **`AlwaysOnlineConnectivityService`** reports connected, always. Legitimate for a host that
 genuinely is — or when you want the response cache and nothing else.

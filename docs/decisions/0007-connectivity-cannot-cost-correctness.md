@@ -125,3 +125,42 @@ is worth re-checking against the code, not just against the previous ADR.
 - [ADR 0004](0004-default-to-removal.md) — the fix removed a branch, a status classification and
   two enum members while closing the gap. Consistent with the pattern that adding the right thing
   usually takes something out.
+
+---
+
+## Addendum 1 — 2026-09-06: the claim was too broad in one direction
+
+*Appended the day this was accepted, after review. Nothing above is altered and the decision is
+unchanged; what follows bounds a claim the body states without qualification.*
+
+The body says *"the transport is what actually knows, and it now always gets the last word."*
+That is true only where the transport is consulted, and one of the two ways an implementation can
+be wrong prevents it from being consulted at all.
+
+| It reports | Reality | Consulted? | Result |
+|---|---|---|---|
+| Online | Offline | Yes — and it fails | Read served from the store, write queued. **Self-correcting** |
+| Offline | Online | **No** | Read served from the store or reported as no data if past TTL; write queued and answered `202`. **Nothing contradicts it** |
+
+Nothing is lost in the second row either, so the decision stands. But the cost is not only
+latency, as the body implies: it is freshness on reads, and a write delayed until the next
+connectivity *change* — which an implementation **stuck** reporting offline never raises. That
+case returns `202`s indefinitely while the outbox never drains, and it is the mirror image of the
+`AlwaysOnline` failure that [ADR 0003](0003-default-what-you-can-decide-correctly.md) was built
+on. The body should have said so, and did not.
+
+The title and the *Context* section overstate for the same reason. Read them as: **connectivity
+cannot cost you data, and cannot produce an error the transport would have caught — where the
+transport is reached.**
+
+**Why the decision is unaffected.** The unrecoverable direction is one the shipped fallback
+essentially cannot produce: `GetIsNetworkAvailable()` reports false only when no ordinary
+interface is up at all, so on a working network its error is always the recoverable one. Erring
+toward connected is the safe bias.
+
+That also sharpens the argument against probing recorded in the connectivity documentation. A
+prober's characteristic failure — a cached `NXDOMAIN`, a blocked port, a slow resolver — is
+reporting *offline* while online, which is precisely the direction nothing corrects. A link check
+fails the other way. **Trading a self-correcting error for a silent one is a bad trade even when
+the second error is rarer**, and that, rather than accuracy, is the reason the simpler check is
+the better default.

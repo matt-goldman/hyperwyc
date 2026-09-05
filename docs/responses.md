@@ -11,8 +11,11 @@ Hyperwyc answers a request itself in exactly two cases:
 
 Either can arise two ways: the connectivity service reported offline, or the request was
 attempted and [the transport could not answer](offline-writes.md). Both produce the identical
-response — the caller cannot tell which happened, and does not need to. That is the point: a
-connectivity implementation that is wrong costs latency, never correctness.
+response — the caller cannot tell which happened, and does not need to. So a connectivity
+implementation that wrongly reports *online* costs a doomed request and nothing else. One that
+wrongly reports *offline* is not corrected, because the transport is never asked; that costs
+freshness and delays a write. Neither loses data. See
+[Connectivity](connectivity.md) for which direction matters.
 
 Everything else your caller sees — including a cache hit — is a real server response, returned
 unchanged.

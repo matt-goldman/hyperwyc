@@ -9,7 +9,7 @@ offline, and replays them when the network returns. Your calling code does not c
 |---|---|
 | **[Is Hyperwyc right for your app?](choosing.md)** | What it is for, what it is not for, and how it compares to Realm and CommunityToolkit.Datasync. Read this first if you are evaluating |
 | **[Getting started](getting-started.md)** | Install, register, make a request |
-| **[Connectivity](connectivity.md)** | What the default does, why it cannot cost you correctness, and when to replace it |
+| **[Connectivity](connectivity.md)** | What the default does, which way it errs and why that is the safe way, and when to replace it |
 
 ## Using it
 

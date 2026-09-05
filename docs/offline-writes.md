@@ -104,7 +104,10 @@ the write. With it, being wrong costs an attempt.
 > risk a duplicate on a guess. Those are also failures no connectivity change would fix.
 
 The same rule the rest of the library follows: connectivity is a hint about which path to try
-first, and the transport is what actually knows.
+first, and where the transport is consulted, it is what actually knows. Note the limit — a
+connectivity service that wrongly reports *offline* is never contradicted, because no request is
+made to contradict it. That write is queued rather than sent, and goes out on the next
+connectivity change.
 
 ## Interrupted deliveries
 

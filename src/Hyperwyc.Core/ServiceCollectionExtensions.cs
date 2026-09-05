@@ -105,10 +105,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(options);
 
         // Connectivity falls back to NetworkAvailabilityConnectivityService when nothing is
-        // supplied. That is a real default rather than a guess dressed as one, because a wrong
-        // connectivity answer can no longer cost correctness: a read the transport cannot
-        // answer is served from the store, and a write the transport never delivered is
-        // queued. What a poor answer costs is latency and battery. See ADR 0007.
+        // supplied. That is a real default rather than a guess dressed as one, because the way
+        // this implementation errs is the recoverable way: it reports connected when it should
+        // not, the transport is consulted, it fails, and Hyperwyc degrades on what the
+        // transport said. The unrecoverable direction — reporting offline while online, which
+        // nothing contradicts because no request is made — is one GetIsNetworkAvailable()
+        // essentially cannot produce on a working network. See ADR 0007.
         //
         // Registering an IConnectivityService in the container is still the expected route, and
         // must work whether that registration comes before or after AddHyperwyc — a consumer
@@ -173,9 +175,10 @@ public static class ServiceCollectionExtensions
         not whether your API is reachable, so it reports "connected" behind a captive portal,
         on a router with no upstream, or when only a VPN interface is present.
 
-        Nothing is lost when it is wrong — a read is served from the store and a write is
-        queued, exactly as if the device had been known to be offline — but every wrong answer
-        costs a doomed request first. On a mobile device that is worth avoiding:
+        It errs toward reporting connected, which is the harmless direction: the request is
+        attempted, the transport fails, and a read is served from the store while a write is
+        queued, exactly as if the device had been known to be offline. Every wrong answer still
+        costs a doomed request first, which on a mobile device is worth avoiding:
 
           - On .NET MAUI, an implementation over Connectivity.Current is about twenty lines and
             the sample application has one to copy.

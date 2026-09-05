@@ -56,17 +56,19 @@ public sealed class HyperwycOptions
     /// <para>
     /// <b>Supply one anyway on a mobile device.</b> The fallback reports whether a network
     /// interface is up, not whether your API is reachable, so it says "connected" behind a
-    /// captive portal or on a signal too weak to carry a request. Nothing is lost when it is
-    /// wrong — a read is served from the store and a write is queued, exactly as if the device
-    /// had been known to be offline — but each wrong answer costs a doomed request first. An
-    /// implementation over <c>Connectivity.Current</c> is about twenty lines and the sample
-    /// application has one to copy.
+    /// captive portal or on a signal too weak to carry a request. That is the harmless
+    /// direction — the request is attempted, the transport fails, and Hyperwyc degrades exactly
+    /// as if the device had been known to be offline — but each wrong answer costs a doomed
+    /// request first. An implementation over <c>Connectivity.Current</c> is about twenty lines
+    /// and the sample application has one to copy.
     /// </para>
     /// <para>
-    /// The fallback is a default rather than a guess because a poor connectivity answer can no
-    /// longer cost correctness: the transport is what decides, and Hyperwyc degrades on what it
-    /// reports. That was not true until the transport-failure paths were fixed, which is why
-    /// this option was once required — see ADR 0007.
+    /// <b>Which way an implementation errs matters more than how often.</b> Reporting online
+    /// while offline is self-correcting, because the transport is consulted and contradicts it.
+    /// Reporting offline while online is not: Hyperwyc does not touch the transport, so nothing
+    /// contradicts it. Nothing is lost either way, but the second costs freshness and delays a
+    /// write until the next connectivity change — and an implementation stuck reporting offline
+    /// never raises one. Prefer erring toward connected. See ADR 0007.
     /// </para>
     /// </remarks>
     public IConnectivityService? Connectivity { get; set; }
