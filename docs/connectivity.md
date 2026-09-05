@@ -2,14 +2,9 @@
 
 Hyperwyc needs to know whether the device can reach the network, and it has no default for this on purpose. This is the one thing you must supply.
 
-Hyperwyc needs to know whether the device can reach the network, and it has **no default for
-this, on purpose**.
+Hyperwyc makes every effort to be usable out of the box, but this is the one exception to how the rest of the library behaves. For example, you can provide your own store, but Hyperwyc bundles Cabinet by default because, functionally, it doesn't really matter what durable store you use. 
 
-That is a deliberate exception to how the rest of the library behaves. Hyperwyc can pick a
-store for you because any durable store will do. It cannot pick a connectivity source, because
-the right answer depends on the platform — and a wrong one fails quietly. If it assumed
-"always online", every request would take the network path, nothing would ever be queued, and
-nothing would ever be replayed. You'd have a caching library that looked like it was working.
+It cannot pick a connectivity source, because the right answer depends on the platform — and a wrong one fails quietly. If it assumed "always online", every request would take the network path, nothing would ever be queued, and nothing would ever be replayed. You'd have a caching library that looked like it was working.
 
 ## Register it in your container
 
@@ -200,6 +195,30 @@ it untestable and useless off-platform. Marshal in your subscriber if you're tou
 the grounds that a captive portal is not the internet. If your API is reachable under it, flip
 that condition.
 
+### On Windows, the best answer is a different API again
+
+Outside MAUI, Windows exposes `NetworkInformation.GetInternetConnectionProfile()`, whose
+`GetNetworkConnectivityLevel()` returns `None`, `LocalAccess`, `ConstrainedInternetAccess` or
+`InternetAccess`. That is a better answer than anything below, because it reports reachability
+rather than link state — Windows has actually probed. If you target Windows, use it.
+
+```csharp
+var profile = NetworkInformation.GetInternetConnectionProfile();
+var connected = profile?.GetNetworkConnectivityLevel() == NetworkConnectivityLevel.InternetAccess;
+```
+
+Two costs come with it, and they are the reason it is not in the box. It is WinRT, so it needs a
+`net10.0-windows10.0.x` target framework — the same multi-targeting bill that keeps the MAUI
+implementation out of the package. And Microsoft's own documentation warns that the returned
+profile *"might or might not have internet access"*, so the connectivity level is not optional,
+and you still have to decide for yourself whether `ConstrainedInternetAccess` counts. That is the
+identical judgement call as `NetworkAccess.ConstrainedInternet` above.
+
+**Which is the whole argument in one place.** Three platforms, three unrelated APIs, three
+different answers to "what counts as connected" — and the right one depends on your API, not on
+Hyperwyc. That is why nothing is registered for you; see
+[ADR 0006](decisions/0006-a-shipped-implementation-is-not-a-default.md).
+
 **`NetworkAvailabilityConnectivityService`** ships in the box if you'd rather not, built on
 `NetworkInterface.GetIsNetworkAvailable()` with no platform dependency:
 
@@ -212,11 +231,68 @@ services.AddSingleton<IConnectivityService, NetworkAvailabilityConnectivityServi
 > behind a captive portal, on a router with no upstream, or on a mobile signal too weak to
 > carry a request.
 
+### What it actually checks
+
+Worth knowing precisely, because the name suggests more than it does. The whole test is:
+
+```csharp
+// any interface, in System.Net.NetworkInformation
+netInterface.OperationalStatus == OperationalStatus.Up
+    && netInterface.NetworkInterfaceType != NetworkInterfaceType.Tunnel
+    && netInterface.NetworkInterfaceType != NetworkInterfaceType.Loopback
+```
+
+No address check, no traffic check, no probe. `OperationalStatus` is
+[RFC 2863](https://datatracker.ietf.org/doc/html/rfc2863) `operStatus` — *"able to pass
+packets"* — which is **link state, not administrative state**. So an adapter that is merely
+enabled does not count: an unplugged ethernet port and a Wi-Fi adapter with no association both
+report `Down`, because neither has carrier. That is the part it gets right, and it is why
+aeroplane mode and an unplugged cable are caught.
+
+What it cannot see is anything above layer 2. It reports connected behind a captive portal, on a
+router with no upstream, and on a mobile signal too weak to carry a request — the network is
+real, and useless.
+
+> **A VPN or mesh interface can hold it at `true` on its own.** The tunnel exclusion is narrower
+> than it looks: a TUN interface often reports `NetworkInterfaceType.Unknown` rather than
+> `Tunnel`, so it is not excluded, and it does not necessarily go down when the physical link
+> does. On a machine with every physical adapter down and a mesh client still running, this
+> returns `true`. Different in kind from the cases above — that is not a degraded network path,
+> it is not a path at all.
+
+`NetworkInterfaceType` is not portable either: a Wi-Fi adapter reports as `Ethernet` on Linux,
+not `Wireless80211`, so filtering by type does not rescue this.
+
 In practice that costs less than it sounds like. Connectivity is a hint about which path to
 take; a false positive means the request goes out and fails at the transport, which Hyperwyc
 already handles by abandoning the flush and waiting for the next signal. You lose a wasted
 attempt and some latency, not correctness. It's a reasonable choice for a desktop or server
 host, and a reasonable starting point on mobile until you write the platform version.
+
+### Why not just probe the API?
+
+The obvious next move is to make the check smarter — ping your API, or resolve its host name,
+and report *that*. Pinging is expensive and roughly duplicates the request you were about to
+make. Resolving looks cheaper. It is, and it is worse.
+
+**You cannot guarantee a fresh lookup.** `Dns.GetHostEntry` goes through the OS resolver, which
+caches — the DNS Client service on Windows, `systemd-resolved` on most Linux — and there is no
+"bypass the cache" flag. Being sure would mean speaking DNS yourself to a chosen server over
+UDP/53: a dependency, and a port that is routinely blocked or intercepted.
+
+**Negative caching makes it fail the wrong way.** `NXDOMAIN` and `SERVFAIL` are cached too, for
+the zone's SOA minimum. A lookup that failed while you were offline keeps failing after the
+network returns, so connectivity reports offline, the flush never fires, and queued writes sit
+there. A false positive costs one wasted attempt; a false negative costs delivery. This trades
+the cheap failure for the expensive one.
+
+**And a captive portal defeats it in the wrong direction.** A portal has to answer DNS in order
+to redirect you, so resolution *succeeds* behind one. Against the case that motivated the idea,
+resolving is less reliable than the link check it was meant to improve on.
+
+Which leaves the conclusion the design already assumes: **the only reliable test of whether your
+API is reachable is a request to your API.** Hyperwyc makes that test on every flush. Connectivity
+is a hint about which path to try first; the transport is what actually knows.
 
 **`AlwaysOnlineConnectivityService`** reports connected, always. Legitimate for a host that
 genuinely is — or when you want the response cache and nothing else. **Nothing is ever queued

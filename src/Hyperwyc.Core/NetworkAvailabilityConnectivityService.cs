@@ -22,9 +22,19 @@ namespace Hyperwyc;
 /// the next signal. What it costs is latency and a wasted attempt, not correctness.
 /// </para>
 /// <para>
+/// <b>A VPN or mesh interface can hold this at <see langword="true"/> on its own.</b> The
+/// underlying check excludes <see cref="NetworkInterfaceType.Tunnel"/>, but a TUN interface
+/// frequently reports <see cref="NetworkInterfaceType.Unknown"/> instead and so is not
+/// excluded — and it does not necessarily go down when the physical link does. Unlike the
+/// cases above, that is not a degraded network path; it is not a path at all.
+/// </para>
+/// <para>
 /// On .NET MAUI prefer a <c>Connectivity.Current</c>-based implementation, which
 /// distinguishes <c>NetworkAccess.Internet</c> from <c>ConstrainedInternet</c> and reacts to
-/// platform connectivity events properly. The sample application carries one to copy.
+/// platform connectivity events properly. The sample application carries one to copy. On
+/// Windows outside MAUI, <c>NetworkInformation.GetInternetConnectionProfile()</c> and
+/// <c>GetNetworkConnectivityLevel()</c> report reachability rather than link state, at the
+/// cost of a Windows-specific target framework.
 /// </para>
 /// </remarks>
 public sealed class NetworkAvailabilityConnectivityService : IConnectivityService, IDisposable
