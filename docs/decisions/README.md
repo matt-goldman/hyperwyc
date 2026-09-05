@@ -10,6 +10,7 @@ reversed.
 | [0002](0002-replays-traverse-the-pipeline.md) | Replays traverse the application's pipeline | Accepted |
 | [0003](0003-default-what-you-can-decide-correctly.md) | Default what you can decide correctly; require what you cannot | Accepted |
 | [0004](0004-default-to-removal.md) | Default to removal | Accepted |
+| [0005](0005-vocabulary.md) | Name things for the purpose, not the mechanism | Accepted |
 
 ## What belongs here
 
@@ -25,10 +26,9 @@ no lasting implications.
 
 | Document | Question it answers |
 |---|---|
-| [README](../../README.md) | How do I use it? |
-| [TECHNICAL_PLAN](../../TECHNICAL_PLAN.md) | What does it do today, and how is it built? |
-| [ROADMAP](../../ROADMAP.md) | What is coming? |
-| [Backlog](../../Backlog/README.md) | What is the work, and what state is each piece in? |
+| [README](../../README.md) | What is it? |
+| [docs](../README.md) | How do I use it? |
+| [Backlog](../../Backlog/README.md) | What is the work, what state is each piece in, and what is coming? |
 | **decisions** | **Why is it this way, and what does that imply for what comes next?** |
 
 A backlog item records what was done and how. An ADR records *why*, and what the decision means

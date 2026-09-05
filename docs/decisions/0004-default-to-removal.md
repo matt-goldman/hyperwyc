@@ -85,6 +85,52 @@ foreclose it: `Hyperwyc.Core` plus a consumer-supplied `ISyncStore` is the seam 
 anything deleted can be re-added by whoever actually needs it. That is what makes aggressive
 removal safe rather than reckless.
 
+## What the audit actually removed
+
+Recorded here rather than as its own document, because it is not a separate decision — it is what
+this one cost and saved when applied.
+
+Recorded because absence is invisible: someone reading this document should not have to work out
+from silence that these were considered and taken out.
+
+[ADR 0004](0004-default-to-removal.md) audited the surface against ADR 0001's
+scope test and removed everything the project had already decided against but was still carrying.
+
+**All retry apparatus.** `RetryOptions`, `ISyncPolicy.GetRetryOptions`,
+`HyperwycOptions.DefaultRetryOptions` and `ConnectivityDebounceDelay`, `Envelope.RetryCount` and
+`NextRetryUtc`, `IHyperwycStore.GetReadyToSendAsync`, exponential backoff with jitter, the follow-up
+scheduler, the connectivity debounce, `HyperwycEventType.OnRetrying`, and `DeliveryOutcome.AttemptCount`
+and `IsFinal`.
+
+[Issue 38](../../Backlog/Done/38-retry-classification.md) had already concluded that Hyperwyc retries
+*connectivity* failures on *connectivity change*, and
+[ADR 0002](0002-replays-traverse-the-pipeline.md) established that replays
+traverse the application's pipeline — so the app's own resilience handler already covers `5xx`
+and `429`. The apparatus was serving a responsibility we had declined.
+
+What replaces it: a `4xx` dead-letters on the first attempt; anything else leaves the envelope in
+the outbox for the next flush, which happens on connectivity restored or application start. No
+budget, no curve, no timers. An envelope can wait indefinitely against a permanently broken
+endpoint, which is honest and better than destroying a write.
+
+**`IStalenessEvaluator` and `TtlStalenessEvaluator`.** One implementation, one caller, and the
+indirection caused [issue 29](../../Backlog/Done/29-default-ttl-propagation.md). Now a TTL comparison
+in the handler. [Issue 41](../../Backlog/41-honour-cacheability-directives.md) is where per-response
+staleness earns an interface back.
+
+**`OfflineResponsePolicy`.** The `Signal` mode had no users and asserted the consumer should have
+an opinion. Synthetic responses now have one shape: a normal-looking success, distinguished by
+`X-Hyperwyc-Status` and — for writes — the `202`.
+
+**`DeliveryOutcome.Headers`.** A full response-header dictionary captured on every outcome that
+nothing read.
+
+Nothing here is foreclosed. `Hyperwyc.Core` with a consumer-supplied `IHyperwycStore` is the seam
+through which any of it can be re-added by whoever actually needs it, which is what made removing
+it safe rather than reckless.
+
+---
+
 ## The test this establishes
 
 1. **What can come out?** Ask before asking what goes in. If the answer to a problem is a new

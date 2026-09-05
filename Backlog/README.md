@@ -5,8 +5,11 @@ Every backlog item is a numbered markdown file. Items that are complete move to
 see what exists, what state it's in, and what order it should be tackled in.
 
 **Status is verified against the code, not against an item's own checkboxes.** Where the two
-disagree, this index wins. [ROADMAP.md](../ROADMAP.md) groups the same items by milestone;
-[TECHNICAL_PLAN.md](../TECHNICAL_PLAN.md) describes only what is already built.
+disagree, this index wins. It is also the only forward-looking document: `ROADMAP.md` was a
+second, staler copy of these milestones and was removed on 2026-09-05, along with
+`TECHNICAL_PLAN.md`, whose as-built detail had drifted into a duplicate of the code comments.
+What was worth keeping from them moved into [docs](../docs/) and
+[docs/decisions](../docs/decisions/); the rest is in git history.
 
 | Status | Meaning |
 |---|---|
@@ -114,7 +117,7 @@ then **46 before 45**, since cheap revalidation is what makes stale-while-revali
 
 ## Unfiled roadmap items
 
-Listed in [ROADMAP.md](../ROADMAP.md) under v2.0+ with no backlog file yet. Each needs one
+Direction rather than commitments, with no backlog file yet. Each needs one
 before it can be worked on: `Hyperwyc.IndexedDb`, additional store providers (`LiteDb`,
 `Sqlite`), user-scoped store, background sync scheduler, prefetch on boot, smart paging,
 request grouping / bulk sync, and GraphQL support.
@@ -140,7 +143,7 @@ request grouping / bulk sync, and GraphQL support.
   the first package ships.
 - **The ADR 0004 audit (2026-08-25) removed all retry apparatus, `IStalenessEvaluator`,
   `OfflineResponsePolicy` and `DeliveryOutcome.Headers`.** No backlog item: the decision is in
-  [ADR 0004](../docs/decisions/0004-default-to-removal.md), the detail is in TECHNICAL_PLAN, and
+  [ADR 0004](../docs/decisions/0004-default-to-removal.md), which records what came out, and
   the rest is git history. Items 12 and 28 are superseded by it. `OutboxProcessor` went from 751
   lines to 577, `HyperwycOptions` from eleven knobs to seven, and four public types plus two
   public interface members are gone.

@@ -74,7 +74,7 @@ consumers a first-class extension point, and keeps platform APIs out of the core
 - [ ] The `CabinetStore` "not cryptographically strong" caveat is surfaced on the path
       consumers actually take. Today it appears only on a constructor most will never call, so
       after issue #31 the warning would sit on the one code path nobody reads.
-- [ ] Feature descriptions of encryption at rest — README, package description, TECHNICAL_PLAN
+- [ ] Feature descriptions of encryption at rest — README, package description, docs/storage.md
       §9 — are phrased so they do not imply a stronger guarantee than the default provides.
 - [ ] A MAUI `SecureStorage`-backed key is documented as reference code, alongside the
       connectivity reference implementation from issue #13.

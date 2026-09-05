@@ -1,4 +1,16 @@
-# Hyperwyc — Sample Application
+# Hyperwyc — proof of concept
+
+## What this is
+
+A proof of concept rather than a demo. It exists to prove Hyperwyc works on a real device —
+offline reads across an app restart, offline writes replayed on reconnect, binary bodies — and it
+has done that.
+
+It is **not** a showcase, and the domain is a poor one for the library: stock level is a shared
+mutable resource, so an offline sale is conflict-prone by construction and the `409` you will see
+is routine rather than illustrative. See
+[Is Hyperwyc right for your app?](../docs/choosing.md) for why that matters, and
+[issue 19](../Backlog/Done/19-poc-maui-app.md) for what a better demo would look like.
 
 ## Purpose
 
@@ -94,7 +106,7 @@ but whose response never made it back is recognised on replay.
 Note what is *not* involved. Hyperwyc adds no header and asks nothing of this API — it sends the
 request the app made. The idempotency is a property of the domain model, not of the transport,
 which is the point the sample is making. See
-[Duplicate writes](README.md#duplicate-writes) for other approaches.
+[Duplicate writes](../docs/offline-writes.md#duplicate-writes) for other approaches.
 
 ---
 
@@ -148,7 +160,7 @@ HyperwycHandler (in the HttpClient pipeline)
 
 Note the replay path: a queued sale goes back through the *application's* pipeline, not around
 it, so auth and any other handlers apply to it. `HyperwycHandler` recognises the replay and does
-not intercept it a second time. See [Auth Handler Placement](README.md#auth-handler-placement).
+not intercept it a second time. See [Auth Handler Placement](../docs/pipeline.md).
 
 ---
 
@@ -216,7 +228,7 @@ Worth knowing before you conclude something is broken:
   URL prefix, so `POST /sales` invalidates cached reads under `/sales`, not `/products` — even
   though the sale changed stock levels. Use a short TTL on the catalogue, an explicit refresh,
   or `SyncPolicy.ApiFirst()` for that route. Per-route policies
-  ([issue 22](Backlog/Done/22-v1-per-route-policies.md)) would let this be expressed properly.
+  ([issue 22](../Backlog/Done/22-v1-per-route-policies.md)) would let this be expressed properly.
 
 ---
 

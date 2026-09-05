@@ -9,7 +9,7 @@
 ## Summary
 
 `Envelope.ForRequest` persists every request header verbatim, including `Authorization`
-and `Cookie`. TECHNICAL_PLAN §9 states that sensitive headers are excluded by default.
+and `Cookie`. The since-removed TECHNICAL_PLAN claimed sensitive headers were excluded by default; they were not.
 The documentation describes a protection that does not exist.
 
 ## Background
@@ -36,7 +36,7 @@ actually goes on the wire during a flush.
 - Maintain a default deny-list of headers excluded from persisted envelopes:
   `Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`.
 - Make the list configurable via `HyperwycOptions` — additive, and with an opt-out for
-  developers who deliberately want full request persistence (TECHNICAL_PLAN §9 already
+  developers who deliberately want full request persistence (the old TECHNICAL_PLAN already
   promises this flag).
 - Excluded headers are dropped at envelope-construction time, not at replay time, so they
   never reach the store.
@@ -52,7 +52,7 @@ actually goes on the wire during a flush.
       exposure and its mitigation are read together.
 - [ ] The handler-ordering recommendation gains its second reason: credentials added after
       Hyperwyc are never stored at all.
-- [ ] TECHNICAL_PLAN §9 states the same, replacing the claim that sensitive headers are excluded.
+- [ ] [docs/storage.md](../docs/storage.md) states the same, replacing the claim that sensitive headers are excluded.
 - [ ] Unit test: a caller-set `Authorization` survives queueing and replay unchanged — the
       fidelity guarantee, pinned so a future "security fix" cannot quietly break replay.
 - [ ] Decision recorded on whether an opt-in deny-list ships at all.

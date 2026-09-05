@@ -141,7 +141,7 @@ this item called for, and is documented in the code as a deliberate choice.
 Everything remaining was documentation, and it is done. Two places, because they serve different
 readers:
 
-- **README, under [Connectivity](../../README.md#connectivity).** The full implementation in a
+- **README, under [Connectivity](../../docs/connectivity.md).** The full implementation in a
   collapsible block, followed by the five things in it that are deliberate — no
   `System.Reactive`, change-stream rather than state-view, publish-only-on-change, `IDisposable`
   to unhook the static, and no thread marshalling. Plus the `ConstrainedInternet` reading and how

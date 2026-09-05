@@ -1,0 +1,29 @@
+# Hyperwyc documentation
+
+A Service Worker for .NET: an `HttpClient` handler that caches responses, queues writes made
+offline, and replays them when the network returns. Your calling code does not change.
+
+## Start here
+
+| | |
+|---|---|
+| **[Is Hyperwyc right for your app?](choosing.md)** | What it is for, what it is not for, and how it compares to Realm and CommunityToolkit.Datasync. Read this first if you are evaluating |
+| **[Getting started](getting-started.md)** | Install, register, make a request |
+| **[Connectivity](connectivity.md)** | The one thing you have to supply, and why there is no default |
+
+## Using it
+
+| | |
+|---|---|
+| **[Caching and route policies](caching.md)** | Where a response comes from, how long it stays usable, and how to vary both per route |
+| **[Offline writes](offline-writes.md)** | Queueing, replay, and what happens when a write fails |
+| **[Events](events.md)** | Finding out what the server eventually said about a deferred write |
+| **[Pipeline placement](pipeline.md)** | Where the handler sits, and what that means for auth |
+| **[Storage](storage.md)** | Location, encryption at rest, and what happens when the store cannot be read |
+
+## Why it is this way
+
+**[Architecture decisions](decisions/)** — the reasoning behind Hyperwyc's scope, kept so a
+future decision of the same shape can be answered consistently rather than re-argued. Worth
+reading if you are wondering why some obvious feature is absent; the answer is usually there, and
+usually deliberate.
