@@ -19,3 +19,4 @@ In v0.1, `MaxCachedResponseBodyBytes` defaults to 512 KB and is already wired th
 ## Notes
 
 - The underlying code change is minimal (value is already read from options). This issue is primarily about documentation, validation, and surfacing the option deliberately in v1.0.
+- UPDATE: the above statement is incorrect; this should be a configurable per-route override

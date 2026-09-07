@@ -15,6 +15,8 @@ Route policies affect how Hyperwyc handles read (`GET`, `OPTIONS`, `HEAD`) and w
 
 ### Reads
 
+Hyperwyc lets you control when responses should be prioritised from the cache over the network, and vice versa.
+
 | Strategy                        | Online                                                                                | Offline                                                        |
 | ------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `RoutePolicy.CacheFirst()`      | Serve a cached response if within the default TTL (1 day); otherwise fetch            | Serve the cached response even if stale                        |
@@ -22,6 +24,8 @@ Route policies affect how Hyperwyc handles read (`GET`, `OPTIONS`, `HEAD`) and w
 | `RoutePolicy.NetworkFirst()`    | Always fetch; fall back to the cache only if the request fails                        | Serve the cached response even if stale                        |
 | `RoutePolicy.NetworkFirst(ttl)` | Always fetch; fall back to the cache only if the request fails and the cache is fresh | Serve the cached response if within TTL                        |
 | `RoutePolicy.NetworkOnly()`     | Always fetch; never read or write the store                                           | Does not return null, allows HttpClient to throw               |
+
+Note that Hyperwyc *always* refreshes the cache and resets the TTL upon a successful network fetch (except for `NetworkOnly`).
 
 ### Writes
 
