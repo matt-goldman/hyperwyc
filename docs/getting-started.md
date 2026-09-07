@@ -14,24 +14,17 @@ services.AddHttpClient("MyApi")
 services.AddHyperwyc();
 ```
 
-That's the whole setup. You get a durable, encrypted store and a working connectivity source
-without deciding anything.
+That's the whole setup. You get a durable, encrypted store and a working connectivity source without deciding anything.
 
-**On a mobile device, add one more line.** Hyperwyc falls back to a BCL connectivity check that
-reports whether a network interface is up, not whether your API is reachable — good enough on a
-desktop or a server, wrong often enough on a phone to be worth replacing:
+**On a mobile device, add one more line.** Hyperwyc falls back to a BCL connectivity check that reports whether a network interface is up, not whether your API is reachable; good enough on a desktop or a server, wrong often enough on a phone to be worth replacing:
 
 ```csharp
 services.AddSingleton<IConnectivityService, MauiConnectivityService>();
 ```
 
-That is an optimisation, not a repair. The fallback errs toward reporting connected, and that
-direction costs nothing but the failed request: a read is then served from the store and a write
-is queued, exactly as if the device had been known to be offline. What you save is the doomed
-request each time — which on a phone is worth saving. [Connectivity](connectivity.md) has an
-implementation to copy for MAUI and for Windows.
+That is an optimisation, not a repair. The fallback errs toward reporting connected, which if wrong just costs the extra time it takes for a request to fail. A read is then served from the store and a write is queued, exactly as if the device had been known to be offline. A more robust implementation saves you the time it takes for the request to fail each time, which on a phone is worth saving. [Connectivity](connectivity.md) has a reference implementation to copy for .NET MAUI and for Windows.
 
-Everything else has a working default, and is there when you want it:
+Everything else has a working default, and is customisable when you want to:
 
 ```csharp
 services.AddHyperwyc(options =>
@@ -42,10 +35,10 @@ services.AddHyperwyc(options =>
 
 ## Packages
 
-| Package | Use it when |
-|---|---|
-| `Hyperwyc` | Almost always. Includes durable [Cabinet](https://github.com/mattgoldman/cabinet)-backed storage and works with no configuration |
-| `Hyperwyc.Core` | You are supplying your own `IHyperwycStore`. No storage dependency; call `AddHyperwycCore<TStore>()` instead |
+| Package         | Use it when                                                                                                                      |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `Hyperwyc`      | Almost always. Includes durable [Cabinet](https://github.com/mattgoldman/cabinet)-backed storage and works with no configuration |
+| `Hyperwyc.Core` | You are supplying your own `IHyperwycStore`. No storage dependency; call `AddHyperwycCore<TStore>()` instead                     |
 
 The store is a type parameter on `AddHyperwycCore<TStore>()` rather than a setting, so forgetting it is a compile error rather than a silent fall back to in-memory storage that loses everything on restart:
 
