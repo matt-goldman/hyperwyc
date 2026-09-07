@@ -1,11 +1,10 @@
 # Is Hyperwyc right for your app?
 
-Hyperwyc is narrow on purpose. This is what it is for, what it is not for, and how to tell which
-side your application falls on.
+Hyperwyc is deliberately focused on as narrow a goal as possible. It is not a local or offline database or datastore, and it is not a synchronisation engine (i.e. it has no conflict resolution logic). As much as possible the reasoning behind this is captured in the [architecture decisions](decisions/README.md) (while some of it was captured after the fact the essence is all there). This document explains what Hyperwyc is and isn't and aims to provide guidance on when to use it, when to control _how_ you use it with per-route policies, and, occasionally, when not to use it at all.
 
 ## When to use it
 
-- You want a **service-worker-like** drop-in resilience layer for .NET HTTP clients
+- You want a **service-worker-like** drop-in resilience layer for .NET HTTP clients (see [this Digi Invent article](https://digiinvent.com/service-worker/) or [the official spec](https://developer.mozilla.org/docs/Web/API/Service_Worker_API)) (**note**: Hyperwyc does not handle push notifications)
 - You need offline resilience without rewriting your app around a sync framework
 - You want API calls to look and feel the same online or offline
 - You want transport-level durability, not a storage-first sync engine
@@ -13,93 +12,80 @@ side your application falls on.
 
 ## What it doesn't do
 
-- Doesn't handle auth or token refresh (your own handler should — place it after `HyperwycHandler`)
+- Doesn't handle auth or token refresh (your own handler should; place it *after* `HyperwycHandler`)
 - Doesn't dictate your data model
 - Doesn't replace your local database
-- Doesn't resolve data conflicts — it's designed for scenarios where conflicts are rare or handled server-side
+- Doesn't resolve data conflicts — it's designed for scenarios where conflicts are rare or unexpected, or handled server-side
+- Notifications
 
 ## Is your app a good fit?
 
-The useful question isn't "does it need to work offline" — it's **who else writes to the same
-record**.
+If you want your app to work offline, Hyperwyc is almost certainly a great option.
 
-**Append-only, one writer per record** — a social post, an inspection report, a timesheet entry.
-Good fit. Nobody else is editing your record, so there's nothing to resolve: queue it, replay it,
-done.
+It sits in your HTTP request pipeline, and can cache reads, serving them from the cache when offline, and queue writes (durably, not just in memory), and send them when a connection is detected, or on start (or whenever you want to trigger it).
 
-**A shared mutable resource** — stock levels, seat reservations, an account balance. Poor fit.
-Many actors mutate one value, so an offline write is conflict-prone by construction and rejection
-on replay is the normal case rather than an edge case. No transport-layer tool can help with that,
-because the conflict is real. You want conflict resolution at the origin — event sourcing, or
-whatever your domain calls for — and Hyperwyc has no opinion about it.
+Traditionally this is solved with either a syncrhonisation engine (see below) or custom logic in your local store that tracks send and receive state. Hyperwyc gives you offline read and write assurance without any of that.
 
-Hyperwyc is a **transport-layer tool**. If your application's state needs to survive and be
-queried offline, it needs its own store, with Hyperwyc delivering alongside it rather than
-instead of it.
+With that said Hyperwyc is not a replacement for an offline store, or syncrhonisation between local and remote state (if that's what you need). For writes (e.g. `POST`, `PUT`, `PATCH`, `DELETE`), the scenarios to consider are:
 
----
+* **Append-only, one writer per record** e.g. a social post, an inspection report, a timesheet entry. Hyperwyc is a great fit for this. Nobody else is editing your record, so there's nothing to resolve: queue it, replay it, done.
+
+* **A shared mutable resource** e.g. stock levels, seat reservations, an account balance. If you rely solely on Hyperwyc for this, you will face problems. Many actors mutate one value, so an offline write is conflict-prone and rejection on replay is the normal case rather than an edge case. No transport-layer tool can help with that, because the conflict is real. You want conflict resolution at the origin (e.g. event sourcing, or whatever your domain calls for) and Hyperwyc has no opinion about it.
+    
+For reads (e.g. `GET`), there's no reason I can think of *not* to use it, you just have to think carefully about your policies and pick a sensible TTL.
+
+Hyperwyc is a **transport-layer tool**. If your application's state needs to queried offline, it needs its own store, with Hyperwyc delivering alongside it rather than instead of it.
 
 ## Current limitations
 
-- **Buffered bodies only.** Request and response bodies are read into memory in full before being queued or cached. Binary payloads round-trip byte for byte — file uploads, image downloads, protobuf, gzip — but streaming uploads and downloads of indeterminate length are not supported.
-
----
+- **Buffered bodies only.** Request and response bodies are read into memory in full before being queued or cached. Binary payloads round-trip byte for byte (file uploads, image downloads, protobuf, gzip), but *streaming uploads and downloads of indeterminate length* are not currently supported.
 
 ## Hyperwyc is not a local database
 
-It is a transport-layer component. It caches HTTP responses and delivers HTTP requests that could
-not go out at the time; it does not hold your application's state.
+It is a transport-layer component. It caches HTTP responses and delivers HTTP requests that could not go out at the time; it does not hold your application's state.
 
-If your application needs its own data to survive and be **queried** offline — a list the user
-scrolls, a record they edit, anything you read back by something other than the URL that produced
-it — then it needs its own store, and Hyperwyc sits alongside that store as the delivery
-mechanism rather than replacing it. The usual shape is:
+If your application needs its own data to survive and be **queried** offline — a list the user scrolls, a record they edit, anything you read back by something *other* than the URL that produced it — then it needs its own store, and Hyperwyc sits alongside that store as the delivery mechanism rather than replacing it. The usual shape is:
 
-1. Write to your own database, and render the UI from it.
-2. POST to your API through a Hyperwyc-handled client.
-3. Mark the record unsynced from the `202`, and mark it synced when the matching
-   [event](events.md) arrives.
+1. Write to your own file or database, and render the UI from it
+2. `POST` to your API through a Hyperwyc-handled client
+3. Mark the record unsynced from the `202`, and mark it synced when the matching [event](events.md) arrives
 
-That is a small amount of glue, and it is the difference between an application that works
-offline and one that merely does not crash.
+That is a small amount of glue, and the difference between an application that works offline and one that merely does not crash.
 
 ## How it compares
 
+Hyperwyc was built because existing solutions followed a similar pattern and shared some limitations. The common theme is that they couple both your architecture and your back end data to a single sync requirement. That's opinion about something beyond teh reach of one problem that should not influence things outside its own scope, but worse, for existing solutions adoption requires massive amounts of rework - if you already have a full set of API routes/endpoints, and a fully working solution, you cannot simply drop these in, you _must_ redesign client connectivity from the ground up.
+
+Hyperwyc is built on the belief that you should be able to drop something into your pipeline that handles the majority of scenarios without dictating infrastructure or entity design. Web has had this for over a decade, and now .NET does too.
+
+This section is a brief comparison with leading alternatives, with a summary of the gap Hyperwyc fills.
+
 ### CommunityToolkit.Datasync
+
+This is a community replacement for Azure Mobile Apps, which is a deprecated service. It follows the same principles and design.
 
 - **Philosophy:** Entity-level synchronisation between client and server tables.
 - **Server coupling:** Requires an ASP.NET Core backend with Datasync server components.
-- **Domain model:** Mirrors database entities to the client; assumes close schema alignment
-  between client and API.
+- **Domain model:** Mirrors database entities to the client; assumes close schema alignment between client and API.
 - **Offline model:** Synchronises entire table sets; the API surface must match the data model.
-- **Drawback:** Requires rearchitecting around the sync engine; applications must shape their
-  domain model to fit Datasync's expectations.
+- **Drawback:** Requires rearchitecting around the sync engine; applications must shape their domain model to fit Datasync's expectations.
 
 ### Realm
+
+Realm was a popular choice provided by MongoDB. It worked well for a long time, but has been made end of life now. The functionality is still available, but requires a specific cloud service, rather than a feature in any MongoDB instance. Either way, it dictates your application model beyond the scope of offline functionality for clients.
 
 - **Philosophy:** Persistent object graph synchronised with a MongoDB Atlas backend.
 - **Server coupling:** Requires MongoDB Realm backend services (now EOLed in favour of Atlas SDKs).
 - **Domain model:** Heavily coupled to the Realm storage format and object model.
-- **Drawback:** Tight backend lock-in and schema mirroring; unsuitable for REST- or
-  GraphQL-based APIs.
+- **Drawback:** Tight backend lock-in and schema mirroring; unsuitable for REST- or GraphQL-based APIs.
 
 ### Hyperwyc
 
-- **Philosophy:** Service-worker-inspired HTTP handler — transparent request/response caching
-  and replay at the transport layer. The caller receives normal-looking responses regardless
-  of connectivity state.
-- **Server coupling:** None — works with any HTTP backend.
-- **Domain model:** Fully independent; no schema mirroring, no requirement to align API
-  surface with storage.
-- **Integration:** Drop-in `DelegatingHandler`; can be added to any existing app without
-  restructuring.
-- **Use case fit:** Ideal for apps where API contracts are already stable, or where data
-  conflicts are rare or handled server-side.
+- **Philosophy:** Service-worker-inspired HTTP handler: transparent request/response caching and replay at the transport layer. The caller receives normal-looking responses regardless of connectivity state.
+- **Server coupling:** None. Works with any HTTP backend.
+- **Domain model:** Fully independent; no schema mirroring, no requirement to align API surface with storage.
+- **Integration:** Drop-in `DelegatingHandler`; can be added to any existing app without restructuring.
+- **Use case fit:** Ideal for apps where API contracts are already stable, or where data conflicts are rare or handled server-side.
 
-**TODO:** Evaluate language used; we're using "sync" a lot in the code and it conflates Hyperwyc with these other solutions. May be fine, but needs an active decision rather than it just falling out of what we did.
+In essence, Datasync and Realm require you to architect your app *around* their sync model. Hyperwyc fits *into* your existing architecture, like adding a Service Worker to a web app: invisible by default, powerful when you need it.
 
-In essence, Datasync and Realm require you to architect your app *around* their sync model.
-Hyperwyc fits *into* your existing architecture — like adding a Service Worker to a web app:
-invisible by default, powerful when you need it.
-
----
