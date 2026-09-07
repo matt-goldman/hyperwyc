@@ -82,7 +82,7 @@ that wants purely TTL-based behaviour can still choose it.
 - [ ] Unit test: `no-store` response is returned but absent from the store.
 - [ ] Unit test: `no-cache` response is stored but a subsequent read does not serve it directly.
 - [ ] Unit test: `max-age` shorter than the configured TTL wins.
-- [ ] [docs/caching.md](../docs/caching.md) states which directives are honoured and which are not.
+- [ ] [docs/delivery.md](../docs/delivery.md) states which directives are honoured and which are not.
 
 ## Notes
 

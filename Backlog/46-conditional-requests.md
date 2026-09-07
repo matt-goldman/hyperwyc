@@ -63,7 +63,7 @@ touching its body.
 - [ ] Unit test: a `304` results in the original body being served and the entry becoming fresh.
 - [ ] Unit test: a `200` replaces the cached body.
 - [ ] Unit test: an entry with no validators revalidates unconditionally, as today.
-- [ ] [docs/caching.md](../docs/caching.md) documents conditional revalidation.
+- [ ] [docs/delivery.md](../docs/delivery.md) documents conditional revalidation.
 
 ## Notes
 

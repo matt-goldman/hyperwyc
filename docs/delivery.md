@@ -1,4 +1,4 @@
-# Caching and route policies
+# Caching, deliver, and route policies
 
 Where a response comes from, how long it stays usable, and how to vary both per route.
 

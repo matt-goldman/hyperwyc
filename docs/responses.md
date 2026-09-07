@@ -28,10 +28,10 @@ caller tells a queued write from a delivered one without reading a header: no or
 from your API is a `202`. The code is fixed — there is no option to change it.
 
 **`200 OK` — the read found nothing.** Offline with no cached copy, or a cached copy past its
-[TTL](caching.md). Not a `404` and not a `503`: nothing was rejected and nothing is missing,
+[TTL](delivery.md). Not a `404` and not a `503`: nothing was rejected and nothing is missing,
 Hyperwyc simply has no data for the route. Your code handles the empty result the same way it
 already handles a search with no matches — see
-[Designing your responses](caching.md#designing-your-responses).
+[Designing your responses](delivery.md#designing-your-responses).
 
 ## Headers
 
@@ -56,7 +56,7 @@ Both synthetic responses carry the four characters `null` — the JSON null lite
 `Content-Type`**. An empty body would throw `JsonException` out of `GetFromJsonAsync<T>`; `null`
 deserialises to `null`, which is a case your code handles anyway. No media type is asserted
 because Hyperwyc does not know what the route serves. The reasoning is in
-[Designing your responses](caching.md#designing-your-responses).
+[Designing your responses](delivery.md#designing-your-responses).
 
 ## A cached response is not stamped
 
@@ -80,7 +80,7 @@ usually an `HttpRequestException`, exactly as if Hyperwyc were not installed:
 
 | Case | Why |
 |---|---|
-| A **write** to a [`NetworkOnly`](caching.md) route, offline or on a failed transport | The route declared that deferring is the wrong answer, so Hyperwyc does not take custody |
+| A **write** to a [`NetworkOnly`](delivery.md) route, offline or on a failed transport | The route declared that deferring is the wrong answer, so Hyperwyc does not take custody |
 | The store could not be written | Nothing is holding the write, so answering `202` would promise something nobody is keeping |
 | The store could not be read at all | Hyperwyc [steps aside for the session](storage.md) |
 | A write whose transport failed **after** a connection was made | The server may have processed it; see [offline writes](offline-writes.md) |
