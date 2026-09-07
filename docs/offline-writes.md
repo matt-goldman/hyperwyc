@@ -4,14 +4,14 @@ What happens to a write made with no network, when it is replayed, and how to fi
 
 ## When Hyperwyc delivers
 
-Queued writes are flushed on exactly two triggers:
+Queued writes are automatically flushed by two triggers:
 
-| Trigger | When |
-|---|---|
-| Application start | `FlushOnStartup` (default `true`), if the device is online |
-| Connectivity restored | While the app is running, debounced by 2 seconds |
+| Trigger               | When                                                       |
+| --------------------- | ---------------------------------------------------------- |
+| Application start     | `FlushOnStartup` (default `true`), if the device is online |
+| Connectivity restored | While the app is running, debounced by 2 seconds           |
 
-Plus an explicit call, for a user-facing "sync now" control:
+You can also call this explicitly, for example if certain lifecycle events in your app warrant it, or for a user-facing "sync now" control (something you should do if you expose queued writes to your users):
 
 ```csharp
 await hyperwyc.FlushAsync();   // IHyperwyc, resolved from DI
@@ -19,83 +19,54 @@ await hyperwyc.FlushAsync();   // IHyperwyc, resolved from DI
 
 ## You don't need to hook app lifecycle events
 
-**Shutting down or backgrounding the app is deliberately not a sync trigger**, and you should
-not add one. Writes are only ever queued because connectivity was poor — and closing the app
-doesn't improve connectivity, so a flush at that moment would fail for the same reason the work
-was queued in the first place.
+**Shutting down or backgrounding the app is deliberately not a sync trigger**, and you should not add one. Writes are only ever queued because connectivity was poor, and closing the app doesn't improve connectivity, so a flush at that moment would fail for the same reason the work was queued in the first place.
 
-Anything still queued is replayed at next launch. Nothing is lost, so there is nothing to
-rescue on the way out.
+Anything still queued is replayed at next launch. Nothing is lost, so there is nothing to rescue on the way out.
 
-This matters most on mobile, where it wouldn't work anyway: Android and iOS terminate suspended
-processes without running disposal, finalizers, or any cleanup you might have registered.
-Durability comes from the outbox being persistent, not from tidying up at exit.
+This matters most on mobile, where it wouldn't work anyway: Android and iOS terminate suspended processes without running disposal, finalizers, or any cleanup you might have registered. Durability comes from the outbox being persistent, not from tidying up at exit.
 
 ## When a write fails
 
 One distinction decides everything: **did the server answer?**
 
-| Failure | What happens |
-|---|---|
-| The server answered, with anything other than success | Dead-lettered, and the status reported on [`Events`](events.md). The request reached the API, which was the job |
-| No response at all — the connection failed | Left queued. The flush stops and nothing is held against the remaining writes; the network being down says nothing about them |
+| Failure                                               | What happens                                                                                                                  |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| The server answered, with anything other than success | Dead-lettered, and the status reported on [`Events`](events.md). The request reached the API, which was the job               |
+| No response at all — the connection failed            | Left queued. The flush stops and nothing is held against the remaining writes; the network being down says nothing about them |
 
-**Any answer is a final outcome, including a `500`, a `429` or a `503`.** That looks harsh until
-you ask what a retry here would actually be. Hyperwyc has exactly three triggers — application
-start, connectivity restored, and an explicit `FlushAsync()` — and none of them correlates with a
-server recovering. Requeuing a `503` schedules a retry on an unrelated event, and for a device
-that never goes offline again it schedules one that never arrives. A write kept on that promise
-is kept forever.
+TODO: we use the term "dead lettered" throughout the docs, should we explain what this means somewhere? A reader not familiar with the term, or without the context that it applies purely to the write queue and only after the server has already received it, may be confused and concerned. Dead lettered really means the same thing as succeeded from Hyperwyc's perspective - the HTTP request _did_ succeed, well not semantically strictly true if not a 2xx response, but Hyperwyc succeeded in delivering it.
 
-Your own pipeline has already had the better attempt. A replay traverses it (see
-[Pipeline placement](pipeline.md)), so a resilience handler retries on a schedule that tracks the
-actual failure, with backoff and `Retry-After`, before Hyperwyc ever sees the result. Hyperwyc
-adding a second, worse retry on top would be duplicating a job that has an owner — see
-[ADR 0001](decisions/0001-idempotency-is-not-hyperwycs-remit.md).
+**Any answer is a final outcome, including a `500`, a `429` or a `503`.** Remember that Hyperwyc's job is to make sure your request reaches your back end, and a response, any response, means it has succeeded. Hyperwyc is not responsible for retrying failed requests; it has exactly three triggers — application start, connectivity restored, and an explicit `FlushAsync()` — and none of them correlates with a change to the condition under which the request failed. Requeuing a `503` schedules a retry on an unrelated event, and for a device that never goes offline again it schedules one that never arrives. A write kept on that promise is kept forever.
 
-Dead-lettered is not discarded. The status, reason phrase and response body are recorded against
-the envelope and published, so the application can decide what to do with information Hyperwyc
-does not have.
+Other approaches already handle these scenarios, and with a library lke [Polly](https://github.com/App-vNext/Polly), your pipeline has already had the better attempt. A replay traverses it (see [Pipeline placement](pipeline.md)), so a resilience handler retries on a schedule that tracks the
+actual failure, with backoff and `Retry-After`, before Hyperwyc ever sees the result. Hyperwyc adding a second, worse retry on top would be duplicating a job that has an owner (see [ADR 0001](decisions/0001-idempotency-is-not-hyperwycs-remit.md)).
+
+**Note:** If you are using something like Polly, especially in a UI app, an implementation of Hyperwyc's `IConnectivityService` will drastically improve UX as it will short-circuit retries when offline. TODO: validate this; does Polly already let you branch on failure reason? I think it does as I've built 401 refresh handlers before.
+
+Dead-lettered is not discarded. The status, reason phrase and response body are recorded against the envelope and published, so the application can decide what to do with information Hyperwyc does not have. It just means Hyperwyc won't ever try to send it again.
 
 ## Duplicate writes
 
-Any retry can deliver the same request twice — if a response is lost after the server has
-already committed, the retry looks identical to a first attempt. This is true of a Polly retry
-handler, a user double-tapping a button, or a proxy replaying a request. Hyperwyc's retry carries
-the same risk and no more.
+Any retry can deliver the same request twice. If a response is lost after the server has already committed, the retry looks identical to a first attempt. This is true of a Polly retry handler, a user double-tapping a button, or a proxy replaying a request. Hyperwyc's retry carries the same risk and no more.
 
-**Hyperwyc takes no position on it.** It sends no headers of its own on the wire and asks nothing
-of your API — the [two it adds](responses.md#headers) go on responses it synthesises, which your
-server never sees. Duplicate suppression is between your application and your backend. If it
-matters to you, approaches people use include:
+**Hyperwyc takes no position on it.** It sends no headers of its own on the wire and asks nothing of your API — the [two it adds](responses.md#headers) go on *responses* it synthesises, not requests; the headers never leave your client, and your server never sees them. Duplicate suppression is between your application and your backend. If it matters to you, approaches people use include:
 
-- **Client-generated domain identity** — the record carries an id chosen by the client, so a
-  repeated write updates rather than duplicates. Idempotent by construction, and nothing in the
-  transport needs to know.
-- **The [`Idempotency-Key`](https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/)
-  header**, set at the call site, if your backend implements it. Hyperwyc persists request headers
-  and replays them unchanged, so a key you set once stays stable across every retry:
+- **Client-generated domain identity** — the record carries an id chosen by the client, so a repeated write updates rather than duplicates (or rejects with a `409`; the update may be valid for `PUT` or `PATCH` but not `POST`, but, again, this is the business of your API, not Hyperwyc). Idempotent by construction, and nothing in the transport needs to know.
+- **The [`Idempotency-Key`](https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/) header**, set at the call site, if your backend implements it. Hyperwyc persists request headers and replays them unchanged, so a key you set once stays stable across every retry:
 
   ```csharp
   request.Headers.Add("Idempotency-Key", sale.Id.ToString());
   ```
 
-- **A correlation or transaction id you already emit** — common in event-driven systems, and
-  increasingly generated in the UI so analytics can be tied to backend telemetry.
+- **A correlation or transaction id you already emit** — common in event-driven systems, and increasingly generated in the UI so analytics can be tied to backend telemetry.
 
-These are things people do, not a recommendation from Hyperwyc. Which one fits, or whether the
-concern applies at all, depends on your API.
+These are things people do, not a recommendation from Hyperwyc. Which one fits, or whether the concern applies at all, depends on your solution.
 
 ## Writes are queued on transport failure too, not just when you are offline
 
-Hyperwyc does not only queue when `IConnectivityService` says offline. If a write is attempted
-because the device reports connected, and **the transport cannot establish a connection at all**,
-that write is queued and answered with the same `202` as if it had been made offline.
+Hyperwyc does not only queue when `IConnectivityService` says offline. If a write is attempted because the device reports connected, and **the transport cannot establish a connection at all**, that write is queued and answered with the same `202` as if it had been made offline.
 
-This matters because every connectivity implementation is wrong sometimes — a captive portal, a
-VPN interface that looks like a network, a signal that drops between the check and the send, or
-`AlwaysOnlineConnectivityService` on a device that is not. Without this, being wrong would cost
-the write. With it, being wrong costs an attempt.
+This matters because every connectivity implementation is wrong sometimes — a captive portal, a VPN interface that looks like a network, a signal that drops between the check and the send, or `AlwaysOnlineConnectivityService` on a device that is not. Without this, being wrong would cost the write. With it, being wrong costs an attempt.
 
 > **Only when nothing was sent.** Hyperwyc queues on the transport errors that mean no connection
 > was ever established — DNS failure, connection refused, TLS handshake failure, proxy tunnel
@@ -103,17 +74,8 @@ the write. With it, being wrong costs an attempt.
 > the exception reaches you: the server may have processed it, and quietly replaying it would
 > risk a duplicate on a guess. Those are also failures no connectivity change would fix.
 
-The same rule the rest of the library follows: connectivity is a hint about which path to try
-first, and where the transport is consulted, it is what actually knows. Note the limit — a
-connectivity service that wrongly reports *offline* is never contradicted, because no request is
-made to contradict it. That write is queued rather than sent, and goes out on the next
-connectivity change.
+The same rule the rest of the library follows: connectivity is a *hint* about which path to try first, and where the transport is consulted, it is what actually knows. Note the limit: a connectivity service that wrongly reports *offline* is never contradicted, because no request is made to contradict it. That write is queued rather than sent, and only goes out on the next connectivity change, or when the `IHyperwyc.FlushAsync()` method is called.
 
 ## Interrupted deliveries
 
-If a flush is cut short — the app is backgrounded mid-replay, or the process is killed — the
-envelopes it hadn't delivered stay queued and go out on the next trigger. They are not marked
-as failed, and they are not dead-lettered. Only a request the server actually rejected, after
-the server refuses, ends up in the dead-letter queue.
-
----
+If a flush is cut short, e.g. the app is backgrounded mid-replay, or the process is killed, the envelopes it hadn't delivered stay queued and go out on the next trigger. They are not marked as failed, and they are not dead-lettered. Only a request the server actually rejected, after the server refuses, ends up in the dead-letter queue.
