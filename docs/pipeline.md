@@ -44,7 +44,17 @@ For the fallback case — a handler registered without a client name — `option
 
 [Synthetic responses](responses.md) — the `202` for a queued write, the `200` for a read with nothing to serve — are returned directly from the handler. **Any `DelegatingHandler` registered after `HyperwycHandler` is not invoked** on that path.
 
-That is deliberate: there is no outbound request to authenticate or mutate. But it decides where your own handlers go.
+```mermaid
+flowchart LR
+    A([your call site]) --> B[HyperwycHandler]
+    B -->|goes to the network| C[AuthHandler]
+    C -->|and anything else you added| D[(your API)]
+    B -.->|"answers itself:<br>202 Queued or 200 Offline"| A
+```
+
+The dotted path is the one to notice: it returns to your call site without ever reaching the handlers to its right.
+
+That is deliberate — there is no outbound request to authenticate or mutate. But it decides where your own handlers go.
 
 | Your handler                                                                | Where it goes                     | Why                                                                                                                                                     |
 | --------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -13,6 +13,25 @@ Pick the one that matches why you came.
 | **[Hyperwyc in a .NET MAUI app](maui.md)**         | You are building for mobile. Everything a MAUI app needs on one page: connectivity, the encryption key, backup exclusion, AOT               |
 | **[Tutorial](tutorial/)**                          | You would rather be shown. Five short pages building an app that keeps working when its API goes away                                       |
 
+## What happens to a request
+
+```mermaid
+flowchart TD
+    R([a request]) --> M{read or write?}
+    M -->|read| RN{did the network answer?}
+    RN -->|yes| RF[the response — and it is stored]
+    RN -->|no| RC{stored copy within its TTL?}
+    RC -->|yes| RS[the stored response]
+    RC -->|no| RO["200, X-Hyperwyc-Status: Offline, body null"]
+    M -->|write| WN{did the network answer?}
+    WN -->|yes| WR[the response, whatever it said]
+    WN -->|no| WQ["202 Accepted — queued, replayed later"]
+```
+
+"Did the network answer?" deliberately covers both cases: the connectivity service said offline, or it said online and the transport could not connect. The caller cannot tell which, and does not need to — see [Design](design.md#connectivity-is-an-optimisation-not-a-correctness-input).
+
+The one exception is a [`NetworkOnly`](delivery.md) route, which opts out of the store in both directions and does not queue writes at all.
+
 ## Reference
 
 What each part does, in tables. Read a page when you need a fact from it.

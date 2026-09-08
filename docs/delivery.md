@@ -78,7 +78,36 @@ Use the factory methods (as per [Route Policies](#route-policies)) and compose w
 
 TTL (time to live) in a Hyperwyc cache defines *whether or not a response is still valid*, not whether to refetch.
 
-It means the same thing online and offline. Once it expires, the response is not served: online it is refetched, offline the caller gets the same "no data" answer as if nothing were cached. So set it to how long the data is genuinely useful, not to how often you would like to refresh. "Always fetch when I can" is `NetworkFirst`, which is a strategy; using a short TTL to force refetching would leave you nothing to serve offline, which is the opposite of the point. The default is one day.
+It means the same thing online and offline. Once it expires, the response is not served: online it is refetched, offline the caller gets the same "no data" answer as if nothing were cached.
+
+```mermaid
+sequenceDiagram
+    participant C as your code
+    participant H as Hyperwyc
+    participant S as the store
+    participant A as your API
+
+    Note over C,A: a CacheFirst route, with a response stored earlier
+    C->>H: GET /products
+    H->>S: is there a stored response for this URL?
+
+    alt within its TTL
+        S-->>H: yes — stored 3 hours ago
+        H-->>C: the stored response
+        Note over H,A: no request is made at all — the same, online or offline
+    else past its TTL, and the network answers
+        H->>A: GET /products
+        A-->>H: 200 and a body
+        H->>S: store it — the TTL restarts here
+        H-->>C: the response
+    else past its TTL, and it does not
+        H-->>C: 200, X-Hyperwyc-Status: Offline, body null
+    end
+```
+
+The first branch is the point: inside the TTL there is no request, and connectivity does not come into it. `NetworkFirst` reverses the order — it always tries the network first and consults the store only when that fails — but the TTL means the same thing in both, because it governs whether a stored response may be *served*, not when to go looking for a fresh one.
+
+So set it to how long the data is genuinely useful, not to how often you would like to refresh. "Always fetch when I can" is `NetworkFirst`, which is a strategy; using a short TTL to force refetching would leave you nothing to serve offline, which is the opposite of the point. The default is one day.
 
 `NetworkOnly` opts out of the store entirely, so it has nothing to offer offline.
 

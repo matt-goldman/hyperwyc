@@ -34,6 +34,21 @@ One distinction decides everything: **did the server answer?**
 | The server answered, with anything other than success | Dead-lettered, and the status reported on [`Events`](events.md). The request reached the API, which was the job               |
 | No response at all — the connection failed            | Left queued. The flush stops and nothing is held against the remaining writes; the network being down says nothing about them |
 
+```mermaid
+stateDiagram-v2
+    state "queued in the outbox" as queued
+    state "delivered" as done
+    state "dead-lettered" as dead
+    [*] --> queued : could not be sent — OnQueued
+    queued --> queued : transport failed — no event
+    queued --> done : server answered 2xx — OnDelivered
+    queued --> dead : server answered anything else — OnFailed
+    done --> [*]
+    dead --> [*]
+```
+
+Every transition raises an event except one. A delivery attempt that fails at the transport records its outcome on the envelope and stops the flush, and publishes nothing at all — so from the event stream, a write that cannot be delivered simply goes quiet until it can be.
+
 TODO: we use the term "dead lettered" throughout the docs, should we explain what this means somewhere? A reader not familiar with the term, or without the context that it applies purely to the write queue and only after the server has already received it, may be confused and concerned. Dead lettered really means the same thing as succeeded from Hyperwyc's perspective - the HTTP request _did_ succeed, well not semantically strictly true if not a 2xx response, but Hyperwyc succeeded in delivering it.
 
 [comment: Agreed, and your framing is the right one to use: from Hyperwyc's side the delivery succeeded, and what failed is downstream of the job it took on. The word is borrowed from message queues, where it does mean something closer to "we gave up", so a reader who knows the term is more likely to be alarmed than one who does not.
