@@ -39,15 +39,15 @@ That works even when the store cannot be read — it clears the files rather tha
 
 TODO: Should we add an automatic call to this to HyperwycOptions? I.e., options.ResetStoreOnFailure = true or something?
 
-[comment: I would say no, and record it as a deliberate absence rather than build the knob.
+[comment: Filed, and my first answer to this was no - on the grounds that discarding queued writes is the failure the library exists to prevent. That was wrong, and the correction is worth recording here because it is a specific way to get the defaults test wrong.
 
-The outbox is a list of writes that have not happened yet. ResetStoreOnFailure = true means "if the store cannot be read, silently discard writes the caller was told had been accepted" - which is defaults test question 3, quietly producing the failure the library exists to prevent. It is also wrong-and-silent by construction: the consumer finds out by the data not being there.
+The test asks whether a wrong default could quietly produce the failure the library exists to prevent. I answered that without asking the prior question: were those writes ever going to be recovered? They were not. The 202 was returned when they were queued, so from the application's side they are already lost the moment the store stops opening. Today's behaviour does not preserve delivery - it preserves forensics, on an end user's device, and charges a working app for it by turning caching and queueing off for the session.
 
-And it would fire in exactly the case where the data is most likely intact. The usual cause of an unreadable store is a key or a path change, not corruption - the bytes are fine and merely unreadable, and the fix is often to restore the key rather than to destroy the store. Deleting on the first failed read forecloses that.
+There is also a third option neither the TODO nor my answer considered, and it dissolves the question rather than trading against it: a non-destructive reset. Rename the unreadable store - a -1 suffix, or a quarantine sibling - and start a clean one. Nothing is deleted, so the data-loss objection goes away entirely; the recoverable case stays recoverable, which matters because the usual cause is a key or path change rather than corruption; and the app keeps working. It is also the self-healing half of item 49 that never shipped.
 
-The current design is the right shape: report it, get out of the way, and give the application a method to call once it has decided. That decision needs things Hyperwyc does not have - whether the app keeps its own record of the pending writes, whether the user should be told, whether this is a fresh install or a restore onto a new device.
+The open question is accumulation - a device that fails repeatedly collects orphans forever, which is item 42's shape arriving by a second route. The leading answer is to quarantine only once: if an orphan already exists, fall back to today's behaviour and report. A store that becomes unreadable twice is a systemic fault rather than an incident, and churning through stores would hide exactly the thing someone needs to see - so the bound comes free, because the existence of the orphan is the counter.
 
-If the real complaint is ergonomics, the smaller answer is a documented one-liner rather than an option: subscribe to OnStoreUnreadable and call ResetStoreAsync from the handler. Same behaviour, opted into explicitly, living in the consumer's code where the decision belongs - and it is three lines to show on this page. Filed as under-consideration with this reasoning.]
+Worth noting a trap for whoever implements it: the default key is derived from the store path, so the orphan's ciphertext was written under the *old* path's key. Renaming without accounting for that makes both stores unreadable. And ResetStoreAsync should stay destructive - an explicit reset on logout means discard, and quarantining the previous user's outbox is the opposite of what was asked. See item 62.]
 
 ## Excluding the store from OS backup
 

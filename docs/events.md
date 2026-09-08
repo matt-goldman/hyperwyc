@@ -67,11 +67,15 @@ Events also carry `RequestId` (Hyperwyc's own unique envelope id, which a diagno
 
 TODO: this snipped requires Rx doesn't it?
 
-[comment: Yes. .Where() over IObservable<T> is System.Reactive.Linq. HyperwycEventStream is a hand-rolled IObservable with no operators on it, and Hyperwyc deliberately takes no System.Reactive dependency - connectivity.md makes a point of that twice. So this snippet does not compile in a consumer app unless they have added Rx themselves, and nothing on the page says so.
+[comment: Yes. .Where() over IObservable<T> is System.Reactive.Linq. HyperwycEventStream is a hand-rolled IObservable with no operators on it, so this snippet does not compile against Hyperwyc alone, and nothing on the page says so.
 
-It is a trap in a specific direction, too: a reader who follows the connectivity guidance and hand-rolls their observable rather than reaching for Rx, then follows this page, hits a compile error the docs walked them into.
+My first instinct was to replace it with the plain IObserver form. That is only half right: Rx belongs in most UI applications, and a MAUI or WPF consumer reaching for it is doing the right thing rather than taking on an unnecessary dependency. Dropping the version most people should ideally use, to keep a snippet dependency-free, trades the better advice for the more portable one.
 
-Three ways out, and I would take the second. (a) Note the Rx dependency and move on - honest, but it makes the documented path depend on a package the library declines to take. (b) Show the plain IObserver<HyperwycEvent> form with the switch inside the OnNext - a few more lines, no dependency, and it is closer to what most consumers will write anyway. (c) Ship the two or three operators, which fails the scope test on question 3 and is not worth relitigating. Filed.]
+So it is a placement question rather than a choice, and the two forms have different readers. The plain IObserver form is reference - it compiles against Hyperwyc alone and shows the event shape without asking anything of the reader's project, which is what this page is for. The Rx query is a pattern: it is how you actually wire outcomes into a view model, and it belongs alongside correlating a 202 to a local record and marking unsynced then synced. That is the patterns page in the restructure.
+
+Which is a small argument for the restructure rather than against it - the reason this snippet is wrong is that the page is trying to be reference and pattern at once, and the pattern half carries a dependency the reference half must not.
+
+One clause worth adding somewhere while this is fixed: the no-Rx decision is about Hyperwyc's dependency graph, not yours. connectivity.md states it twice without that distinction, so a reader can come away thinking Rx is discouraged for them, which is not the position. Filed as 59.]
 
 ```csharp
 hyperwyc.Events
