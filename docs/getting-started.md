@@ -1,6 +1,6 @@
 # Getting started
 
-Install it, register it, make a request. Nothing about your existing `HttpClient` code changes.
+Install the package, register it, and make a request. Nothing about your existing `HttpClient` code changes.
 
 ```bash
 dotnet add package Hyperwyc
@@ -16,7 +16,7 @@ services.AddHyperwyc(); // Register the Hyperwyc dependencies
 
 That's the whole setup. You get a durable, encrypted store and a working connectivity source without deciding anything.
 
-**Register `AddHyperwycHandler()` first**, before your own handlers. Everything after it also runs on replayed writes, which is how a write queued on Monday goes out with Tuesday's token — see [Pipeline placement](pipeline.md).
+**Register `AddHyperwycHandler()` first**, before your own handlers. Everything after it also runs on replayed requests, which is how a write queued on Monday but sent on Tuesday goes out with Tuesday's token. See [Pipeline placement](pipeline.md) for a full explanation of why (and when not to).
 
 ## Your calls are untouched
 
@@ -30,7 +30,7 @@ var products = await client.GetFromJsonAsync<List<Product>>("/products");
 var response = await client.PostAsJsonAsync("/sales", sale);
 ```
 
-Neither call knows Hyperwyc is there. A read that cannot be served returns `null` rather than throwing; a write that cannot be sent is kept and replayed when the network returns.
+Neither call knows Hyperwyc is there: a read that cannot be served returns `null` rather than throwing, and a write that cannot be sent is kept and replayed when the network returns.
 
 ## On a mobile device, add one more line
 
@@ -38,9 +38,9 @@ Neither call knows Hyperwyc is there. A read that cannot be served returns `null
 services.AddSingleton<IConnectivityService, MauiConnectivityService>();
 ```
 
-`MauiConnectivityService` is a class you copy into your app — it is about twenty lines, available in [Hyperwyc in a .NET MAUI app](maui.md), along with the other three things a .NET MAUI app should do.
+`MauiConnectivityService` is a class you copy into your app. It's about twenty lines, available in [Hyperwyc in a .NET MAUI app](maui.md), along with three other things a .NET MAUI app should do.
 
-**This is an optimisation, rather than a a repair.** Without it Hyperwyc falls back to a BCL check that reports whether a network interface is up, which errs toward "connected" — so a request is attempted, and if the transport fails, a read is served from the store while a write is queued, exactly as if the device had been known to be offline. What you gain is shortcutting a doomed request, and, more importantly, a notification signal when the network returns, because that is what sends queued writes. See [Connectivity](connectivity.md).
+**This is an optimisation, rather than a a repair.** Without it Hyperwyc falls back to a BCL check that reports whether a network interface is up, which errs toward "connected", so a request is attempted, and if the transport fails, a read is served from the store while a write is queued, exactly as if the device had been known to be offline. What you gain is short-cutting a doomed request, and, more importantly, a notification signal when the network returns, because that is what sends queued writes. See [Connectivity](connectivity.md).
 
 ## Customising
 

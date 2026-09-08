@@ -50,7 +50,7 @@ Hyperwyc has three delivery triggers: application start, connectivity restored, 
 
 So calling `FlushAsync()` is necessary in this tutorial. In an application that has a host it is there for a user-facing "sync now" control, which you should offer if you show queued writes to your users.
 
-There is no timer, no backoff and no schedule. Three triggers, and that is all, which is also why a write the server *answers* is finished with, whatever it said. See [Offline writes](../offline-writes.md#when-a-write-fails).
+There is no timer, no backoff and no schedule. Three triggers, and that is all, which is also why a write the server *answers* is finished with, whatever it said. See [Offline writes](../offline-writes.md#what-happens-when-a-write-goes-out).
 
 ## What silence means
 

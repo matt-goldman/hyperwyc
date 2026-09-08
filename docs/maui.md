@@ -28,7 +28,7 @@ builder.Services.AddSingleton<IConnectivityService, MauiConnectivityService>();
 
 ## 2. The connectivity service
 
-This is the one piece you have to own. It is not packaged, because taking a dependency on .NET MAUI would put it in the dependency graph of every console app, service and Blazor host that has no use for it. Copy it as-is; it is proven on an Android device, and with Wi-Fi and mobile data disabled it reports disconnected.
+The `MauiConnectivityService` is provided here as a sample to copy, rather than being included in the package, to prevent Hyperwyc included .NET MAUI dependencies for consumers that don't need it. Copy it as-is; it is proven on an Android device, and with Wi-Fi and mobile data disabled it reports disconnected.
 
 <details>
 <summary><b><code>MauiConnectivityService</code></b> — copy this into your app</summary>
@@ -141,23 +141,25 @@ public sealed class MauiConnectivityService : IConnectivityService, IDisposable
 
 </details>
 
-Five things in it worth knowing, in case you need to change it:
+Five things worth calling out in case you want or need to change them:
 
-1. **No `System.Reactive`.** The first version used a `BehaviorSubject<bool>`, which meant a package reference existing for one field. Hand-rolling matches how Hyperwyc implements `IObservable<T>` internally and keeps a dependency out of your app that Hyperwyc deliberately avoids. If you already use Rx, then you might consider switching; and it's likely worthwhile in your mobile app anyway for several reasons.
-2. **A change stream, not a state view.** Nothing is replayed on subscribe; `IsConnected` answers "right now". Getting this wrong is easy: an earlier version seeded a subject with `false` at startup, so a subscriber was told "offline" on connect while `IsConnected` read live state and said otherwise.
-3. **Only publish on an actual change.** .NET MAUI raises `ConnectivityChanged` for any change in network access, including moving between Wi-Fi and cellular while staying online. Forwarding that as a connectivity restoration triggers a flush with nothing to send, so the service compares against the last value it published, seeded from live state, and only sends a new value if there's a change (see note below on constrained internet).
-4. **`IDisposable`, to unhook the platform event.** `Connectivity.Current` is a long-lived static, so a handler left attached keeps the service and everything it captures alive for the process lifetime. Irrelevant for an app-lifetime singleton, but reference code gets copied into places where it isn't one. Note that `IConnectivityService` itself is not `IDisposable`; Hyperwyc never disposes your instance. Register it as a singleton and the container will.
+1. **No `System.Reactive`.** The first version used a `BehaviorSubject<bool>`, which meant a package reference existing for one field, but Hyperwyc deliberately avoids a dependency on `System.Reactive`, so this version matches how Hyperwyc implements `IObservable<T>` internally. However, the `BehaviorSubject` version is better, and if you already use Rx, then you can use it here instead; and if you don't it's likely worth considering in your mobile app anyway for several reasons.
+2. **A change stream, not a state view.** Nothing is replayed on subscribe; `IsConnected` provides the point-in-ime state. Getting this wrong is easy: an earlier version seeded a subject with `false` at startup, so a subscriber was told "offline" on connect while `IsConnected` read live state and said otherwise.
+3. **Only publish on an actual change.** .NET MAUI raises `ConnectivityChanged` for any change in network access, including moving between Wi-Fi and cellular while staying online. Forwarding that as a connectivity restoration triggers a flush with nothing to send, so the service compares against the last value it published, seeded from live state, and only sends a new value if there's a meaningful change.
+4. **`IDisposable`, to unhook the platform event.** `Connectivity.Current` is a long-lived static, so a handler left attached keeps the service and everything it captures alive for the process lifetime. Irrelevant for an app-lifetime singleton, but reference code often gets copied verbatim into other scenarios. Note that `IConnectivityService` itself is not `IDisposable`; Hyperwyc never disposes your instance. Register it as a singleton and let the container handle it.
 5. **Events arrive on whatever thread the platform raised them on**, which on .NET MAUI is usually _not_ the UI thread. That's usually the correct approach, as you may not always want or need the UI to respond to the events. Also, forcing a dispatcher dependency into the service would make it untestable and useless off-platform. Respond to events on the UI thread as required (e.g. if you need to notify a user of a post-reconnection send success or failure).
 
 `NetworkAccess.ConstrainedInternet` counts as disconnected here, on the grounds that a captive portal is not the internet. If your API is reachable under one, flip that condition.
 
-## 3. A key that survives
+## 3. Custom storage encryption key
 
-By default the store is encrypted with a key derived from its own path. That costs you nothing and keeps cached data from casual inspection, but the key is deterministic, so it is not a defence against someone who has the device and knows what this library does.
+By default the store is encrypted with a key derived from its own path. That requires no setup, and protects cached data from casual inspection, but the key is deterministic, so it is not a defense against someone who has the device and knows what this library does.
 
 If the cached data warrants more, hold the key in `SecureStorage`:
 
 ```csharp
+// Retrieve or create a custom unique key:
+
 var key = await SecureStorage.GetAsync("hyperwyc-key");
 
 if (key is null)
@@ -166,17 +168,19 @@ if (key is null)
     await SecureStorage.SetAsync("hyperwyc-key", key);
 }
 
+// use it in Hyperwyc options
+
 builder.Services.AddHyperwyc(configureStore: store =>
 {
     store.EncryptionKey = Convert.FromBase64String(key);   // 32 bytes
 });
 ```
 
-**Losing that key means losing everything already stored** — including queued writes. It is a real trade: the derived key is weaker, and it is also the reason a restore onto a new device cannot read the old outbox, which is a hazard the next section is about.
+**Note that losing that key means losing everything already stored.** This includes queued writes. This is a decision you will need to balance: the derived key is weaker, and it is also the reason a restore onto a new device cannot read the old outbox, which is a hazard the next section is about.
 
 ## 4. Exclude the store from OS backup
 
-**Do this.** It is two lines, and the reason is sharp:
+**Do this.** It is two lines, and the reason is important:
 
 > The outbox is a list of writes that have not happened yet. Restore a three-week-old backup and
 > Hyperwyc will faithfully replay a sale that was delivered a fortnight ago. Restore onto a second
@@ -188,6 +192,8 @@ Hyperwyc has no duplicate suppression, by design, so nothing catches it.
 - **Android** — an `<exclude domain="file" path="…"/>` entry in `data_extraction_rules` (API 31+) or `full_backup_content` below that. Use the `<cloud-backup>` / `<device-transfer>` split: a direct device-to-device transfer does not carry the duplicate-replay risk a cloud restore does.
 
 `CabinetStoreOptions.DefaultDirectoryPath()` gives you the path.
+
+[comment: the path is not helpful here. The code shown gets it at runtime but the exclusions go in the plist and manifest files.]
 
 A secondary reason on Android: Auto Backup caps an app at 25 MB, and exceeding it silently stops backup for the whole app rather than just the offending files. Hyperwyc's cache is not currently bounded, so that ceiling is reachable — see [Storage](storage.md).
 

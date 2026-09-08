@@ -25,43 +25,43 @@ Anything still queued is replayed at next launch. Nothing is lost, so there is n
 
 This matters most on mobile, where it wouldn't work anyway: Android and iOS terminate suspended processes without running disposal, finalizers, or any cleanup you might have registered. Durability comes from the outbox being persistent, not from tidying up at exit.
 
-## When a write fails
+## What happens when a write goes out
 
 One distinction decides everything: **did the server answer?**
 
-| Failure                                               | What happens                                                                                                                  |
+Not *what* it answered. [Hyperwyc succeeds or fails at delivery](design.md#delivery-is-what-hyperwyc-succeeds-or-fails-at), and HTTP's own idea of success is a different axis that happens to use the same word.
+
+| | What happens |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| The server answered, with anything other than success | Dead-lettered, and the status reported on [`Events`](events.md). The request reached the API, which was the job               |
+| The server answered — with anything at all | The delivery is complete. The status, reason phrase and body are recorded and reported on [`Events`](events.md). The request reached the API, which was the job |
 | No response at all — the connection failed            | Left queued. The flush stops and nothing is held against the remaining writes; the network being down says nothing about them |
 
 ```mermaid
 stateDiagram-v2
     state "queued in the outbox" as queued
     state "delivered" as done
-    state "dead-lettered" as dead
+    state "delivered, answer kept" as kept
     [*] --> queued : could not be sent — OnQueued
     queued --> queued : transport failed — no event
     queued --> done : server answered 2xx — OnDelivered
-    queued --> dead : server answered anything else — OnFailed
+    queued --> kept : server answered anything else — OnFailed
     done --> [*]
-    dead --> [*]
+    kept --> [*]
 ```
 
 Every transition raises an event except one. A delivery attempt that fails at the transport records its outcome on the envelope and stops the flush, and publishes nothing at all — so from the event stream, a write that cannot be delivered simply goes quiet until it can be.
 
-TODO: we use the term "dead lettered" throughout the docs, should we explain what this means somewhere? A reader not familiar with the term, or without the context that it applies purely to the write queue and only after the server has already received it, may be confused and concerned. Dead lettered really means the same thing as succeeded from Hyperwyc's perspective - the HTTP request _did_ succeed, well not semantically strictly true if not a 2xx response, but Hyperwyc succeeded in delivering it.
+**The two right-hand states differ in what is kept, not in whether Hyperwyc did its job.** A `2xx` leaves the outbox and nothing is retained, because there is nothing you need from it. Any other answer is retained along with what the server said, so your application can still find out after a restart. Both are complete: the request reached your API, which is the whole of what Hyperwyc promised.
 
-[comment: Agreed, and your framing is the right one to use: from Hyperwyc's side the delivery succeeded, and what failed is downstream of the job it took on. The word is borrowed from message queues, where it does mean something closer to "we gave up", so a reader who knows the term is more likely to be alarmed than one who does not.
-
-Two things fix it: a one-sentence definition at first use on this page, and a glossary. I have filed both. The glossary earns its place well beyond this one term - outbox, envelope, replay, flush, synthetic response, correlation id, dead-letter and even "stale" are all used as though already defined, and ADR 0005 did the thinking for it already; a glossary is just its consumer-facing face.]
+> **A note on "dead-letter", which is on its way out.** The API calls that second state dead-lettered — `IHyperwycStore.MoveToDeadLetterAsync`, `Envelope.IsDeadLettered`, the `OnFailed` event — borrowing a term from message queues where it means *we gave up on this*. Here it does not: the write was delivered, and what is kept is your API's answer to it.
+>
+> The retention itself is under review. Keeping the answer is arguably not Hyperwyc's job either — it is an ordinary HTTP response, and the only Hyperwyc-shaped part of it is the [event](events.md) telling you it arrived for a request whose caller had already moved on. Expect this to get smaller rather than better named.
 
 **Any answer is a final outcome, including a `500`, a `429` or a `503`.** Remember that Hyperwyc's job is to make sure your request reaches your back end, and a response, any response, means it has succeeded. Hyperwyc is not responsible for retrying failed requests; it has exactly three triggers — application start, connectivity restored, and an explicit `FlushAsync()` — and none of them correlates with a change to the condition under which the request failed. Requeuing a `503` schedules a retry on an unrelated event, and for a device that never goes offline again it schedules one that never arrives. A write kept on that promise is kept forever.
 
 Other approaches handle these failures, and can be wired into your pipeline with a resilience handler such as [Polly](https://github.com/App-vNext/Polly), which retries on a schedule that tracks the actual failure before Hyperwyc ever sees the result. [Why Hyperwyc does not retry](design.md#hyperwyc-does-not-retry) has the rest.
 
 **Note:** If you use a resilience handler such as Polly, register it *after* `AddHyperwycHandler()` and supply an `IConnectivityService`. When Hyperwyc believes it is offline it answers from the handler and the rest of the pipeline is never invoked, so there is no doomed first attempt and no backoff to sit through — see [Pipeline placement](pipeline.md). In a UI app that is the difference between an instant cached read and a retry schedule the user waits out.
-
-Dead-lettered is not discarded. The status, reason phrase and response body are recorded against the envelope and published, so the application can decide what to do with information Hyperwyc does not have. It just means Hyperwyc won't ever try to send it again.
 
 ## Duplicate writes
 

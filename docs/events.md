@@ -12,11 +12,11 @@ hyperwyc.Events.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
 | ------------------- | ------------------------------------------------------------------------------------------- | ------------------------------- |
 | `OnQueued`          | Request persisted to the outbox — offline, or after a transport failure                     | No — nothing has been attempted |
 | `OnDelivered`       | Request successfully delivered                                                              | Yes                             |
-| `OnFailed`          | Request dead-lettered — the server refused it                                               | Yes                             |
+| `OnFailed`          | Delivered, and the server answered with a non-success status                                | Yes                             |
 | `OnUpdated`         | Cached response refreshed                                                                   | No                              |
 | `OnStoreUnreadable` | The local store could not be read; caching and queueing are off for the rest of the session | No                              |
 
-**Nothing is published when a delivery attempt fails at the transport.** The outcome is recorded on the envelope and the flush stops, so a write that cannot be delivered goes quiet until it eventually is. Silence is what a transport failure looks like from here.
+**Nothing is published when a re-delivery attempt fails at the transport.** `OnQueued` is emitted if the initial delivery attempt fails and the request is queued, but for subsequent attempts from the outbox that fail, the outcome is recorded on the envelope and the flush stops. This logic applies **per request**, equally for events and the stopped flush - a failed delivery from the outbox is not retried until the next trigger, but the next request in the queue *is* attempted, and if that fails, it is parked too. And neither raises an event.
 
 These are Hyperwyc's own events, not your app's lifecycle. See below for how the two relate.
 
@@ -43,7 +43,7 @@ var response = await client.PostAsJsonAsync("/sales", sale);
 sale.CorrelationId = response.Headers.GetValues("X-Hyperwyc-Correlation-Id").Single();
 ```
 
-The header is present either way. Hyperwyc neither requires the value to be unique nor deduplicates on it; it is your key, carrying your meaning. It is **not** an idempotency key; see [ADR 0001](decisions/0001-idempotency-is-not-hyperwycs-remit.md).
+If the request was deferred, rather than delivered successfully immediately, the header is present either way. Hyperwyc neither requires the value to be unique nor deduplicates on it; it is your key, carrying your meaning. It is **not** an idempotency key; see [ADR 0001](decisions/0001-idempotency-is-not-hyperwycs-remit.md).
 
 Events also carry `RequestId` (Hyperwyc's own unique envelope id, which a diagnostics view would use) and `RequestBody`, so you can deserialise your own payload back out if you'd rather not keep a copy.
 

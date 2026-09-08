@@ -1,6 +1,8 @@
 # Is Hyperwyc right for your app?
 
-Hyperwyc is deliberately focused on as narrow a goal as possible. It is not a local or offline database or datastore, and it is not a synchronisation engine (i.e. it has no conflict resolution logic). As much as possible the reasoning behind this is captured in the [architecture decisions](decisions/README.md) (while some of it was captured after the fact the essence is all there). This document explains what Hyperwyc is and isn't and aims to provide guidance on when to use it, when to control _how_ you use it with per-route policies, and, occasionally, when not to use it at all.
+This page explains what Hyperwyc is and isn't and aims to provide guidance on when to use it, when to control _how_ you use it with per-route policies, and, occasionally, when not to use it at all.
+    
+Hyperwyc is deliberately focused on as narrow a goal as possible. It is not a local or offline database or datastore, and it is not a synchronisation engine (i.e. it has no conflict resolution logic). The full reasoning and scope decision is covered in the [design](design.md) document.
 
 ## When to use it
 
@@ -52,7 +54,7 @@ If your application needs its own data to survive and be **queried** offline —
 
 1. Write to your own file or database, and render the UI from it
 2. `POST` to your API through a Hyperwyc-handled client
-3. Mark the record unsynced from the `202`, and mark it synced when the matching [event](events.md) arrives
+3. Mark the record unsynced from the `202` that Hyperwyc returns, and mark it synced when the matching [event](events.md) arrives
 
 That is a small amount of glue, and the difference between an application that works offline and one that merely does not crash.
 
@@ -93,5 +95,34 @@ Realm was a popular choice provided by MongoDB. It worked well for a long time, 
 
 In essence, Datasync and Realm require you to architect your app *around* their sync model. Hyperwyc fits *into* your existing architecture, like adding a Service Worker to a web app: invisible by default, powerful when you need it.
 
-[comment: The comparison omits the two things a .NET reader most likely already has in mind: Microsoft.Extensions.Http.Resilience / Polly ("I already have retries") and "why not just write my own DelegatingHandler". Neither is a competitor exactly, which is the point - the answer to both is short, and it would land better here than anywhere else. Polly especially, given how much of the docs are about the boundary with it.]
+## Not alternatives
 
+Datasync and Realm are things you would reach for *instead of* Hyperwyc. Two others come up often and are not in that category at all: one sits alongside it, and the other is what you would be taking on yourself.
+
+### A resilience handler
+
+[Polly](https://github.com/App-vNext/Polly), or `Microsoft.Extensions.Http.Resilience`, is not an alternative to Hyperwyc. It is the other half, and the two answer different questions.
+
+A resilience handler retries **within one attempt**, on a schedule that tracks the failure it just saw — backoff, jitter, `Retry-After`, a circuit breaker. Hyperwyc decides whether there should be **another attempt at all**, possibly hours later and across a process restart.
+
+The dividing line is durability. Polly's retries live in memory: kill the app and they are gone with it. Hyperwyc's queue is on disk and survives being killed, which on a phone is not an edge case — Android and iOS terminate suspended processes without running disposal or anything you registered. So a resilience handler covers "the server is briefly unhappy"; Hyperwyc covers "there is no network, and there may not be one for a while".
+
+They compose rather than compound. Register the resilience handler *after* `AddHyperwycHandler()` and it retries inside a single attempt while Hyperwyc decides whether to make another — and when Hyperwyc answers from its own store, the resilience handler is never invoked at all, so an offline read costs no backoff. See [Pipeline placement](pipeline.md).
+
+This is also why Hyperwyc does not retry a request the server answered, whatever it said. Not an omission: that job already has an owner, and doing it twice would be worse than doing it once. See [ADR 0001](decisions/0001-idempotency-is-not-hyperwycs-remit.md).
+
+### Writing your own `DelegatingHandler`
+
+You could, and this repo is the proof. If you only need the read half, caching a response and serving it back is something you could build in an afternoon, and a hand-rolled version you understand beats a dependency you do not need.
+
+The write path is where it gets complicated. What has to be decided, roughly in the order it bites:
+
+- **Surviving process death.** The outbox has to be on disk *before* you answer the caller, because on mobile there is no shutdown hook to flush it in. That means a store, a serialisation format, and a shape you can change later without stranding what is already written.
+- **Replaying through the pipeline.** A write queued on Monday and sent on Tuesday needs Tuesday's token. That means putting the replay back through the client's own handler chain rather than a bare transport, without the handler catching it a second time and queueing it again.
+- **Knowing which failures are safe to replay.** Only four `HttpRequestError` values mean nothing was transmitted. The others may have reached your API, and replaying those duplicates a write on a guess.
+- **What to do when the store itself cannot be read** — a rotated key, a moved directory, a file that no longer deserialises. Failing loudly loses the app; failing silently loses the writes.
+- **Not throwing where the caller does not expect it**, which turns out to be about response bodies rather than status codes.
+
+It's a series of decisions, and the trap is that most of them have a wrong answer that looks correct until you stress test it. That is what [the decision records](decisions/) are, and a fair number of them were written after getting the first answer wrong.
+
+But with all that said, none of that is insurmountable, and none of it is really difficulty, so if you want to write your own, and use this as inspiration, that's a valid option (if you have the time). The decisions recorded here (in the code and the decision record) have probably solved most of the hard problems, and with any luck, that can benefit you whether consuming the package or writing your own version.
