@@ -2,7 +2,7 @@
 
 ## Summary
 
-A pass over `docs/` against the code on 2026-09-08 found eleven places where the documentation
+A pass over `docs/` against the code on 2026-09-08 found twelve places where the documentation
 describes behaviour that was removed or changed, plus a section that understates the library's
 limitations to someone deciding whether to adopt it.
 
@@ -24,7 +24,7 @@ Ordered by consequence, worst first.
 | # | Where | What it says | What the code does |
 |---|---|---|---|
 | 1 | `docs/events.md` — outcome table | `DeliveryOutcomeKind` includes `TransientFailure` (a 5xx/408/429) | The member does not exist. There are three: `Succeeded`, `Rejected`, `TransportFailure`. A consumer who writes the documented `switch` does not compile |
-| 2 | `HyperwycOptions.Routes` XML | "matched first-registered-wins", "Register most specific first" | `RoutePolicyMap.PolicyFor` walks the list **backwards** — last registration wins, register general to specific. Following the XML silently applies the wrong policy. Tracked in [61](61-xml-docs-contradict-the-code.md) with the other XML defects, listed here because `delivery.md` is where a reader would check |
+| 2 | `HyperwycOptions.Routes` XML | "matched first-registered-wins", "Register most specific first" | `RoutePolicyMap.PolicyFor` walks the list **backwards** — last registration wins, register general to specific. Following the XML silently applies the wrong policy. Tracked in [61](Done/61-xml-docs-contradict-the-code.md) with the other XML defects, listed here because `delivery.md` is where a reader would check |
 | 3 | `docs/delivery.md` — reads table | `CacheFirst()` and `NetworkFirst()` serve a cached response offline "even if stale" | The TTL always applies offline. `ServeReadWithoutNetworkAsync` checks `IsStale` unconditionally; `CacheFirst()` is the default one-day TTL, not the absence of one. Also contradicts the page's own "Understanding TTL" section |
 | 4 | `docs/delivery.md` — reads table | `NetworkOnly` offline: "does not return null, allows HttpClient to throw" | An offline **read** on a `NetworkOnly` route gets the `200`/`Offline` response. `responses.md` documents this as the deliberate exception, so the two pages contradict each other |
 | 5 | `docs/offline-writes.md` — triggers | Connectivity restored is "debounced by 2 seconds" | There is no debounce; it was removed in the ADR 0004 audit and is named in 0004's own list. `OutboxProcessor` says "No debounce" explicitly. The single-flush gate is what actually absorbs a burst |
@@ -34,6 +34,7 @@ Ordered by consequence, worst first.
 | 9 | `docs/events.md` | "Every event carries a `CorrelationId`" | Null on `OnUpdated` (documented on the type) **and** on the `OnDelivered` published from the online write path, which is constructed with four arguments. A caller who sets `HyperwycRequestOptions.CorrelationId` on a write that goes out online cannot correlate the event. Decide whether that asymmetry is deliberate before rewording |
 | 10 | `docs/connectivity.md` ×2 | "silence the startup warning", "not to get past the startup error" | ADR 0007 replaced the throw with one `LogInformation`, whose own comment says it is not a warning that anything is broken |
 | 11 | `docs/delivery.md` | "a failure due to a connectivity or **unknown** fault is queued" | `HttpRequestError.Unknown` is explicitly excluded by `NeverReachedTheApi`, along with `InvalidResponse`, `ResponseEnded` and `HttpProtocolError`. Only four errors queue |
+| 12 | `docs/events.md` — outcome table | Lists `Headers` as a member of `DeliveryOutcome` | It was removed by the ADR 0004 audit, which names `DeliveryOutcome.Headers` in its list. Same table row as finding 1, so both go in one edit. Found while doing [61](Done/61-xml-docs-contradict-the-code.md) |
 
 ## The limitations section understates the limitations
 

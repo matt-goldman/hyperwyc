@@ -113,6 +113,8 @@ Once the Kind row is corrected, this branch should go, and the honest replacemen
 
 TransientFailure was removed when any server response became final. DeliveryOutcomeKind now has three members: Succeeded, Rejected, TransportFailure.
 
+The row below it has the same problem: Headers is not a member of DeliveryOutcome either. It went in the same ADR 0004 audit, which names it explicitly in its list of what came out. So StatusCode and ReasonPhrase are right and Headers should go.
+
 And Rejected is no longer "a 4xx - it will never work". It is any non-success status, including 5xx, 408 and 429, which is the change offline-writes.md documents correctly. "It will never work" is also the wrong reading now: it means Hyperwyc will not attempt it again, which is a statement about Hyperwyc rather than about the request. The application may well retry it, and the whole point of persisting the outcome is to let it decide.]
 
 `OnDelivered` carries an outcome too. A replayed `POST` may answer with the created resource (server-assigned ids, normalised values) which the caller never saw, so this is how you reconcile your local record with what was actually stored.

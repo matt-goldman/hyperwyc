@@ -10,8 +10,7 @@ public interface IHyperwyc
 {
     /// <summary>
     /// A hot observable that emits a <see cref="HyperwycEvent"/> each time a request
-    /// moves through the sync lifecycle (queued, retried, synced, failed, or
-    /// updated).
+    /// moves through its lifecycle (queued, delivered, failed, or updated).
     /// </summary>
     IObservable<HyperwycEvent> Events { get; }
 
@@ -21,9 +20,11 @@ public interface IHyperwyc
     /// at startup and when connectivity is restored.
     /// </summary>
     /// <remarks>
-    /// Returns immediately if a flush is already in progress. Queued writes that
-    /// cannot be delivered stay in the outbox and are retried on the next flush,
-    /// so calling this is safe regardless of connectivity.
+    /// Returns immediately if a flush is already in progress. A write whose transport
+    /// could not reach the API stays in the outbox and goes out on the next flush; one
+    /// the server answered is final either way. There is no schedule and no backoff —
+    /// the triggers are startup, connectivity restored, and this method — so calling it
+    /// is safe regardless of connectivity.
     /// </remarks>
     Task FlushAsync(CancellationToken ct = default);
 

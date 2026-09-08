@@ -84,7 +84,7 @@ These are things people do, not a recommendation from Hyperwyc. Which one fits, 
 
 Hyperwyc does not only queue when `IConnectivityService` says offline. If a write is attempted because the device reports connected, and **the transport cannot establish a connection at all**, that write is queued and answered with the same `202` as if it had been made offline.
 
-This matters because every connectivity implementation is wrong sometimes — a captive portal, a VPN interface that looks like a network, a signal that drops between the check and the send, or `AlwaysOnlineConnectivityService` on a device that is not. Without this, being wrong would cost the write. With it, being wrong costs an attempt.
+This matters because every connectivity implementation is wrong sometimes — a captive portal, a signal that drops between the check and the send, or `AlwaysOnlineConnectivityService` on a device that is not. Without this, being wrong would cost the write. With it, being wrong costs an attempt.
 
 [comment: This section is the answer to "what happens when my connectivity implementation is wrong", which is the question the whole connectivity page raises and never quite closes. It is also near the bottom of a page a reader may not reach, and connectivity.md's summary table describes exactly this behaviour in its first row without saying where it is documented. At minimum, link back to here from that table.]
 

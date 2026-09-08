@@ -41,15 +41,21 @@ public interface IHyperwycStore
     Task UpsertAsync(Envelope envelope, CancellationToken ct = default);
 
     /// <summary>
-    /// Marks the envelope identified by <paramref name="id"/> as successfully
-    /// synced and removes it from the outbox.
+    /// Marks the envelope identified by <paramref name="id"/> as delivered and removes it
+    /// from the outbox.
     /// </summary>
     Task MarkDeliveredAsync(string id, CancellationToken ct = default);
 
     /// <summary>
-    /// Moves the envelope identified by <paramref name="id"/> to the dead-letter
-    /// queue after all retry attempts have been exhausted.
+    /// Moves the envelope identified by <paramref name="id"/> to the dead-letter queue.
     /// </summary>
+    /// <remarks>
+    /// Not the end of a retry sequence — there is no retry budget to exhaust. An envelope is
+    /// dead-lettered as soon as the server answers with a non-success status, because any
+    /// answer means the request reached the API and Hyperwyc's work is done. Only a transport
+    /// failure leaves an envelope in the outbox. See
+    /// <see cref="Models.DeliveryOutcomeKind"/>.
+    /// </remarks>
     Task MoveToDeadLetterAsync(string id, CancellationToken ct = default);
 
     /// <summary>

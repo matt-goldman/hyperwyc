@@ -173,7 +173,7 @@ public static class ServiceCollectionExtensions
         No IConnectivityService was registered, so Hyperwyc is using
         NetworkAvailabilityConnectivityService. It reports whether a network interface is up,
         not whether your API is reachable, so it reports "connected" behind a captive portal,
-        on a router with no upstream, or when only a VPN interface is present.
+        on a router with no upstream, or on a signal too weak to carry a request.
 
         It errs toward reporting connected, which is the harmless direction: the request is
         attempted, the transport fails, and a read is served from the store while a write is

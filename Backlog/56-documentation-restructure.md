@@ -130,7 +130,7 @@ id, the event stream and the "no data" read one design instead of four decisions
 The first draft of this item said "fix the accuracy work first, moving wrong text is wasted
 motion". That is too simple, and it is only true of some of it.
 
-**[61](61-xml-docs-contradict-the-code.md) goes first regardless.** It is a different artefact —
+**[61](Done/61-xml-docs-contradict-the-code.md) goes first regardless.** It is a different artefact —
 XML that ships inside the package — so nothing here touches it, and it is the one finding with a
 live wrong-behaviour consequence attached (`HyperwycOptions.Routes` documents the opposite
 matching order to the one the code implements).

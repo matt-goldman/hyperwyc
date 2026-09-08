@@ -10,7 +10,7 @@ public enum HyperwycEventType
     OnQueued,
 
 
-    /// <summary>A queued request was successfully synced to the server.</summary>
+    /// <summary>A queued request was successfully delivered to the server.</summary>
     OnDelivered,
 
     /// <summary>
