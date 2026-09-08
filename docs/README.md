@@ -11,6 +11,8 @@ offline, and replays them when the network returns. Your calling code does not c
 | **[Getting started](getting-started.md)** | Install, register, make a request |
 | **[Connectivity](connectivity.md)** | What the default does, which way it errs and why that is the safe way, and when to replace it |
 
+[comment: Three entries under "Start here" and six under "Using it", all six of which are reference documents. If the tutorial lands, this table becomes the shape of the whole restructure: Choosing (evaluate) -> Tutorial (learn) -> Quick starts (MAUI, host apps) -> Reference -> Why it works this way. That reordering is the progressive disclosure you are after and it can be done here before a single page is rewritten.]
+
 ## Using it
 
 | | |

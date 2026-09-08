@@ -18,6 +18,8 @@ Hyperwyc is deliberately focused on as narrow a goal as possible. It is not a lo
 - Doesn't resolve data conflicts — it's designed for scenarios where conflicts are rare or unexpected, or handled server-side
 - Notifications
 
+[comment: Bare fragment in a list of "Doesn't ..." sentences. "Doesn't handle push notifications", which also matches the caveat at the top of the page.]
+
 ## Is your app a good fit?
 
 If you want your app to work offline, Hyperwyc is almost certainly a great option.
@@ -25,6 +27,8 @@ If you want your app to work offline, Hyperwyc is almost certainly a great optio
 It sits in your HTTP request pipeline, and can cache reads, serving them from the cache when offline, and queue writes (durably, not just in memory), and send them when a connection is detected, or on start (or whenever you want to trigger it).
 
 Traditionally this is solved with either a syncrhonisation engine (see below) or custom logic in your local store that tracks send and receive state. Hyperwyc gives you offline read and write assurance without any of that.
+
+[comment: "syncrhonisation" here and again on the next paragraph; "teh" further down in "How it compares".]
 
 With that said Hyperwyc is not a replacement for an offline store, or syncrhonisation between local and remote state (if that's what you need). For writes (e.g. `POST`, `PUT`, `PATCH`, `DELETE`), the scenarios to consider are:
 
@@ -34,11 +38,24 @@ With that said Hyperwyc is not a replacement for an offline store, or syncrhonis
     
 For reads (e.g. `GET`), there's no reason I can think of *not* to use it, you just have to think carefully about your policies and pick a sensible TTL.
 
+[comment: "there's no reason I can think of" is the only first-person singular in the docs. Deliberate or not, worth deciding - the rest of the voice is impersonal with an occasional "we".]
+
 Hyperwyc is a **transport-layer tool**. If your application's state needs to queried offline, it needs its own store, with Hyperwyc delivering alongside it rather than instead of it.
+
+[comment: This paragraph and the "Hyperwyc is not a local database" section below make the same argument at similar length, about 10 lines apart. One of them can go; the second is the better written of the two. ("needs to queried" - be.)]
 
 ## Current limitations
 
 - **Buffered bodies only.** Request and response bodies are read into memory in full before being queued or cached. Binary payloads round-trip byte for byte (file uploads, image downloads, protobuf, gzip), but *streaming uploads and downloads of indeterminate length* are not currently supported.
+
+[comment: This is the biggest accuracy gap in the docs. An evaluator reading a section called "Current limitations" reasonably concludes streaming bodies are the only one. The open backlog says otherwise, and at least four are consumer-visible and cannot be worked around:
+
+  - Cache-Control is ignored entirely, including no-store, so a response the server said not to store is written to disk (item 41)
+  - the cache grows without bound - individual bodies are capped, the store is not, and nothing evicts (item 42)
+  - Vary is not honoured, so a content-negotiated endpoint serves the wrong variant, silently, and it looks like a server bug (item 43)
+  - no JsonSerializerContext, so the store falls back to reflection - in a library whose primary audience ships iOS release builds with AOT on by default (item 53)
+
+53 in particular belongs in front of anyone evaluating this for MAUI, and this is the page where they would look. These are open items rather than defects, which is precisely why they belong in the docs and not only in the backlog.]
 
 ## Hyperwyc is not a local database
 
@@ -79,6 +96,8 @@ Realm was a popular choice provided by MongoDB. It worked well for a long time, 
 - **Domain model:** Heavily coupled to the Realm storage format and object model.
 - **Drawback:** Tight backend lock-in and schema mirroring; unsuitable for REST- or GraphQL-based APIs.
 
+[comment: "has been made end of life now" above - worth dating it (SDK deprecation announced September 2024) so it ages honestly rather than becoming quietly wrong.]
+
 ### Hyperwyc
 
 - **Philosophy:** Service-worker-inspired HTTP handler: transparent request/response caching and replay at the transport layer. The caller receives normal-looking responses regardless of connectivity state.
@@ -88,4 +107,6 @@ Realm was a popular choice provided by MongoDB. It worked well for a long time, 
 - **Use case fit:** Ideal for apps where API contracts are already stable, or where data conflicts are rare or handled server-side.
 
 In essence, Datasync and Realm require you to architect your app *around* their sync model. Hyperwyc fits *into* your existing architecture, like adding a Service Worker to a web app: invisible by default, powerful when you need it.
+
+[comment: The comparison omits the two things a .NET reader most likely already has in mind: Microsoft.Extensions.Http.Resilience / Polly ("I already have retries") and "why not just write my own DelegatingHandler". Neither is a competitor exactly, which is the point - the answer to both is short, and it would land better here than anywhere else. Polly especially, given how much of the docs are about the boundary with it.]
 

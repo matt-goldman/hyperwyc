@@ -9,9 +9,15 @@ This page explains the differences, what you should know, and when and how to pr
 > 💡 **NOTE FOR .NET MAUI USERS**: You probably don't need to read this. Just copy [the sample code](#.net-maui-apps) into your app and register it in DI. You can read the rest of this if you are curious.
 >    TODO: create a `Plugin.Maui.Hyperwyc` package that includes the `MauiConnectivityService`, takes a dependency on Hyperwyc,and wires everything up with a meta extension method on `MauiBuilder`.
 
+[comment: Agreed, and filed. Worth flagging that it is an ADR-shaped question rather than a packaging one: ADR 0006 says a shipped implementation is not a default, and a meta extension method on MauiAppBuilder that wires one up *is* making the choice on the consumer's behalf. That is probably fine - on MAUI, Connectivity.Current is a choice Hyperwyc can make correctly, which is question 1 of the defaults test answered yes - but it is the first time Hyperwyc would register a connectivity source for someone, so it should be argued rather than assumed.]
+
+[comment: The anchor below is broken. GitHub strips the leading dot when it builds the id, so it is #net-maui-apps, not #.net-maui-apps.]
+
 ## Summary
 
 In some cases, a connectivity service could produce a false negative (report that your client is offline when it is not) or false positive (report offline when actually online). One of these can be an inconvenience, the other presents a potentially serious problem.
+
+[comment: The two parentheticals say the same thing. A false positive is reporting online when actually offline. As written both read as "reports offline when online", which inverts the table immediately below and contradicts the passage further down the page where you have it right.]
 
 The following table summarises these scenarios:
 
@@ -25,7 +31,11 @@ Nothing is lost in either direction, but the second scenario hides a potential i
 
 This is important to know when you write your own. It is not a hazard of the fallback: `GetIsNetworkAvailable()` reports false only when no ordinary interface is up at all, so its characteristic error is the first row, the harmless one. Erring toward "online" is the safe direction, which is also why [probing](#why-not-just-probe-the-api) doesn't work.
 
+[comment: "reports false only when no ordinary interface is up at all" is right, and the VPN caveat 200 lines below is the exception that proves it rather than undermines it - a mesh client holds it at true, so it errs the same safe way. Worth one clause saying so here, because a reader who meets that caveat cold has to work that out for themselves.]
+
 What a good implementation buys you, then, is the doomed request you did not make, fresher reads, and, most of all, a prompt signal when the network returns, because that is what sends queued writes.
+
+[comment: This is the sharpest sentence on the page - the change signal, not the saved request, is the reason to write your own - and it is the one that does not make it into Getting started or the README.]
 
 ## Creating your connectivity service
 
@@ -46,6 +56,8 @@ Hyperwyc has two implementations in the package you can use for reference, and a
 You get [`NetworkAvailabilityConnectivityService`](#the-NetworkAvailabilityConnectivityService), and one line in your logs at startup saying so. That is a deliberate default, not a guess: it is the only shipped implementation that raises a change event, which is what makes queued writes go out without the
 application asking.
 
+[comment: Anchor case. GitHub lowercases heading ids and fragment matching is case-sensitive, so #the-NetworkAvailabilityConnectivityService will not resolve - it needs to be #the-networkavailabilityconnectivityservice.]
+
 ## Register it in your container
 
 ```csharp
@@ -54,7 +66,13 @@ services.AddSingleton<IConnectivityService, MyConnectivityService>();
 
 Registering an implementation of `IConnectivityService` will silence the startup warning. Order doesn't matter, before or after `AddHyperwyc()`, whichever suits how your registrations are organised, and it works the same if something else in your startup registers it on your behalf.
 
+[comment: There is no startup warning. ADR 0007 replaced the throw with a single LogInformation, and the code comment on it says explicitly "this is not a warning that anything is broken". The same stale reference appears near the end of the page as "not to get past the startup error".]
+
 It's a runtime requirement, not a build time requirement. This is also important to be aware of.
+
+[comment: Left over from when resolving without one threw. There is no requirement now - that is the whole of ADR 0007. Either cut it, or turn it into the point it is reaching for, which is worth making: a container registration is resolved late, so ordering does not matter. That is ADR 0003's second half ("requiring a decision must not require an ordering") and it is the reason the sentence above about order is true.]
+
+[comment: "ff you'd rather" below.]
 
 Alternatively, ff you'd rather keep the configuration in one place, or you already hold an instance, set it on the options instead:
 
@@ -67,6 +85,8 @@ services.AddHyperwyc(options =>
 
 A container registration takes precedence if you do both.
 
+[comment: Checked this against the code and it holds in both orders - TryAddSingleton stands aside for an earlier container registration, and a later one wins because the last descriptor is the one resolved. Worth keeping; it is a claim readers will test.]
+
 ## Which implementation
 
 Hyperwyc contains two implementations, and you can use these (one is wired up out of the box), but often supplying your own is a good idea.
@@ -74,11 +94,15 @@ Hyperwyc contains two implementations, and you can use these (one is wired up ou
 * `AlwaysOnlineConnectivityService`: this provides no change detection so will never trigger a Hyperwyc queue flush, and it always reports online, so will attempt a network call even if offline. If you _always_ want to try the online path first and don't mind the added delay (not a good idea if you have an exponential backoff retry policy with Polly), and you are happy triggering the Hyperwyc write queue flush yourself, you can use this.
 * `NetworkAvailabilityConnectivityService`: this is the version you get out of the box if you do nothing. It will work in most cases, but it has some limitations (discussed below) and there is likely a better implementation you can use.
 
+[comment: Structural, and the main thing I would fix on this page. AlwaysOnlineConnectivityService is described in one line here and then again, at length and more accurately, near the very end of the page - inside the "Why not just probe the API?" section, which has nothing to do with it. The bullet above also omits the thing that changed most: a write attempted under it against a dead network is now queued from the transport failure rather than lost. Those two closing paragraphs belong here.]
+
 ### .NET MAUI Apps
 
 If you're building a .NET MAUI app, you can copy and paste the implementation from the sample app (and expand the details below to see too) without any changes. It is not packaged because taking it as a dependency would put .NET MAUI in Hyperwyc's dependency graph for everyone, including console apps, services and Blazor hosts that have no use for it. The sample implementation is almost certainly never going to change, so owning it yourself isn't a risk, and it leaves you free to define "connected" as your app needs; treating `ConstrainedInternet` as offline, say, or folding in a health check against your own API.
 
 The implementation below is the one in the [sample app](../sample/Hyperwyc.Sample.Maui/Services/MauiConnectivityService.cs), proven on an Android device: with Wi-Fi and mobile data disabled it reports disconnected, which is what routes a read to the cache.
+
+[comment: Diffed this against the sample - they match exactly, which is worth knowing given how easy that is to let drift. But "The sample implementation is almost certainly never going to change" above sits awkwardly beside the Plugin.Maui.Hyperwyc TODO at the top, which would make it a maintained artefact with a version number. Both statements cannot stay as they are.]
 
 <details>
 <summary><b>`MauiConnectivityService`</b> - copy this and use in your .NET MAUI app</summary>
@@ -201,6 +225,8 @@ Five things in this that you should be aware of:
 
 `NetworkAccess.ConstrainedInternet` counts as disconnected here, the conservative reading, on the grounds that a captive portal is not the internet. If your API is reachable under it, flip that condition.
 
+[comment: Those five notes are genuinely good, and they are also the clearest single example of the mixing you described. A reader told at the top of the page "just copy this" now gets five paragraphs on Rx, change streams versus state views, disposal of a static event, and platform threading before they reach anything else. That is deep-dive material. In a split this is the first block that moves.]
+
 ### On Windows, the best answer is a different API again
 
 Windows exposes `NetworkInformation.GetInternetConnectionProfile()`, whose `GetNetworkConnectivityLevel()` returns `None`, `LocalAccess`, `ConstrainedInternetAccess` or `InternetAccess`. If your use case is on Windows, this is better than anything below, because it reports reachability
@@ -212,6 +238,8 @@ var connected = profile?.GetNetworkConnectivityLevel() == NetworkConnectivityLev
 ```
 
 There is no implementation in Hyperwyc that uses this, as it is WinRT, so needs a Windows target framework and including it would make Hyperwyc Windows only. Additionally, Microsoft's own documentation warns that the returned profile *"might or might not have internet access"*, so you have to check both the profile and the connectivity level, and still have to decide for yourself whether `ConstrainedInternetAccess` counts (same judgement call as `NetworkAccess.ConstrainedInternet` above).
+
+[comment: This section is accurate and it is the strongest illustration on the page of why nothing is registered for you - three platforms, three different right answers, none of them knowable from inside Hyperwyc. It is currently framed as a Windows tip. It is doing the ADR 0006 work, and saying so would earn it the space it takes.]
 
 ### The NetworkAvailabilityConnectivityService
 
@@ -239,11 +267,15 @@ netInterface.OperationalStatus == OperationalStatus.Up
 
 This is a simple interface connection check, not a liveness probe or internet connectivity check.
 
+[comment: Not quite what the code says. NetworkAvailabilityConnectivityService.IsConnected is literally `NetworkInterface.GetIsNetworkAvailable()` - the three-condition expression above is what the BCL does inside that call, not what the getter is. As presented, a reader could reasonably think Hyperwyc wrote that filter and could change it. "GetIsNetworkAvailable() is, in effect:" would fix it, and it is worth fixing because this is exactly the detail you said consumers should know.]
+
 > **Note**: `OperationalStatus` is [RFC 2863](https://datatracker.ietf.org/doc/html/rfc2863) `operStatus` - *"able to pass packets"* — which is **link state, not administrative state**. So an adapter that is merely enabled does not count: an unplugged ethernet port and a Wi-Fi adapter with no association both report `Down`, because neither has carrier. That is the part it gets right, and it is why aeroplane mode and an unplugged cable are caught.
 
 What it cannot see is anything above layer 2. It reports connected behind a captive portal, on a router with no upstream, and on a mobile signal too weak to carry a request.
 
 > **A VPN or mesh interface can hold it at `true` on its own.** The tunnel exclusion is narrower than it looks: a TUN interface often reports `NetworkInterfaceType.Unknown` rather than `Tunnel`, so it is not excluded, and it does not necessarily go down when the physical link does. On a machine with every physical adapter down and a mesh client still running, this returns `true`. Different in kind from the cases above; that is not a degraded network path, it is not a path at all.
+
+[comment: "that is not a path at all" is the sentence we corrected and it has come back in the redraft. In an enterprise or IoT deployment where the API sits inside the tunnel, that tunnel is the only path that matters and reporting connected is correct. The point is not that the check is wrong here - it is that whether it is wrong depends on where your API lives, which is the thing Hyperwyc cannot know. That makes this the best example on the page rather than a caveat. The same sentence is still in NetworkAvailabilityConnectivityService's XML docs, so it also ships in the package.]
 
 `NetworkInterfaceType` is also not reliable across platforms: a Wi-Fi adapter reports as `Ethernet` on Linux, not `Wireless80211`, so filtering by type does not rescue this.
 
@@ -264,16 +296,26 @@ there. A false positive costs one wasted attempt; a false negative costs deliver
 
 > TODO: Can we verify whether platforms deterministically and consistently behave one way or the other? Because we might be able to use this if we can determine the runtime.
 
+[comment: I would not pursue this, on two grounds.
+
+First, it is not only the runtime. Which SocketError you get comes from the platform resolver and its configuration - systemd-resolved against plain glibc against a corporate resolver against whatever a mobile carrier interposes - so "determine the runtime" does not determine the answer, and the failure mode of getting it wrong is silent.
+
+Second, and more decisive: even if it were perfectly deterministic it would not help, because the negative-caching problem in the paragraph above stands on its own. A lookup that failed while you were offline keeps failing after the network returns, and no amount of distinguishing TryAgain from HostNotFound changes that. The paragraph above already closes the question; this reopens it for a mechanism that would not fix the thing that made it a bad idea.]
+
 **And a captive portal defeats it in the wrong direction.** A portal has to answer DNS in order to redirect you, so resolution *succeeds* behind one, but your API will still be unreachable.
 
 Which leaves the conclusion the design already assumes: **the only reliable test of whether your API is reachable is a request to your API.** Hyperwyc makes that test on every flush. This is why "the transport is the authority".
 
 As mentioned above, there are two potential failures of a connectivity check: a false negative, reporting not online when you are, or a false positive, reporting that you are online when you are not. A false positive is self correcting - your HTTP client makes the call and fails, which Hyperwyc helps with, and your app needs to handle anyway. The other case, a false negative, is where it becomes problematic, and this is fundamentally why Hyperwyc doesn't choose for you.
 
+[comment: Third full statement of the asymmetry on this page (the Summary, then the paragraph about erring in the safe direction, then this) - and it also appears in responses.md, offline-writes.md, HyperwycOptions' XML docs and ADR 0007. It is the central idea, so some repetition is fair, but it should be written once at length and referenced from the rest. As it stands the three versions on this page have slightly different emphases and one of them, in the Summary, is wrong.]
+
 **`AlwaysOnlineConnectivityService`** reports connected, always. Legitimate for a host that genuinely is, or when you want the response cache and nothing else.
 
 It is not as destructive as it once was: a write attempted under it against a dead network now fails at the transport and is [queued from there](offline-writes.md), so writes are not lost. What you give up is everything that depends on *knowing* — every offline read pays a full
 transport timeout before degrading, nothing is replayed automatically because no connectivity signal ever fires, and a `CacheFirst` route with a stale entry throws rather than serving. Choose it because your host really is always connected, not to get past the startup error.
+
+[comment: These two paragraphs belong up under "Which implementation", beside the one-line bullet that currently describes this type. Nothing about AlwaysOnlineConnectivityService follows from the DNS discussion they are sitting in.]
 
 ## Faking connectivity in your own tests
 
@@ -309,3 +351,7 @@ await hyperwyc.FlushAsync();
 
 If you're testing the automatic flush on connectivity restoration rather than an explicit one, you need the stream to emit — reach for your mocking library's observable support, or a `Subject<bool>` from `System.Reactive` in the test project only. And if a test is simply online
 throughout, `AlwaysOnlineConnectivityService` is already the fake you want.
+
+[comment: Overall on this page: at 311 lines it is the longest in the docs and it is third in "Start here". For the audience you say is core the path should be quick start (copy this, done) -> this page (why, and what to do when the copy-paste is not right for you) -> ADR 0006/0007 (why there is a decision here at all). All the material exists; it is the ordering that does not. Roughly, the reference half is: the interface, what you get if you supply nothing, how to register, the two shipped implementations and what each costs. Everything else - the five notes, the Windows API, the DNS analysis, the testing section - is the second read.]
+
+[comment: This section is for a third reader again - someone writing tests for their own application, on a different day from either of the other two. Good content, wrong page. It is the clearest single candidate for a short "Testing an app that uses Hyperwyc" page, which could also absorb the ReplayTransport-as-a-stub note from pipeline.md.]

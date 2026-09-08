@@ -4,6 +4,8 @@
     
 An `HttpClient` handler that caches responses, queues writes made offline, and replays them when the network comes back, *without changing your calling code.*
 
+[comment: "queues writes made offline" is now narrower than the behaviour. Writes are also queued when the device believes it is online and the transport cannot establish a connection - which is the headline of ADR 0007 and arguably the strongest single sentence you have. Consider "queues writes it cannot send".]
+
 ## Quick start
 
 Install the package:
@@ -43,9 +45,13 @@ Hyperwyc is invisible to your `HttpClient` caller code and processes requests wh
 | **Outcomes**       | Hyperwyc emits an event stream, so you can still find out what happened to a deferred write when it eventually sent  |
 | **Storage**        | Durable and encrypted out of the box, with BYO optional                                                              |
 
+[comment: This table is headed "default behavior" (US) while its own first column reads "Behaviour" (UK) and the licence heading is "Licence". The repo is consistently British elsewhere - worth a pass.]
+
 ## Is it right for your app?
 
 Use Hyperwyc if you want to queue reads and writes to an API while offline, without re-architecting your solution around a sync engine. Or if the idea of "synchronising" doesn't sit right with you at all (see [Choosing](docs/choosing.md) for more on this).
+
+[comment: "queue reads and writes" - reads are not queued, they are cached and served. Small, but it is the second sentence an evaluator reads.]
 
 If you need to query state offline, it needs its own store. Hyperwyc can still be used to provide durable offline delivery, but think of it as a transport-layer component, not a local database.
 
@@ -60,6 +66,8 @@ As a general rule of thumb:
 - **A shared mutable resource**: e.g. stock levels, seat reservations, a balance.
   These may be a poor fit for offline write caching, use per-route policies to exclude them if necessary (see [Caching and delivery](docs/delivery.md))
 
+[comment: This append-only / shared-mutable split appears three times: here, in choosing.md's "Is your app a good fit?", and a third time in backlog item 50 which specifies it as the fit test. It is the best idea in the docs and repetition dilutes it. Suggest it lives once, in choosing.md, and the README carries two lines and a link.]
+
 ## Documentation
 
 **[Full documentation →](docs/)**
@@ -72,6 +80,10 @@ As a general rule of thumb:
 [Events](docs/events.md) ·
 [Pipeline placement](docs/pipeline.md) ·
 [Storage](docs/storage.md)
+
+[comment: responses.md is missing from this list but present in docs/README.md. Also: this list calls delivery.md "Caching and route policies", the section above calls it "Caching and delivery", the file is delivery.md, and its H1 is "Delivery and Route Policies". Four names for one document. One name, used everywhere.]
+
+[comment: Nothing here points a .NET MAUI reader anywhere specific, and connectivity.md - the page they most need - is 311 lines with the MAUI answer 80 lines in. This is the case for the MAUI quick start you flagged.]
 
 [Architecture decisions](docs/decisions/): why the scope is what it is, and why some seemingly obvious features are deliberately absent.
 
@@ -93,3 +105,5 @@ AI was used heavily to build Hyperwyc. I produced the entirety of the architectu
 I assume sole responsibility for the code contained in this library; its authorship and design are mine regardless of the tools using to generate it. Using AI does not absolve us of responsibility for the work we use it for.
 
 Equally, responsibility for usage of Hyperwyc in your own products, including its fit for your purpose, rests with you. Hyperwyc is provided under the terms of a the LICENSE file, including warranty disclaimer and limitation of liability. We are all responsible for our own choices.
+
+[comment: Two typos in this section: "regardless of the tools using to generate it" (used), and "under the terms of a the LICENSE file".]

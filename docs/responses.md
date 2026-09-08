@@ -13,17 +13,43 @@ Either can arise two ways: the connectivity service reported offline, or the req
 
 Everything else your caller sees — including a cache hit — is a real server response, returned unchanged.
 
+[comment: Fourth full statement of the false-positive/false-negative asymmetry in the docs. Here it is the least necessary of them: this page's job is "what does a caller see", and the answer is "identical either way, and you cannot tell which happened". That sentence carries the whole point; the rest can be a link to wherever the asymmetry ends up living once.]
+
 ## Status codes
 
 **`202 Accepted` — the write is queued.** Not `200`, because the request has been accepted for later processing and has not yet been performed against the origin server. It is also how a caller tells a queued write from a delivered one without reading a header, but only if no ordinary success from your API is a `202`. The code is fixed — there is no option to change it. TODO: should this be configurable in per-route policies?
 
+[comment: I would answer no, and answer it on the page rather than leaving it open.
+
+The 202 is the only in-band signal separating a queued write from a delivered one. Making it configurable lets a consumer configure that distinction away, and the failure mode is both silent and severe - a caller treats a queued write as done. That is defaults test question 3, "could a wrong value quietly produce the failure the library exists to prevent", which is a never rather than a trade-off.
+
+The scope test points the same way. A consumer who needs a different code has one line at the call site, or one handler registered above Hyperwyc's, so question 3 of the scope test says our job is to not interfere.
+
+And the "only if no ordinary success from your API is a 202" caveat you have already written is the real constraint, which a knob would not relieve. An API that genuinely returns 202s needs the header rather than a different code, because whatever code you configured could collide the same way - you would have moved the problem, not solved it. That is worth saying explicitly, because it is the argument a consumer will bring.
+
+Filed as under-consideration with this reasoning so the question is answered rather than re-asked, but I think the answer belongs on this page as a deliberate absence, in the same shape as the other "we do not do this, here is why" notes.]
+
 **`200 OK` — the read found nothing.** Offline with no cached copy, or a cached copy past its [TTL](delivery.md). Not a `404` and not a `503`: nothing was rejected and nothing is missing, Hyperwyc simply has no data for the route. Your code handles the empty result the same way it already handles a search with no matches — see [Designing your responses](delivery.md#designing-your-responses). TODO: we should explain here why this isn't a 404. IIRC it's essentially because that's simply not true of the real world and also because your calling code may treat that as a permanent failure, not sure exactly. Either way, for a read, callers likely already handle the 404 scenario here (or should) and this is probably what many will want. If we make the response configurable, globally or per route, people can set it in a way that makes sense, in the mean time we should articulate here why a read that is essentially failed returns a 200. We cover that a little in the designing your responses section in delivery.md, maybe that belongs here.
+
+[comment: Your recollection is right, and the case is stronger than "not true of the real world". There are three reasons and they stack:
+
+  - A 404 asserts the resource does not exist. Hyperwyc does not know that, and it is usually false - the resource exists, we just cannot reach it. Asserting it on the server's behalf is the same category of overreach as stamping a Content-Type on a route we know nothing about, which this page already declines to do two sections down.
+  - It is permanent, and callers treat it that way. EnsureSuccessStatusCode throws on it, GetFromJsonAsync throws on it, and application code caches "this one does not exist". A read that failed because of connectivity is the most transient condition there is, and encoding it as the most permanent status is backwards.
+  - It puts the exception back. The null body exists precisely so that an offline read returns rather than throws; a 4xx hands the throw straight back through the JSON extension methods, undoing the thing the body was chosen for.
+
+503 fails on the first of those too - it asserts something about the server, and the server is fine. So "this request produced no data" is the only honest statement available, and 200 plus null plus X-Hyperwyc-Status: Offline is the only combination that makes it without asserting something false.
+
+Agreed the reasoning should live here. delivery.md's "Why no data instead of no connection" box should then link to it rather than duplicate it - that box is making the application-design argument (your code already handles the empty path) and this is making the status-code argument, and they are genuinely different claims that currently blur together.
+
+On configurability: same answer as the 202 above, and for the sharper of the two reasons. A consumer who sets this to 404 has re-armed the exception for every offline read in their app, which is the exact failure the design exists to prevent.]
 
 ## Headers
 
 For writes, Hyperwyc attaches headers to responses it handles.
 
 No header will be attached for requests that were sent successfully (i.e. made it out past the transport layer) while online.
+
+[comment: Two things in this pair of sentences. "For writes, Hyperwyc attaches headers to responses it handles" - the Offline header goes on reads, as the table immediately below shows. And "sent successfully (i.e. made it out past the transport layer)" reads as "the server said 2xx", when a 500 from the server also carries no Hyperwyc header. What is meant is "any response that came from the server is returned exactly as it arrived", which the line above the section already says well.]
 
 | Header                      | Present on               | Value                                              |
 | --------------------------- | ------------------------ | -------------------------------------------------- |
@@ -56,5 +82,9 @@ In three cases there is no synthetic response, and the caller gets whatever the 
 | The store could not be written                                                        | Nothing is holding the write, so answering `202` would promise something nobody is keeping |
 | The store could not be read at all                                                    | Hyperwyc [steps aside for the session](storage.md)                                         |
 | A write whose transport failed **after** a connection was made                        | The server may have processed it; see [offline writes](offline-writes.md)                  |
+
+[comment: "In three cases" above a four-row table.]
+
+[comment: And there is a fifth, which is worth a row because it is the one that would surprise someone: a write that would otherwise be queued, but whose content cannot be buffered. TryQueueWriteAsync returns null if LoadIntoBufferAsync throws, and the caller then rethrows or passes through. The "store could not be written" row covers the adjacent case but not this one, and the reason is the same in both - a body that cannot be read is a write that cannot be replayed, so taking custody of it would be a promise Hyperwyc cannot keep.]
 
 An offline **read** on a `NetworkOnly` route is the exception: it gets the `200`/`Offline` response, because there is nothing to pass through to.
