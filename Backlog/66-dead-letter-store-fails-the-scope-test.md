@@ -104,6 +104,12 @@ What genuinely does not survive B is **the body of a non-`2xx` answer**. A `409`
 
 `DeliveryOutcome` itself stays. It is what the event carries, and the event is the part that passes Q4.
 
+## The word may come back, for what it actually means
+
+Removing this does not banish "dead-letter". In a message bus the term means **could not be delivered**, and it was being applied here to requests that *had* been — the misuse was the direction, not the borrowing.
+
+Once that is gone, the question it was standing in front of becomes askable: should a write Hyperwyc has failed to deliver for long enough simply expire? That is dead-lettering, correctly used, and it comes out the *other* side of the scope test — the age of something in the outbox is precisely what only Hyperwyc knows. Filed as [69](69-expiring-queued-writes.md).
+
 ## Acceptance Criteria
 
 - [ ] An ADR records the distinction — delivery is Hyperwyc's success axis, HTTP's is not — and what it condemns.
