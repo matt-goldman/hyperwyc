@@ -40,7 +40,16 @@ For the fallback case — a handler registered without a client name — `option
 
 [comment: Worth adding here: AddHyperwycHandler() works on a typed client too. AddHttpClient<TClient>() sets builder.Name to the type name, so the capture works and replays go back through that client's pipeline. That is the registration most MAUI apps actually use, and nothing in the docs confirms it - a reader who has only seen the named-client example has to guess.]
 
-> **Note — Hyperwyc short-circuits the pipeline when offline.** [Synthetic responses](responses.md) (`Queued`, `Offline`) are returned directly from the handler, so any `DelegatingHandler` placed *after* `HyperwycHandler` is **not** invoked on the offline path. This is by design — there is no outbound request to authenticate or otherwise mutate — but it means downstream handlers should not be relied upon for side effects that need to occur on every logical request (logging, telemetry, header stamping). For cross-cutting concerns that must run regardless of connectivity, place the handler **before** `HyperwycHandler` in the pipeline. For everything else, particularly handlers that could be costly or time-consuming to run if offline, place them after so that Hyperwyc can intentionally short-circuit them.
+## Hyperwyc short-circuits the pipeline when it answers
 
-[comment: This is the most operationally important note in the docs and the hardest to read - one 140-word paragraph inside a blockquote, carrying three distinct instructions (what happens, why it is deliberate, and where to put your own handlers as a result). Three short paragraphs, or a two-row table of "must run every logical request -> before" against "should be skipped when offline -> after", would fix it without losing anything.]
+[Synthetic responses](responses.md) — the `202` for a queued write, the `200` for a read with nothing to serve — are returned directly from the handler. **Any `DelegatingHandler` registered after `HyperwycHandler` is not invoked** on that path.
+
+That is deliberate: there is no outbound request to authenticate or mutate. But it decides where your own handlers go.
+
+| Your handler                                                                | Where it goes                     | Why                                                                                                                                                     |
+| --------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Must run on **every logical request** — logging, telemetry, header stamping | **Before** `AddHyperwycHandler()` | Otherwise it silently stops running whenever Hyperwyc answers                                                                                           |
+| Only matters when a request actually goes out — auth, resilience, retries   | **After** `AddHyperwycHandler()`  | It is skipped when there is nothing to send, which is the point. A resilience handler placed here never retries a request that was never going to leave |
+
+Everything else — anything costly or slow to run when offline — belongs after, so that Hyperwyc can short-circuit it.
 

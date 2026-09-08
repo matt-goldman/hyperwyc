@@ -84,38 +84,16 @@ It means the same thing online and offline. Once it expires, the response is not
 
 The app doesn't need to know the difference. Your existing code doesn't change.
 
-[comment: This section is the clearest writing in the docs, and it answers a question the tables 40 lines above it raise. That distance is the progressive-disclosure problem in miniature: "Understanding TTL" and "Designing your responses" are explanation, the tables are reference, and a reader needs them in the opposite order depending on which one they came here for.]
+## What a caller gets when there is nothing to give
 
-> **Why "no data" instead of "no connection"?** Connectivity is an infrastructure concern, not
-> an application one. Your code already has to handle the empty-result path (a search with no
-> matches, a feed with no items); offline simply produces the same shape. A caller that does want
-> to know reads the [`X-Hyperwyc-Status` header](responses.md) — or, for a write, the `202`, which
-> no ordinary success is.
-
-TODO: I wonder if I should add an "opinions" doc, or similar. Philosophy maybe? Hyperwyc has in many cases deliberately got out of the way and done as much as possible to stay in its lane. In other places it holds strong opinions, this is one example. This one is entirely defensible for two reasons; the first is that it is almost inarguably true, the issue is not _that_ your app has to handle the empty result path, it's that it _should_ handle it at the application logic layer rather than the infrastructure layer, but it is still true, and the second is that the header provides the infrastructure layer handling for those that want it. The impact of either is that if your code currently catches and handles an HTTP client exception in the application logic (say a ViewModel), the premise that "you don't have to change your calling code" no longer holds true. Granted, that cannot hold absolutely true universally, but the point is that Hyperwyc is expressing an opinion here that, if you're handling infrastructure in your application code, you're doing it wrong. The following section also makes a case for the result pattern, and during development (not sure if this is captured) I thought about Hyperwyc driving you to adopt distributed patterns (e.g. considering requests accepted rather than completed, with the event stream providing the equivalent of eventual consistency), and I wonder whether these should be recorded and shared somewhere.
-
-[comment: Agreed, and I would go further: two pages rather than one, because they are different commitments and a reader wants them on different days.
-
-Design principles (or philosophy) holds the stances - infrastructure is not application logic, a queued write is submitted rather than successful, why null and not an empty body, why a 200 and not a 404, why no retry, why no deduplication. A reader can disagree with every one of these and still use the library correctly.
-
-Patterns holds what to actually build - the application-owned store, correlating a 202 back to a local record, marking unsynced and then synced from the event stream, a "sync now" affordance. That is load-bearing, and it is already specified: it is backlog item 50, "Designing resilient applications with Hyperwyc", down to the inspection-app worked example. So patterns is not a new document, it is item 50 finally being written, and this TODO is the argument for scheduling it rather than leaving it unscheduled.
-
-Your point about the calling code is the sharpest thing in this note and it belongs in the principles page close to verbatim. The promise is "you don't have to change your calling code", and it stops being true for an app that catches HttpRequestException in a ViewModel - precisely because Hyperwyc's whole point is that the exception stops happening. That is not a caveat to bury; it is the clearest statement of the opinion you could make, and stating it plainly makes the opinion easier to accept rather than harder.
-
-On the distributed-patterns thread: I do not think it is captured anywhere. The closest is events.md's collapsed "framing note" about submitted versus successful, which is one paragraph hidden behind a details element. Requests as accepted rather than completed, with the event stream as the eventual-consistency channel, is the same idea stated properly, and it is the through-line that makes the 202, the correlation id, the event stream and the "no data" read all one design rather than four decisions.]
-
-## Designing your responses
-
-When Hyperwyc has nothing to give you, like an offline read with no cached copy, or a write it has only queued, it returns the JSON `null` literal, not an empty body. That distinction matters more than it looks:
+An offline read with no cached copy, and a write that has only been queued, both return the JSON `null` literal rather than an empty body:
 
 ```csharp
 var product  = await http.GetFromJsonAsync<Product>("/products/1");        // null
 var products = await http.GetFromJsonAsync<List<Product>>("/products");    // null
 ```
 
-This is deliberate, it allows `HttpClient` to return a result, even if null, rather than throwing an exception, and it works both with and without the JSON extension methods.
-
-Both return `null` rather than throwing. An *empty* body would be fine for a plain `HttpClient`, but would throw `JsonException` from inside the extension method, for either a single object or a collection, because an empty body is not "no data", it is not valid JSON at all.
+Both return `null` rather than throwing, with or without the JSON extension methods. [Why `null` and not an empty body](design.md#null-rather-than-an-empty-body) is on the design page; the short version is that an empty body is not JSON at all, so `GetFromJsonAsync<T>` throws on it.
 
 ```csharp
 var products = await http.GetFromJsonAsync<List<Product>>("/products");
@@ -130,6 +108,6 @@ if (products is null)
 
 In almost every case your code already needs to handle a `null` result, whether using the JSON extension methods, using plain `HttpClient`, or even calling other API types (like SOAP/XML). At some point you need to deserialise the response, which can return `null` — `JsonSerializer.Deserialize<T>` and the `HttpClient` JSON extensions all return `T?` — or you need to read string content. This last scenario is the only one where you may need to do something different - if you are reading literal string content, your code needs to check for the exact string match `null`.
 
-**A collection comes back as `null`, not empty.** This may be different from what your API returns. Returning `[]` would need Hyperwyc to know the route returns a collection, which is knowledge it does not have. A null-coalesce at the call site covers it, and you need one for the online path anyway; while your API may guarantee an empty array, `HttpClient` does not.
+**A collection comes back as `null`, not empty**, which may differ from what your API does. A null-coalesce at the call site covers it, and you need one for the online path anyway.
 
 If you would rather branch on status codes than on `null`, read [`X-Hyperwyc-Status`](responses.md) to find out. And if your API already uses an envelope or result type — [`Ardalis.Result`](https://github.com/ardalis/Result) or a hand-rolled `ApiResponse<T>` — that keeps working, since the envelope simply deserialises to `null` and your existing handling takes over.

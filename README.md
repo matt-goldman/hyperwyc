@@ -2,41 +2,51 @@
 
 **A Service Worker for .NET.**
     
-An `HttpClient` handler that caches responses, queues writes made offline, and replays them when the network comes back, *without changing your calling code.*
-
-[comment: "queues writes made offline" is now narrower than the behaviour. Writes are also queued when the device believes it is online and the transport cannot establish a connection - which is the headline of ADR 0007 and arguably the strongest single sentence you have. Consider "queues writes it cannot send".]
+An `HttpClient` handler that caches responses, queues writes it cannot send, and replays them when the network comes back, *without changing your calling code.*
 
 ## Quick start
 
-Install the package:
+Your API is unreachable — a dropped connection, a phone in a lift, a server that went away. Without Hyperwyc:
+
+```csharp
+var products = await client.GetFromJsonAsync<List<Product>>("/products");
+
+// Unhandled exception. System.Net.Http.HttpRequestException: Connection refused
+```
+
+Install it, and add two registrations:
 
 ```bash
 dotnet add package Hyperwyc
 ```
 
-Register the Hyperwyc handler with your `HttpClient`, and register Hyperwyc in DI:
-
-```csharp
-services.AddHttpClient("MyApi")
-    .AddHyperwycHandler()
-    .AddHttpMessageHandler<AuthHandler>();
-
-services.AddHyperwyc();
+```diff
+  services.AddHttpClient("MyApi")
++     .AddHyperwycHandler()
+      .AddHttpMessageHandler<AuthHandler>();   // yours, if you have one
++
++ services.AddHyperwyc();
 ```
 
-That's all you need to get started, and your existing calls are untouched:
+Run the same line again, with the API still unreachable:
 
 ```csharp
-// Online: fetched, and cached on the way back
-// Offline: served from cache, from the same code
 var products = await client.GetFromJsonAsync<List<Product>>("/products");
 
-// Online: sent normally
-// Offline: queued, and you get 202 Accepted
-var response = await client.PostAsJsonAsync("/sales", sale);
+// 2 products, first = Anvil
 ```
 
-Hyperwyc is invisible to your `HttpClient` caller code and processes requests whether you are online or not. Hyperwyc's default behaviour:
+Served from a durable, encrypted store that was filled the last time the request succeeded — and **the call site never changed**. A write goes the same way: rather than throwing, it is kept and replayed when the network returns.
+
+```csharp
+var response = await client.PostAsJsonAsync("/sales", sale);
+
+// 202 Accepted, X-Hyperwyc-Status: Queued
+```
+
+Register `AddHyperwycHandler()` first, before your own handlers. Everything after it also runs on replayed writes, which is how a write queued on Monday goes out with Tuesday's token.
+
+That is the whole setup. Hyperwyc's default behaviour:
 
 | Connectivity       | Behaviour                                                                                                            |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------- |
@@ -44,6 +54,8 @@ Hyperwyc is invisible to your `HttpClient` caller code and processes requests wh
 | **Offline writes** | Queued durably and replayed on reconnect, through your own pipeline (i.e. auth or any other handlers are re-applied) |
 | **Outcomes**       | Hyperwyc emits an event stream, so you can still find out what happened to a deferred write when it eventually sent  |
 | **Storage**        | Durable and encrypted out of the box, with BYO optional                                                              |
+
+[Walk through it properly →](docs/tutorial/) — five short pages, on a desktop, with an API you stop yourself.
 
 ## Is it right for your app?
 
@@ -55,31 +67,32 @@ You can (and, arguably, should) consider using Hyperwyc in any app, especially m
 
 It's still not necessarily the right approach for everything, even in apps where it is worthwhile including.
 
-As a general rule of thumb:
+**Reads are the easy half.** Serving a stored response when the network is gone costs nothing, and only risks staleness, and a TTL is how you bound that. There is rarely a reason not to.
 
-- **Append-only, one writer per record**: e.g. an inspection report, a social post, a timesheet entry.
-  Hyperwyc is perfect for these scenarios. As there is nothing to resolve, you can comfortably queue the request, and replay it, done.
-- **A shared mutable resource**: e.g. stock levels, seat reservations, a balance.
-  These may be a poor fit for offline write caching, use per-route policies to exclude them if necessary (see [Caching and delivery](docs/delivery.md))
+**Writes are worth a thought, route by route.** A queued write is delivered later, so the question is whether your app can tolerate a wait, or whether it needs to know immediately when delivery has failed (and respond accordingly). Data that only your own user writes, e.g. an inspection report, a timesheet entry, etc., are usually fine: queue it, replay it when you can, done. Where many actors change one value, like stock levels or a seat reservation, essentially any scenario where not immediately reporting that the payload could not be delivered, a transport-layer tool can't help, and in fact makes it worse. Those are the routes to exclude with a [per-route policy](docs/delivery.md).
 
-[comment: This append-only / shared-mutable split appears three times: here, in choosing.md's "Is your app a good fit?", and a third time in backlog item 50 which specifies it as the fit test. It is the best idea in the docs and repetition dilutes it. Suggest it lives once, in choosing.md, and the README carries two lines and a link.]
+[Is Hyperwyc right for your app?](docs/choosing.md) has the longer version.
 
 ## Documentation
 
 **[Full documentation →](docs/)**
 
-[Is Hyperwyc right for your app?](docs/choosing.md) ·
-[Getting started](docs/getting-started.md) ·
-[Connectivity](docs/connectivity.md) ·
-[Caching and route policies](docs/delivery.md) ·
-[Offline writes](docs/offline-writes.md) ·
-[Events](docs/events.md) ·
-[Pipeline placement](docs/pipeline.md) ·
-[Storage](docs/storage.md)
+|                                                     |                                                                    |
+| --------------------------------------------------- | ------------------------------------------------------------------ |
+| [Is Hyperwyc right for your app?](docs/choosing.md) | You are evaluating                                                 |
+| [Getting started](docs/getting-started.md)          | Install, register, make a request                                  |
+| [Hyperwyc in a .NET MAUI app](docs/maui.md)         | Everything a MAUI app needs, on one page                           |
+| [Tutorial](docs/tutorial/)                          | Five short pages, building an app that survives its API going away |
+| [Design](docs/design.md)                            | Why it behaves the way it does, and the opinions it holds          |
 
-[comment: responses.md is missing from this list but present in docs/README.md. Also: this list calls delivery.md "Caching and route policies", the section above calls it "Caching and delivery", the file is delivery.md, and its H1 is "Delivery and Route Policies". Four names for one document. One name, used everywhere.]
-
-[comment: Nothing here points a .NET MAUI reader anywhere specific, and connectivity.md - the page they most need - is 311 lines with the MAUI answer 80 lines in. This is the case for the MAUI quick start you flagged.]
+Reference: [delivery and route policies](docs/delivery.md) ·
+[offline writes](docs/offline-writes.md) ·
+[synthetic responses](docs/responses.md) ·
+[events](docs/events.md) ·
+[connectivity](docs/connectivity.md) ·
+[pipeline placement](docs/pipeline.md) ·
+[storage](docs/storage.md) ·
+[testing](docs/testing.md)
 
 [Architecture decisions](docs/decisions/): why the scope is what it is, and why some seemingly obvious features are deliberately absent.
 

@@ -33,7 +33,7 @@ The two forms have different readers, which is a placement question rather than 
 | Form | Where it belongs | Why |
 |---|---|---|
 | Plain `IObserver<HyperwycEvent>`, `switch` inside `OnNext` | `docs/events.md` — reference | Compiles against `Hyperwyc` alone. Shows the event shape without asking anything of the reader's project. This is the page that documents what the library emits |
-| Rx query | **Patterns** — see [56](56-documentation-restructure.md) | This is how you actually wire outcomes into a view model, which is a pattern rather than a fact about the library. It sits alongside correlating a `202` to a local record and marking unsynced then synced |
+| Rx query | **Patterns** — see [56](Done/56-documentation-restructure.md) | This is how you actually wire outcomes into a view model, which is a pattern rather than a fact about the library. It sits alongside correlating a `202` to a local record and marking unsynced then synced |
 
 That split is a small argument for the restructure rather than against it: the reason the current
 page is wrong is that it is trying to be reference and pattern at once, and the pattern half

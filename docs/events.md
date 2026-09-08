@@ -24,12 +24,6 @@ These are Hyperwyc's own events, not your app's lifecycle. See below for how the
 
 When a write is deferred, the caller has already been given a `202` and moved on. For the eventual outcome to be useful, the event has to say *which* write it concerns; three `POST` requests queued to `/sales` are indistinguishable by URL and method.
 
-TODO: correlation ID should probably be mentioned in delivery. Or given more attention prior to just events, currently it has a brief mention in offline-writes but there does not appear to be a canonical point in the docs that owns the concept.
-
-[comment: Agreed that it needs an owner, and I think this page is it - the correlation id exists so that an outcome arriving later can be matched to a write made earlier, which is precisely what this page is about. The fix is small: keep the full explanation here, and have responses.md's header table and offline-writes.md link to it instead of restating it.
-
-I would not add it to delivery.md. That page is about where a response comes from; correlation is about what happens afterwards, and putting it there would widen a page that already covers two topics.]
-
 **If you set a `CorrelationId`, Hyperwyc uses it**, which means you can correlate on an id you already have and keep no mapping table:
 
 ```csharp
@@ -98,16 +92,7 @@ hyperwyc.Events
 > this: prompt, auto-reduce, back-order, escalate, discard. It hands you what the server said and
 > stops there.
 
-<details>
-<summary>A framing note, if it's useful</summary>
-
-Surfacing outcomes this way nudges you toward describing the action rather than its result - "order **submitted**", not "order **successful**" — with the outcome arriving separately and later. Most teams already think this way about their backend without having carried it into the
-client. It is genuinely optional: Hyperwyc does not require anyone to model their UI a particular way.
-
-TODO: I mentioned this elsewhere, think it needs more attention and possible relocation. I mentioned a potential "opinions" doc, I'm now thinking "patterns" might be the right approach. A lot of this documentation mixes "here's what you need to do" with "here's how it works under the hood". Both are useful but there should be a clear separation between what consumers need to read for it to be useful vs what people deep-diving need.
-
-[comment: Agreed, and there is a longer note at delivery.md's version of this TODO. Short version: I think it is two pages rather than one, and the second of them is backlog item 50, which is already specified in some detail.
-
-On this passage specifically - it is a principles one rather than a patterns one. It is a stance about how to name things in a UI, not a thing to build, and it currently sits behind a collapsed details element on a reference page, which is about the least discoverable place a stance can be. It is also, as it happens, the clearest statement anywhere of the idea that ties the 202, the correlation id, the event stream and the "no data" read into one design instead of four separate decisions. That is worth more than a footnote.]
-
-</details>
+> **A framing note.** Surfacing outcomes this way nudges you toward describing the action rather
+> than its result — "order **submitted**", not "order **successful**", with the outcome arriving
+> separately and later. That is
+> [deliberate, and optional](design.md#a-queued-write-is-submitted-not-successful).

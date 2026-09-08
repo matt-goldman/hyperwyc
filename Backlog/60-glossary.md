@@ -41,6 +41,19 @@ Every one of these is load-bearing and none is defined:
 Half of these entries are one line pointing at an ADR, which is the point — the thinking is done,
 it is just not reachable from the word.
 
+## It also gates a rename
+
+`docs/delivery.md` was `docs/caching.md`, and its title was "Caching, deliver, and route policies", until both were changed on 2026-09-05. The reasoning is worth keeping, because it is [ADR 0005](../docs/decisions/0005-vocabulary.md) applied to a document rather than to a type:
+
+- **"Cache" is a mechanism, not a feature.** It is a real and public one, but naming the page after it names the machinery rather than the purpose — which is the thing 0005 exists to stop.
+- **"Delivery" covers both halves.** The page is as much about serving a read from wherever it comes from as it is about the outbox and writes. "Caching" stretches over the write path, which is exactly the failure the backlog's own vocabulary note records: *"'Cache' stayed because every use of it was genuine caching — the problem was that it was the only word, so it got stretched over the write path."*
+
+The title was briefly changed back during [56](Done/56-documentation-restructure.md), resolving a four-names-for-one-document inconsistency toward the leftovers rather than toward the deliberate name. Restored, and recorded here so it is not re-decided a third time by whoever notices the docs and the nav disagreeing.
+
+**Any further rename waits for this item.** Deciding what the page is called before deciding what the words mean is backwards, and a file rename should happen once — the repo is about to be public, so a moved path breaks external links. Whatever the glossary settles should then change the filename and the title together, as the first rename did.
+
+Scope, if it does move: "cach*" appears about 65 times across `docs/` and the README, concentrated in `delivery.md` (19), `responses.md` (9) and `choosing.md` (8). Most of those are genuine caching and should stay. The question the glossary has to answer is which of **store**, **cache** and **delivery** owns which idea, and it is the same question for the code — `IHyperwycStore`, `CachedResponse`, `InvalidateCacheOnWrite` and `MaxCachedResponseBodyBytes` all sit on the boundary.
+
 ## Acceptance Criteria
 
 - [ ] Every term above has an entry.
@@ -54,4 +67,4 @@ it is just not reachable from the word.
   consumer-facing face, and the ADR is the place to check that an entry says what was actually
   decided.
 - Small, and independently useful. Does not need to wait for
-  [56](56-documentation-restructure.md), though it belongs to the same pass.
+  [56](Done/56-documentation-restructure.md), though it belongs to the same pass.

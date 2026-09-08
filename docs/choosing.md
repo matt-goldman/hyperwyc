@@ -28,17 +28,11 @@ Traditionally this is solved with either a synchronisation engine (see below) or
 
 With that said Hyperwyc is not a replacement for an offline store, or synchronisation between local and remote state (if that's what you need). For writes (e.g. `POST`, `PUT`, `PATCH`, `DELETE`), the scenarios to consider are:
 
-* **Append-only, one writer per record** e.g. a social post, an inspection report, a timesheet entry. Hyperwyc is a great fit for this. Nobody else is editing your record, so there's nothing to resolve: queue it, replay it, done.
+* **Append-only, one writer per record** e.g. a social post, an inspection report, a timesheet entry. Hyperwyc is a great fit for this. Nobody else is editing your record, so a write that arrives late cannot conflict with anything: queue it, replay it, done.
 
 * **A shared mutable resource** e.g. stock levels, seat reservations, an account balance. If you rely solely on Hyperwyc for this, you will face problems. Many actors mutate one value, so an offline write is conflict-prone and rejection on replay is the normal case rather than an edge case. No transport-layer tool can help with that, because the conflict is real. You want conflict resolution at the origin (e.g. event sourcing, or whatever your domain calls for) and Hyperwyc has no opinion about it.
     
-For reads (e.g. `GET`), there's no reason I can think of *not* to use it, you just have to think carefully about your policies and pick a sensible TTL.
-
-[comment: "there's no reason I can think of" is the only first-person singular in the docs. Deliberate or not, worth deciding - the rest of the voice is impersonal with an occasional "we".]
-
-Hyperwyc is a **transport-layer tool**. If your application's state needs to be queried offline, it needs its own store, with Hyperwyc delivering alongside it rather than instead of it.
-
-[comment: This paragraph and the "Hyperwyc is not a local database" section below make the same argument at similar length, about 10 lines apart. One of them can go; the second is the better written of the two. ("needs to queried" - be.)]
+For reads (e.g. `GET`) there is rarely a reason not to use it; you just have to think about your policies and pick a sensible TTL.
 
 ## Current limitations
 
@@ -82,14 +76,12 @@ This is a community replacement for Azure Mobile Apps, which is a deprecated ser
 
 ### Realm
 
-Realm was a popular choice provided by MongoDB. It worked well for a long time, but has been made end of life now. The functionality is still available, but requires a specific cloud service, rather than a feature in any MongoDB instance. Either way, it dictates your application model beyond the scope of offline functionality for clients.
+Realm was a popular choice provided by MongoDB. It worked well for a long time, but the SDKs were deprecated in September 2024. The functionality is still available, but requires a specific cloud service, rather than a feature in any MongoDB instance. Either way, it dictates your application model beyond the scope of offline functionality for clients.
 
 - **Philosophy:** Persistent object graph synchronised with a MongoDB Atlas backend.
 - **Server coupling:** Requires MongoDB Realm backend services (now EOLed in favour of Atlas SDKs).
 - **Domain model:** Heavily coupled to the Realm storage format and object model.
 - **Drawback:** Tight backend lock-in and schema mirroring; unsuitable for REST- or GraphQL-based APIs.
-
-[comment: "has been made end of life now" above - worth dating it (SDK deprecation announced September 2024) so it ages honestly rather than becoming quietly wrong.]
 
 ### Hyperwyc
 
