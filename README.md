@@ -1,8 +1,10 @@
 # Hyperwyc
 
-**A Service Worker for .NET.**
+**HTTP When You Can: A Service Worker for .NET.**
     
 An `HttpClient` handler that caches responses, queues writes it cannot send, and replays them when the network comes back, *without changing your calling code.*
+
+*(**Hyper**text transfer protocol, **w**hen **y**ou **c**an.)*
 
 ## Quick start
 
