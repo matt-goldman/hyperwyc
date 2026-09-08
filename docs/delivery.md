@@ -17,45 +17,27 @@ Route policies affect how Hyperwyc handles read (`GET`, `OPTIONS`, `HEAD`) and w
 
 Hyperwyc lets you control when responses should be prioritised from the cache over the network, and vice versa.
 
-| Strategy                        | Online                                                                                | Offline                                                        |
-| ------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `RoutePolicy.CacheFirst()`      | Serve a cached response if within the default TTL (1 day); otherwise fetch            | Serve the cached response even if stale                        |
-| `RoutePolicy.CacheFirst(ttl)`   | As above, but with a defined TTL                                                      | Serve the cached response if within TTL, otherwise return null |
-| `RoutePolicy.NetworkFirst()`    | Always fetch; fall back to the cache only if the request fails                        | Serve the cached response even if stale                        |
-| `RoutePolicy.NetworkFirst(ttl)` | Always fetch; fall back to the cache only if the request fails and the cache is fresh | Serve the cached response if within TTL                        |
-| `RoutePolicy.NetworkOnly()`     | Always fetch; never read or write the store                                           | Does not return null, allows HttpClient to throw               |
+| Strategy                    | Online                                                                    | Offline                                                                |
+| --------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `RoutePolicy.CacheFirst()`  | Serve a stored response within its TTL; otherwise fetch                   | Serve a stored response within its TTL; otherwise the offline response |
+| `RoutePolicy.NetworkFirst()`| Always fetch; fall back to a stored response within its TTL if that fails  | Serve a stored response within its TTL; otherwise the offline response |
+| `RoutePolicy.NetworkOnly()` | Always fetch; never read or write the store                               | The offline response — nothing to serve, and nothing to pass through to |
 
-Note that Hyperwyc *always* refreshes the cache and resets the TTL upon a successful network fetch (except for `NetworkOnly`).
+Each has a `(ttl)` overload that sets [`Ttl`](#understanding-ttl) and changes nothing else. **The TTL means the same thing offline as online**: past it, a stored response is not served, and if offline the caller gets the [offline response](responses.md) as though nothing were cached.
 
-[comment: Two rows of the table above are wrong against the code.
-
-"Serve the cached response even if stale" for CacheFirst() and NetworkFirst(): the TTL always applies offline. ServeReadWithoutNetworkAsync checks IsStale unconditionally, and CacheFirst() is not "no TTL" - it is the default TTL of one day. So rows 1/2 and rows 3/4 differ only in where the TTL comes from, not in whether one applies. This also contradicts "Understanding TTL" below, which says, correctly, that it means the same thing online and offline.
-
-"NetworkOnly offline: does not return null, allows HttpClient to throw": an offline *read* on a NetworkOnly route gets the 200/Offline synthetic response. ServeReadWithoutNetworkAsync returns Offline() before it ever reaches the store, and responses.md documents this as the deliberate exception - NetworkOnly governs writes, and on an offline read there is nothing to pass through to. As written, this page and responses.md say opposite things about the same case.]
+Hyperwyc *always* refreshes the cache and resets the TTL on a successful network fetch (except for `NetworkOnly`).
 
 ### Writes
 
-Currently Hyperwyc behaves the same way when online irrespective of strategy: it attempts the make the request, and returns the response if one is received. It doesn't matter what the response is or if the request failed; that's none of Hyperwyc's business, it just returns the response to the caller.
+Hyperwyc behaves the same way when online whatever the strategy, with one exception below: it attempts the request, and returns the response if one is received. It doesn't matter what the response is or whether the request failed; that's none of Hyperwyc's business, it just returns the response to the caller.
 
-**Hyperwyc queues the request to send later *only* if a response is not received.** A request that failed on the API side was still sent successfully, and as a transport layer tool, Hyperwyc is no longer needed. A request that *failed to send* is Hyperwyc's business, so a failure due to a connectivity or unknown fault is queued.
+**Hyperwyc queues the request to send later *only* if a response is not received.** A request that failed on the API side was still sent successfully, and as a transport layer tool, Hyperwyc is no longer needed. A request that *failed to send* is Hyperwyc's business, so a transport failure that means no connection was ever established is queued — see [Offline writes](offline-writes.md#writes-are-queued-on-transport-failure-too-not-just-when-you-are-offline) for exactly which those are.
 
-[comment: "a connectivity or unknown fault is queued" - unknown faults specifically are not. HttpRequestError.Unknown is one of the cases NeverReachedTheApi deliberately excludes, alongside InvalidResponse, ResponseEnded and HttpProtocolError, on the grounds that a connection may have been made and the server may have processed the request. Only four errors queue: NameResolutionError, ConnectionError, SecureConnectionError, ProxyTunnelError. offline-writes.md has this right.]
-
-[comment: "Hyperwyc behaves the same way when online irrespective of strategy" is contradicted by the last row of the table below, where NetworkOnly does not queue on a transport failure. It needs "except NetworkOnly" - and that row is the only place NetworkOnly's write behaviour shows up on the online side, which is easy to miss.]
-
-| Strategy                        | Online                                                                           | Offline                                                |
-| ------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `RoutePolicy.CacheFirst()`      | Sends the request as normal, queues if the request failed to send                | Queues the request to be processed when online         |
-| `RoutePolicy.CacheFirst(ttl)`   | Sends the request as normal, queues if the request failed to send                | Queues the request to be processed when online         |
-| `RoutePolicy.NetworkFirst()`    | Sends the request as normal, queues if the request failed to send                | Queues the request to be processed when online         |
-| `RoutePolicy.NetworkFirst(ttl)` | Sends the request as normal, queues if the request failed to send                | Queues the request to be processed when online         |
-| `RoutePolicy.NetworkOnly()`     | Sends the request as normal, *does not queue even if the request failed to send* | Does not queue the request, allows HttpClient to throw |
+The exception is `NetworkOnly`, which declines to queue in either case. Offline it does not take custody, and online a transport failure is allowed to throw.
 
 ## Per-route policies
 
-The default (TODO: what is the default?) applies to everything. Override it per route, **registering from general to specific — each rule refines the ones before it**:
-
-[comment: The default is RoutePolicy.CacheFirst(): SourcePriority.CacheFirst, a TTL of one day, InvalidateCacheOnWrite true. It lives on options.Routes.Default, which is the property getting-started.md assigns to and which this page never names - worth stating both here, since this is the page that owns route policy.]
+The default is `RoutePolicy.CacheFirst()` — cache-first, a TTL of one day, `InvalidateCacheOnWrite` on — and it applies to everything. Set it on `options.Routes.Default`. Override it per route, **registering from general to specific — each rule refines the ones before it**:
 
 ```csharp
 services.AddHyperwyc(options =>
@@ -71,8 +53,6 @@ It's the same model as `.gitignore` and the CSS cascade: state the general rule,
 
 Patterns match on the URL **path** only — scheme, host, port and query string are ignored, so a pattern works whatever your `BaseAddress` is. `/api/sales/*` covers `/api/sales` and everything beneath it; `*` matches everything; matching is case-insensitive.
 
-[comment: Verified: last registration wins - PolicyFor walks the list backwards - so this page and RoutePolicyMap's own docs are correct. But HyperwycOptions.Routes' XML doc says the opposite: "matched first-registered-wins" and "Register most specific first". That is the documentation a consumer sees on the property they configure, and following it produces the wrong policy, silently. RoutePolicy's XML says "first match wins" too, which is technically true of a backwards walk and reads as the opposite. Filed - it is a real defect rather than a wording preference.]
-
 A policy carries three things:
 
 | Member                   | Default      |                                                                               |
@@ -87,8 +67,9 @@ Use the factory methods (as per [Route Policies](#route-policies)) and compose w
 .For("/api/audit/*", RoutePolicy.CacheFirst(TimeSpan.FromDays(7)) with { InvalidateCacheOnWrite = false })
 ```
 
-> **`NetworkOnly` governs writes as well as reads.** It's the one strategy that does. An offline
-> write to a `NetworkOnly` route is **not queued** — it goes to the transport and fails as it
+> **`NetworkOnly` governs writes as well as reads.** It's the one strategy that does. A write to
+> a `NetworkOnly` route is **never queued** — not when offline, and not when the transport fails
+> after Hyperwyc believed it was online. It goes to the transport and fails as it
 > would without Hyperwyc installed. Use it where deferring a write is the wrong answer even
 > though deferring a read would be fine: a payment, a seat reservation, anything contending for a
 > shared mutable resource.
@@ -147,10 +128,7 @@ if (products is null)
 }
 ```
 
-In almost every case your code already needs to handle a `null` result, whether using the JSON extension methods, using plain `HttpClient`, or even calling other API types (like SOAP/XML). At some point you need to deserialise the response, which can return `null` (there are no .NET generic deserialisers that are not nullable), or you need to read string content. This last scenario is the only one where you may need to do something different - if you are reading literal string content, your code needs to check for the exact string match `null`.
-
-[comment: "there are no .NET generic deserialisers that are not nullable" is a claim about the whole ecosystem and is easy to falsify - a source-generated context or a custom converter can return non-nullable. The narrower claim carries the argument and is simply true: JsonSerializer.Deserialize<T> and the HttpClient JSON extension methods all return T?.]
-
+In almost every case your code already needs to handle a `null` result, whether using the JSON extension methods, using plain `HttpClient`, or even calling other API types (like SOAP/XML). At some point you need to deserialise the response, which can return `null` — `JsonSerializer.Deserialize<T>` and the `HttpClient` JSON extensions all return `T?` — or you need to read string content. This last scenario is the only one where you may need to do something different - if you are reading literal string content, your code needs to check for the exact string match `null`.
 
 **A collection comes back as `null`, not empty.** This may be different from what your API returns. Returning `[]` would need Hyperwyc to know the route returns a collection, which is knowledge it does not have. A null-coalesce at the call site covers it, and you need one for the online path anyway; while your API may guarantee an empty array, `HttpClient` does not.
 

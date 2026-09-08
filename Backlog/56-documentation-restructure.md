@@ -138,7 +138,7 @@ matching order to the one the code implements).
 After that it depends on whether the first publish comes before or after the restructure, which
 is a scheduling decision rather than a technical one:
 
-- **Publishing first.** [58](58-docs-code-reconciliation.md) and
+- **Publishing first.** [58](Done/58-docs-code-reconciliation.md) and
   [59](59-events-without-system-reactive.md) land against the pages as they stand, and this item
   follows. Shipping unstructured documentation is survivable; shipping documentation that names
   an enum member which does not exist is not.

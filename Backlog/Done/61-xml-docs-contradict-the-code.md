@@ -111,12 +111,12 @@ owns the model change, and 55's own note says not to fold it into a rename.
 - [x] No XML comment names a mechanism removed by ADR 0004.
 - [x] The virtual-interface claim is stated once, correctly, in the XML — **on the second
       attempt**; see the note below. `docs/connectivity.md` still carries the old sentence and is
-      annotated with the correction, to be fixed in [58](../58-docs-code-reconciliation.md) so
+      annotated with the correction, to be fixed in [58](58-docs-code-reconciliation.md) so
       the docs pass stays in one place.
 
 ## Notes
 
-- **Finding 1 is the reason this is not filed inside [58](../58-docs-code-reconciliation.md).** That
+- **Finding 1 is the reason this is not filed inside [58](58-docs-code-reconciliation.md).** That
   item is about `docs/`, which can be fixed after publishing. This ships in the package, and a
   consumer reading IntelliSense has no reason to go and check the docs, because the two are meant
   to agree.

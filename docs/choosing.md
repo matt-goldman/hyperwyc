@@ -16,9 +16,7 @@ Hyperwyc is deliberately focused on as narrow a goal as possible. It is not a lo
 - Doesn't dictate your data model
 - Doesn't replace your local database
 - Doesn't resolve data conflicts — it's designed for scenarios where conflicts are rare or unexpected, or handled server-side
-- Notifications
-
-[comment: Bare fragment in a list of "Doesn't ..." sentences. "Doesn't handle push notifications", which also matches the caveat at the top of the page.]
+- Doesn't handle push notifications
 
 ## Is your app a good fit?
 
@@ -26,11 +24,9 @@ If you want your app to work offline, Hyperwyc is almost certainly a great optio
 
 It sits in your HTTP request pipeline, and can cache reads, serving them from the cache when offline, and queue writes (durably, not just in memory), and send them when a connection is detected, or on start (or whenever you want to trigger it).
 
-Traditionally this is solved with either a syncrhonisation engine (see below) or custom logic in your local store that tracks send and receive state. Hyperwyc gives you offline read and write assurance without any of that.
+Traditionally this is solved with either a synchronisation engine (see below) or custom logic in your local store that tracks send and receive state. Hyperwyc gives you offline read and write assurance without any of that.
 
-[comment: "syncrhonisation" here and again on the next paragraph; "teh" further down in "How it compares".]
-
-With that said Hyperwyc is not a replacement for an offline store, or syncrhonisation between local and remote state (if that's what you need). For writes (e.g. `POST`, `PUT`, `PATCH`, `DELETE`), the scenarios to consider are:
+With that said Hyperwyc is not a replacement for an offline store, or synchronisation between local and remote state (if that's what you need). For writes (e.g. `POST`, `PUT`, `PATCH`, `DELETE`), the scenarios to consider are:
 
 * **Append-only, one writer per record** e.g. a social post, an inspection report, a timesheet entry. Hyperwyc is a great fit for this. Nobody else is editing your record, so there's nothing to resolve: queue it, replay it, done.
 
@@ -40,22 +36,19 @@ For reads (e.g. `GET`), there's no reason I can think of *not* to use it, you ju
 
 [comment: "there's no reason I can think of" is the only first-person singular in the docs. Deliberate or not, worth deciding - the rest of the voice is impersonal with an occasional "we".]
 
-Hyperwyc is a **transport-layer tool**. If your application's state needs to queried offline, it needs its own store, with Hyperwyc delivering alongside it rather than instead of it.
+Hyperwyc is a **transport-layer tool**. If your application's state needs to be queried offline, it needs its own store, with Hyperwyc delivering alongside it rather than instead of it.
 
 [comment: This paragraph and the "Hyperwyc is not a local database" section below make the same argument at similar length, about 10 lines apart. One of them can go; the second is the better written of the two. ("needs to queried" - be.)]
 
 ## Current limitations
 
 - **Buffered bodies only.** Request and response bodies are read into memory in full before being queued or cached. Binary payloads round-trip byte for byte (file uploads, image downloads, protobuf, gzip), but *streaming uploads and downloads of indeterminate length* are not currently supported.
+- **`Cache-Control` is not honoured**, including `no-store`. A response the server asked you not to store is stored. Use a `NetworkOnly` route policy for anything that matters.
+- **The cache is not bounded.** Individual response bodies are capped at 512 KB, but the store as a whole grows without limit and nothing evicts. On a long-lived mobile app that is the number to watch, and on Android it is what runs into the 25 MB backup quota — see [Storage](storage.md).
+- **`Vary` is not honoured.** The cache is keyed on URL alone, so a content-negotiated endpoint can serve the wrong variant.
+- **Not AOT-safe.** There is no `JsonSerializerContext`, so the store falls back to reflection-based serialisation. This matters most on iOS, where release builds have AOT on by default.
 
-[comment: This is the biggest accuracy gap in the docs. An evaluator reading a section called "Current limitations" reasonably concludes streaming bodies are the only one. The open backlog says otherwise, and at least four are consumer-visible and cannot be worked around:
-
-  - Cache-Control is ignored entirely, including no-store, so a response the server said not to store is written to disk (item 41)
-  - the cache grows without bound - individual bodies are capped, the store is not, and nothing evicts (item 42)
-  - Vary is not honoured, so a content-negotiated endpoint serves the wrong variant, silently, and it looks like a server bug (item 43)
-  - no JsonSerializerContext, so the store falls back to reflection - in a library whose primary audience ships iOS release builds with AOT on by default (item 53)
-
-53 in particular belongs in front of anyone evaluating this for MAUI, and this is the page where they would look. These are open items rather than defects, which is precisely why they belong in the docs and not only in the backlog.]
+These are known and tracked, not surprises; they are the reason Hyperwyc is pre-1.0.
 
 ## Hyperwyc is not a local database
 
@@ -71,7 +64,7 @@ That is a small amount of glue, and the difference between an application that w
 
 ## How it compares
 
-Hyperwyc was built because existing solutions followed a similar pattern and shared some limitations. The common theme is that they couple both your architecture and your back end data to a single sync requirement. That's opinion about something beyond teh reach of one problem that should not influence things outside its own scope, but worse, for existing solutions adoption requires massive amounts of rework - if you already have a full set of API routes/endpoints, and a fully working solution, you cannot simply drop these in, you _must_ redesign client connectivity from the ground up.
+Hyperwyc was built because existing solutions followed a similar pattern and shared some limitations. The common theme is that they couple both your architecture and your back end data to a single sync requirement. That is an opinion about something beyond the reach of one problem, imposed on things outside its own scope, but worse, for existing solutions adoption requires massive amounts of rework - if you already have a full set of API routes/endpoints, and a fully working solution, you cannot simply drop these in, you _must_ redesign client connectivity from the ground up.
 
 Hyperwyc is built on the belief that you should be able to drop something into your pipeline that handles the majority of scenarios without dictating infrastructure or entity design. Web has had this for over a decade, and now .NET does too.
 

@@ -32,9 +32,7 @@ So a handler registered *after* `AddHyperwycHandler()` sees each response **befo
 
 That's the order you should deliberately adopt. **Hyperwyc is the last resort, not a retry layer**: it wraps the whole pipeline, so it only ever acts on failures your own handlers couldn't fix. It won't second-guess your auth, your circuit breaker or your fallbacks, and you don't need to configure it to stay out of their way.
 
-Hyperwyc makes **one delivery attempt per queued write per flush** — it does not loop. A write the server rejects is failed immediately; one that fails transiently is left queued and tried again at the next opportunity. So your own retry handler, if you have one, composes rather than compounds: it retries within a single attempt, and Hyperwyc decides whether there should be another attempt at all.
-
-[comment: "one that fails transiently is left queued and tried again at the next opportunity" is stale. There is no transient class any more - any response from the server is final and dead-letters, which is the ADR 0007 change. Only a transport failure leaves an envelope queued, and when one happens the flush stops rather than moving on to the next envelope, on the grounds that the rest would fail for the same reason. The sentence before it is right, and the last sentence still holds.]
+Hyperwyc makes **one delivery attempt per queued write per flush** — it does not loop. A write the server answers is finished with, whatever it said; only one whose transport never reached the API stays queued. So your own retry handler, if you have one, composes rather than compounds: it retries within a single attempt, and Hyperwyc decides whether there should be another attempt at all.
 
 ## Replays and `ReplayTransport`
 
@@ -42,13 +40,7 @@ For the fallback case — a handler registered without a client name — `option
 
 [comment: Worth adding here: AddHyperwycHandler() works on a typed client too. AddHttpClient<TClient>() sets builder.Name to the type name, so the capture works and replays go back through that client's pipeline. That is the registration most MAUI apps actually use, and nothing in the docs confirms it - a reader who has only seen the named-client example has to guess.]
 
-[comment: Separately, HyperwycOptions.ReplayTransport's XML doc contradicts this page. It says replayed requests "do not travel through your application's HttpClient pipeline - they are sent directly, bypassing HyperwycHandler", which was true before issue 37 and is the opposite of ADR 0002. It is the *fallback* that bypasses the pipeline, not replays generally. That text ships in the package XML, so it is what IntelliSense tells a consumer while this page tells them the opposite. Filed.]
-
-> **Note — Hyperwyc short-circuits the pipeline when offline.** [Synthetic responses](responses.md) (`Queued`, `Offline`) are returned directly from the handler, so any `DelegatingHandler` placed *after* `HyperwycHandler` is **not** invoked on the offline path. This is by design — there is no outbound request to authenticate or otherwise mutate — but it means downstream handlers should not be relied upon for side effects that need to occur on every logical request (logging, telemetry, header stamping). For cross-cutting concerns that must run regardless of connectivity, place the handler **before** `HyperwycHandler` in the pipeline. For everything else, particularly handlers that could be costly or time-consuming to run if offline, place them after so that Hyperwwyc can intentionally short-circuit them.
-
-[comment: "Hyperwwyc" in the last line.]
+> **Note — Hyperwyc short-circuits the pipeline when offline.** [Synthetic responses](responses.md) (`Queued`, `Offline`) are returned directly from the handler, so any `DelegatingHandler` placed *after* `HyperwycHandler` is **not** invoked on the offline path. This is by design — there is no outbound request to authenticate or otherwise mutate — but it means downstream handlers should not be relied upon for side effects that need to occur on every logical request (logging, telemetry, header stamping). For cross-cutting concerns that must run regardless of connectivity, place the handler **before** `HyperwycHandler` in the pipeline. For everything else, particularly handlers that could be costly or time-consuming to run if offline, place them after so that Hyperwyc can intentionally short-circuit them.
 
 [comment: This is the most operationally important note in the docs and the hardest to read - one 140-word paragraph inside a blockquote, carrying three distinct instructions (what happens, why it is deliberate, and where to put your own handlers as a result). Three short paragraphs, or a two-row table of "must run every logical request -> before" against "should be skipped when offline -> after", would fix it without losing anything.]
-
-[comment: It is also the mechanism behind offline-writes.md's Polly note, which currently attributes the benefit to something else. Worth cross-linking - the two pages are describing one behaviour from opposite ends.]
 

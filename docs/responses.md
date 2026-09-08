@@ -45,12 +45,6 @@ On configurability: same answer as the 202 above, and for the sharper of the two
 
 ## Headers
 
-For writes, Hyperwyc attaches headers to responses it handles.
-
-No header will be attached for requests that were sent successfully (i.e. made it out past the transport layer) while online.
-
-[comment: Two things in this pair of sentences. "For writes, Hyperwyc attaches headers to responses it handles" - the Offline header goes on reads, as the table immediately below shows. And "sent successfully (i.e. made it out past the transport layer)" reads as "the server said 2xx", when a 500 from the server also carries no Hyperwyc header. What is meant is "any response that came from the server is returned exactly as it arrived", which the line above the section already says well.]
-
 | Header                      | Present on               | Value                                              |
 | --------------------------- | ------------------------ | -------------------------------------------------- |
 | `X-Hyperwyc-Status`         | Every synthetic response | `Queued` or `Offline`                              |
@@ -74,17 +68,13 @@ If you want to observe the cache rather than infer it, `OnUpdated` fires wheneve
 
 ## When Hyperwyc doesn't answer at all
 
-In three cases there is no synthetic response, and the caller gets whatever the transport gives — usually an `HttpRequestException`, exactly as if Hyperwyc were not installed:
+In these cases there is no synthetic response, and the caller gets whatever the transport gives — usually an `HttpRequestException`, exactly as if Hyperwyc were not installed:
 
 | Case                                                                                  | Why                                                                                        |
 | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | A **write** to a [`NetworkOnly`](delivery.md) route, offline or on a failed transport | The route declared that deferring is the wrong answer, so Hyperwyc does not take custody   |
-| The store could not be written                                                        | Nothing is holding the write, so answering `202` would promise something nobody is keeping |
+| The write could not be taken into custody — the store could not be written, or the body could not be read | Nothing is holding the write, so answering `202` would promise something nobody is keeping |
 | The store could not be read at all                                                    | Hyperwyc [steps aside for the session](storage.md)                                         |
 | A write whose transport failed **after** a connection was made                        | The server may have processed it; see [offline writes](offline-writes.md)                  |
-
-[comment: "In three cases" above a four-row table.]
-
-[comment: And there is a fifth, which is worth a row because it is the one that would surprise someone: a write that would otherwise be queued, but whose content cannot be buffered. TryQueueWriteAsync returns null if LoadIntoBufferAsync throws, and the caller then rethrows or passes through. The "store could not be written" row covers the adjacent case but not this one, and the reason is the same in both - a body that cannot be read is a write that cannot be replayed, so taking custody of it would be a promise Hyperwyc cannot keep.]
 
 An offline **read** on a `NetworkOnly` route is the exception: it gets the `200`/`Offline` response, because there is nothing to pass through to.

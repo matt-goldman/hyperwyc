@@ -6,18 +6,14 @@ Hyperwyc is not the authority on connectivity, the transport is. **But only when
 
 This page explains the differences, what you should know, and when and how to provide your own connectivity service.
 
-> 💡 **NOTE FOR .NET MAUI USERS**: You probably don't need to read this. Just copy [the sample code](#.net-maui-apps) into your app and register it in DI. You can read the rest of this if you are curious.
+> 💡 **NOTE FOR .NET MAUI USERS**: You probably don't need to read this. Just copy [the sample code](#net-maui-apps) into your app and register it in DI. You can read the rest of this if you are curious.
 >    TODO: create a `Plugin.Maui.Hyperwyc` package that includes the `MauiConnectivityService`, takes a dependency on Hyperwyc,and wires everything up with a meta extension method on `MauiBuilder`.
 
 [comment: Agreed, and filed. Worth flagging that it is an ADR-shaped question rather than a packaging one: ADR 0006 says a shipped implementation is not a default, and a meta extension method on MauiAppBuilder that wires one up *is* making the choice on the consumer's behalf. That is probably fine - on MAUI, Connectivity.Current is a choice Hyperwyc can make correctly, which is question 1 of the defaults test answered yes - but it is the first time Hyperwyc would register a connectivity source for someone, so it should be argued rather than assumed.]
 
-[comment: The anchor below is broken. GitHub strips the leading dot when it builds the id, so it is #net-maui-apps, not #.net-maui-apps.]
-
 ## Summary
 
-In some cases, a connectivity service could produce a false negative (report that your client is offline when it is not) or false positive (report offline when actually online). One of these can be an inconvenience, the other presents a potentially serious problem.
-
-[comment: The two parentheticals say the same thing. A false positive is reporting online when actually offline. As written both read as "reports offline when online", which inverts the table immediately below and contradicts the passage further down the page where you have it right.]
+A connectivity service can be wrong in two directions, and they are not equally costly. One is an inconvenience; the other is a potentially serious problem.
 
 The following table summarises these scenarios:
 
@@ -30,8 +26,6 @@ The following table summarises these scenarios:
 Nothing is lost in either direction, but the second scenario hides a potential issue: the caller is told everything is fine, and the data it received is older than it needed to be. A write queued this way goes out on the next *connectivity change*, so an implementation that is briefly wrong costs a delay, and one that is **stuck** reporting offline never raises that change and never drains the outbox, while returning `202`s that look like success.
 
 This is important to know when you write your own. It is not a hazard of the fallback: `GetIsNetworkAvailable()` reports false only when no ordinary interface is up at all, so its characteristic error is the first row, the harmless one. Erring toward "online" is the safe direction, which is also why [probing](#why-not-just-probe-the-api) doesn't work.
-
-[comment: "reports false only when no ordinary interface is up at all" is right, and the VPN caveat 200 lines below is the exception that proves it rather than undermines it - a mesh client holds it at true, so it errs the same safe way. Worth one clause saying so here, because a reader who meets that caveat cold has to work that out for themselves.]
 
 What a good implementation buys you, then, is the doomed request you did not make, fresher reads, and, most of all, a prompt signal when the network returns, because that is what sends queued writes.
 
@@ -53,10 +47,7 @@ Hyperwyc has two implementations in the package you can use for reference, and a
 
 ## If you supply nothing
 
-You get [`NetworkAvailabilityConnectivityService`](#the-NetworkAvailabilityConnectivityService), and one line in your logs at startup saying so. That is a deliberate default, not a guess: it is the only shipped implementation that raises a change event, which is what makes queued writes go out without the
-application asking.
-
-[comment: Anchor case. GitHub lowercases heading ids and fragment matching is case-sensitive, so #the-NetworkAvailabilityConnectivityService will not resolve - it needs to be #the-networkavailabilityconnectivityservice.]
+You get [`NetworkAvailabilityConnectivityService`](#the-networkavailabilityconnectivityservice), and one line in your logs at startup saying so. That is a deliberate default, not a guess: it is the only shipped implementation that raises a change event, which is what makes queued writes go out without the application asking.
 
 ## Register it in your container
 
@@ -64,17 +55,9 @@ application asking.
 services.AddSingleton<IConnectivityService, MyConnectivityService>();
 ```
 
-Registering an implementation of `IConnectivityService` will silence the startup warning. Order doesn't matter, before or after `AddHyperwyc()`, whichever suits how your registrations are organised, and it works the same if something else in your startup registers it on your behalf.
+Order doesn't matter, before or after `AddHyperwyc()`, whichever suits how your registrations are organised, and it works the same if something else in your startup registers it on your behalf.
 
-[comment: There is no startup warning. ADR 0007 replaced the throw with a single LogInformation, and the code comment on it says explicitly "this is not a warning that anything is broken". The same stale reference appears near the end of the page as "not to get past the startup error".]
-
-It's a runtime requirement, not a build time requirement. This is also important to be aware of.
-
-[comment: Left over from when resolving without one threw. There is no requirement now - that is the whole of ADR 0007. Either cut it, or turn it into the point it is reaching for, which is worth making: a container registration is resolved late, so ordering does not matter. That is ADR 0003's second half ("requiring a decision must not require an ordering") and it is the reason the sentence above about order is true.]
-
-[comment: "ff you'd rather" below.]
-
-Alternatively, ff you'd rather keep the configuration in one place, or you already hold an instance, set it on the options instead:
+Alternatively, if you'd rather keep the configuration in one place, or you already hold an instance, set it on the options instead:
 
 ```csharp
 services.AddHyperwyc(options =>
@@ -85,14 +68,14 @@ services.AddHyperwyc(options =>
 
 A container registration takes precedence if you do both.
 
-[comment: Checked this against the code and it holds in both orders - TryAddSingleton stands aside for an earlier container registration, and a later one wins because the last descriptor is the one resolved. Worth keeping; it is a claim readers will test.]
-
 ## Which implementation
 
 Hyperwyc contains two implementations, and you can use these (one is wired up out of the box), but often supplying your own is a good idea.
 
 * `AlwaysOnlineConnectivityService`: this provides no change detection so will never trigger a Hyperwyc queue flush, and it always reports online, so will attempt a network call even if offline. If you _always_ want to try the online path first and don't mind the added delay (not a good idea if you have an exponential backoff retry policy with Polly), and you are happy triggering the Hyperwyc write queue flush yourself, you can use this.
 * `NetworkAvailabilityConnectivityService`: this is the version you get out of the box if you do nothing. It will work in most cases, but it has some limitations (discussed below) and there is likely a better implementation you can use.
+
+**Write your own if reaching your API depends on something narrower than "a network"** — a VPN, a private APN, a particular interface or subnet. No general-purpose check can answer a question about a specific link, in either direction: a device with working internet and a dropped tunnel reports connected and still cannot reach you.
 
 [comment: Structural, and the main thing I would fix on this page. AlwaysOnlineConnectivityService is described in one line here and then again, at length and more accurately, near the very end of the page - inside the "Why not just probe the API?" section, which has nothing to do with it. The bullet above also omits the thing that changed most: a write attempted under it against a dead network is now queued from the transport failure rather than lost. Those two closing paragraphs belong here.]
 
@@ -256,7 +239,7 @@ services.AddSingleton<IConnectivityService, NetworkAvailabilityConnectivityServi
 > behind a captive portal, on a router with no upstream, or on a mobile signal too weak to
 > carry a request.
 
-To be clear, `GetIsNetworkAvailable` is literal, and lower level than you might expect. In the `NetworkAvailabilityConnectivityService`, the `IsConnected` getter is:
+To be clear, `GetIsNetworkAvailable` is literal, and lower level than you might expect. `NetworkAvailabilityConnectivityService.IsConnected` is nothing but a call to it, and what the BCL does inside that call is, in effect:
 
 ```csharp
 // any interface, in System.Net.NetworkInformation
@@ -267,25 +250,9 @@ netInterface.OperationalStatus == OperationalStatus.Up
 
 This is a simple interface connection check, not a liveness probe or internet connectivity check.
 
-[comment: Not quite what the code says. NetworkAvailabilityConnectivityService.IsConnected is literally `NetworkInterface.GetIsNetworkAvailable()` - the three-condition expression above is what the BCL does inside that call, not what the getter is. As presented, a reader could reasonably think Hyperwyc wrote that filter and could change it. "GetIsNetworkAvailable() is, in effect:" would fix it, and it is worth fixing because this is exactly the detail you said consumers should know.]
-
 > **Note**: `OperationalStatus` is [RFC 2863](https://datatracker.ietf.org/doc/html/rfc2863) `operStatus` - *"able to pass packets"* — which is **link state, not administrative state**. So an adapter that is merely enabled does not count: an unplugged ethernet port and a Wi-Fi adapter with no association both report `Down`, because neither has carrier. That is the part it gets right, and it is why aeroplane mode and an unplugged cable are caught.
 
 What it cannot see is anything above layer 2. It reports connected behind a captive portal, on a router with no upstream, and on a mobile signal too weak to carry a request.
-
-> **A VPN or mesh interface can hold it at `true` on its own.** The tunnel exclusion is narrower than it looks: a TUN interface often reports `NetworkInterfaceType.Unknown` rather than `Tunnel`, so it is not excluded, and it does not necessarily go down when the physical link does. On a machine with every physical adapter down and a mesh client still running, this returns `true`. Different in kind from the cases above; that is not a degraded network path, it is not a path at all.
-
-[comment: Cut this blockquote, and the paragraph after it about NetworkInterfaceType not being reliable across platforms.
-
-I spent two passes correcting it before noticing it should not be here at all - first talking myself out of your "not a path at all" conclusion, then talking myself back into it with a measurement. Both were work on something that fails the ADR 0004 test. What can come out? This. It is an edge case for well under 1% of readers, and ADR 0007 already made the exact taxonomy of false positives stop mattering: a false positive costs an attempt, and enumerating which false positives exist is machinery around the promise rather than the promise. The sentence above it - "reports connected behind a captive portal, on a router with no upstream, and on a mobile signal too weak to carry a request" - already establishes the category and covers the cases people will actually hit.
-
-For the record, since it cost something to find out: the factual claim was true. A Tailscale interface reports NetworkInterfaceType.Unknown and OperationalStatus.Up and is counted; it is Up because the kernel reports operstate as "unknown" and .NET maps that to Up, so .NET is more permissive than the OS. It generalises past VPNs too - container and hypervisor bridges report as Ethernet and are not excluded either. None of which changes that a tunnel carries its packets over the physical link, so with the link down it delivers nothing whatever it reports. It is a plain false positive, in the same safe direction as the rest.
-
-What survives is one clause, and it belongs in the "when to write your own" guidance rather than here: if reaching your API depends on something narrower than "a network" - a VPN, a private APN, a particular interface or subnet - write an implementation that watches that, because no general-purpose check can answer a question about a specific link. That is already in NetworkAvailabilityConnectivityService's XML; this page wants the same sentence in "Which implementation" or alongside the interface.
-
-Also removed for the same reason: "a VPN interface that looks like a network" from the list in offline-writes.md, and "or when only a VPN interface is present" from the startup log message.]
-
-`NetworkInterfaceType` is also not reliable across platforms: a Wi-Fi adapter reports as `Ethernet` on Linux, not `Wireless80211`, so filtering by type does not rescue this.
 
 In practice that costs less than it sounds like, because it errs in the safe direction. A false positive means the request goes out and the transport fails: a read is then answered from the store exactly as if Hyperwyc had known it was offline, and a write is queued exactly as if it
 had. You lose an attempt and some latency, nothing else. It's a reasonable choice for a desktop or server host, and a reasonable starting point on mobile until you write the platform version.
@@ -321,7 +288,7 @@ As mentioned above, there are two potential failures of a connectivity check: a 
 **`AlwaysOnlineConnectivityService`** reports connected, always. Legitimate for a host that genuinely is, or when you want the response cache and nothing else.
 
 It is not as destructive as it once was: a write attempted under it against a dead network now fails at the transport and is [queued from there](offline-writes.md), so writes are not lost. What you give up is everything that depends on *knowing* — every offline read pays a full
-transport timeout before degrading, nothing is replayed automatically because no connectivity signal ever fires, and a `CacheFirst` route with a stale entry throws rather than serving. Choose it because your host really is always connected, not to get past the startup error.
+transport timeout before degrading, nothing is replayed automatically because no connectivity signal ever fires, and a `CacheFirst` route with a stale entry throws rather than serving. Choose it because your host really is always connected.
 
 [comment: These two paragraphs belong up under "Which implementation", beside the one-line bullet that currently describes this type. Nothing about AlwaysOnlineConnectivityService follows from the DNS discussion they are sitting in.]
 

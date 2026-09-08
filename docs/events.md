@@ -10,17 +10,13 @@ hyperwyc.Events.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
 
 | Event               | Meaning                                                                                     | Carries an outcome              |
 | ------------------- | ------------------------------------------------------------------------------------------- | ------------------------------- |
-| `OnQueued`          | Request persisted to local queue (offline)                                                  | No — nothing has been attempted |
+| `OnQueued`          | Request persisted to the outbox — offline, or after a transport failure                     | No — nothing has been attempted |
 | `OnDelivered`       | Request successfully delivered                                                              | Yes                             |
 | `OnFailed`          | Request dead-lettered — the server refused it                                               | Yes                             |
 | `OnUpdated`         | Cached response refreshed                                                                   | No                              |
 | `OnStoreUnreadable` | The local store could not be read; caching and queueing are off for the rest of the session | No                              |
 
-[comment: Two things this table does not say that a reader building on it needs.
-
-OnQueued's "(offline)" is now incomplete. It also fires when the device believed it was online and the transport could not connect - the ADR 0007 path - which on a mobile device with a weak connectivity implementation may well be the common case.
-
-And nothing at all is published when a delivery attempt fails at the transport during a flush. Not OnFailed, not anything: the outcome is recorded on the envelope and the flush stops. So a write that cannot be delivered goes quiet until it eventually is. That is the gap backlog item 23 exists to fill, and it should be stated here, because this page opens by promising that Hyperwyc reports what it did.]
+**Nothing is published when a delivery attempt fails at the transport.** The outcome is recorded on the envelope and the flush stops, so a write that cannot be delivered goes quiet until it eventually is. Silence is what a transport failure looks like from here.
 
 These are Hyperwyc's own events, not your app's lifecycle. See below for how the two relate.
 
@@ -34,11 +30,7 @@ TODO: correlation ID should probably be mentioned in delivery. Or given more att
 
 I would not add it to delivery.md. That page is about where a response comes from; correlation is about what happens afterwards, and putting it there would widen a page that already covers two topics.]
 
-Every event carries a `CorrelationId`. **If you set one, Hyperwyc uses it**, which means you can correlate on an id you already have and keep no mapping table:
-
-[comment: "Every event carries a CorrelationId" is not true. It is null on OnUpdated, which is expected and documented on the type - a cache refresh concerns no write. Less obviously, it is also null on the OnDelivered published from the *online* write path, which is constructed with four arguments and no correlation id at all.
-
-So a caller who sets HyperwycRequestOptions.CorrelationId and whose write then goes out online receives an OnDelivered they cannot correlate. That may well be fine - they also got the real response synchronously, so they have their answer by another route - but it is not what this sentence promises, and an app that drives its UI off the event stream uniformly would have a hole in exactly the happy path. Worth deciding whether that asymmetry is deliberate; if it is, this sentence should say "every event about a queued write".]
+**If you set a `CorrelationId`, Hyperwyc uses it**, which means you can correlate on an id you already have and keep no mapping table:
 
 ```csharp
 var request = new HttpRequestMessage(HttpMethod.Post, "/sales")
@@ -82,40 +74,20 @@ hyperwyc.Events
     .Where(e => e.Type == HyperwycEventType.OnFailed)
     .Subscribe(e =>
     {
+        // OnFailed always means the server answered and refused: Kind is Rejected,
+        // StatusCode is what it said, and the reason is in the body.
         var outcome = e.Outcome!;
 
-        if (outcome.Kind == DeliveryOutcomeKind.Rejected)
-        {
-            // The server refused it. outcome.StatusCode is 409, and the reason is in the body.
-            var detail = outcome.GetBodyAsText();
-            ShowRejection(e.CorrelationId!, outcome.StatusCode, detail);
-        }
-        else
-        {
-            // Never reached the server. Still queued; nothing to do but wait.
-            ShowPending(e.CorrelationId!);
-        }
+        ShowRejection(e.CorrelationId!, outcome.StatusCode, outcome.GetBodyAsText());
     });
 ```
 
-[comment: This branch is unreachable. OnFailed is published only from DeadLetterAsync, so Outcome.Kind is always Rejected inside this subscription - a transport failure publishes no event at all, as noted on the table above. The comment describes a callback that never fires.
-
-Once the Kind row is corrected, this branch should go, and the honest replacement is a sentence rather than code: silence is what a transport failure looks like from the event stream.]
-
 | Member                                     | What it tells you                                                                                                                       |
 | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `Kind`                                     | `Succeeded`, `Rejected` (a 4xx — it will never work), `TransientFailure` (a 5xx/408/429), `TransportFailure` (never reached the server) |
-| `StatusCode`, `ReasonPhrase`, `Headers`    | As returned, or `null`/empty for a transport failure                                                                                    |
+| `Kind`                                     | `Succeeded`, `Rejected` (the server answered with a non-success status), or `TransportFailure` (no response came back) |
+| `StatusCode`, `ReasonPhrase`               | As returned, or `null` for a transport failure                                                                                          |
 | `Body`, `GetBodyAsText()`, `BodyTruncated` | The response body, up to `MaxOutcomeBodyBytes` (16 KB by default), clipped rather than dropped if longer                                |
 | `Error`                                    | The transport failure message. A string rather than an exception, because this record is persisted                                      |
-
-[comment: The Kind row is stale in both halves, and this is the one stale line in the docs that will break a consumer's code rather than merely mislead them, because it names an enum member that does not exist.
-
-TransientFailure was removed when any server response became final. DeliveryOutcomeKind now has three members: Succeeded, Rejected, TransportFailure.
-
-The row below it has the same problem: Headers is not a member of DeliveryOutcome either. It went in the same ADR 0004 audit, which names it explicitly in its list of what came out. So StatusCode and ReasonPhrase are right and Headers should go.
-
-And Rejected is no longer "a 4xx - it will never work". It is any non-success status, including 5xx, 408 and 429, which is the change offline-writes.md documents correctly. "It will never work" is also the wrong reading now: it means Hyperwyc will not attempt it again, which is a statement about Hyperwyc rather than about the request. The application may well retry it, and the whole point of persisting the outcome is to let it decide.]
 
 `OnDelivered` carries an outcome too. A replayed `POST` may answer with the created resource (server-assigned ids, normalised values) which the caller never saw, so this is how you reconcile your local record with what was actually stored.
 

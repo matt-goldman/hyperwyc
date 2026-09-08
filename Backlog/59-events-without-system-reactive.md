@@ -44,7 +44,7 @@ problem exists without Hyperwyc and has an owner called `System.Reactive`.
 
 ## Adjacent
 
-The same snippet needs the correction from [58](58-docs-code-reconciliation.md): its `else`
+The same snippet needs the correction from [58](Done/58-docs-code-reconciliation.md): its `else`
 branch is unreachable, because `OnFailed` is only published from `DeadLetterAsync` and a
 transport failure publishes no event at all.
 

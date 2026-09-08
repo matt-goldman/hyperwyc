@@ -36,7 +36,7 @@ var products = await client.GetFromJsonAsync<List<Product>>("/products");
 var response = await client.PostAsJsonAsync("/sales", sale);
 ```
 
-Hyperwyc is invisible to your `HttpClient` caller code and processes requests whether you are online or not. Hyperwyc's default behavior:
+Hyperwyc is invisible to your `HttpClient` caller code and processes requests whether you are online or not. Hyperwyc's default behaviour:
 
 | Connectivity       | Behaviour                                                                                                            |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------- |
@@ -45,13 +45,9 @@ Hyperwyc is invisible to your `HttpClient` caller code and processes requests wh
 | **Outcomes**       | Hyperwyc emits an event stream, so you can still find out what happened to a deferred write when it eventually sent  |
 | **Storage**        | Durable and encrypted out of the box, with BYO optional                                                              |
 
-[comment: This table is headed "default behavior" (US) while its own first column reads "Behaviour" (UK) and the licence heading is "Licence". The repo is consistently British elsewhere - worth a pass.]
-
 ## Is it right for your app?
 
-Use Hyperwyc if you want to queue reads and writes to an API while offline, without re-architecting your solution around a sync engine. Or if the idea of "synchronising" doesn't sit right with you at all (see [Choosing](docs/choosing.md) for more on this).
-
-[comment: "queue reads and writes" - reads are not queued, they are cached and served. Small, but it is the second sentence an evaluator reads.]
+Use Hyperwyc if you want reads served and writes queued while offline, without re-architecting your solution around a sync engine. Or if the idea of "synchronising" doesn't sit right with you at all (see [Choosing](docs/choosing.md) for more on this).
 
 If you need to query state offline, it needs its own store. Hyperwyc can still be used to provide durable offline delivery, but think of it as a transport-layer component, not a local database.
 
@@ -102,8 +98,7 @@ As a general rule of thumb:
 
 AI was used heavily to build Hyperwyc. I produced the entirety of the architecture, technical decisions, and solution design, while relying on AI to generate most of the code. AI was used extensively for "rubber ducking", assistance with some blockers, all of the tests, most documentation, and recording decisions along the way.
 
-I assume sole responsibility for the code contained in this library; its authorship and design are mine regardless of the tools using to generate it. Using AI does not absolve us of responsibility for the work we use it for.
+I assume sole responsibility for the code contained in this library; its authorship and design are mine regardless of the tools used to generate it. Using AI does not absolve us of responsibility for the work we use it for.
 
-Equally, responsibility for usage of Hyperwyc in your own products, including its fit for your purpose, rests with you. Hyperwyc is provided under the terms of a the LICENSE file, including warranty disclaimer and limitation of liability. We are all responsible for our own choices.
+Equally, responsibility for usage of Hyperwyc in your own products, including its fit for your purpose, rests with you. Hyperwyc is provided under the terms of the LICENSE file, including warranty disclaimer and limitation of liability. We are all responsible for our own choices.
 
-[comment: Two typos in this section: "regardless of the tools using to generate it" (used), and "under the terms of a the LICENSE file".]
