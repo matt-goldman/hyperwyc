@@ -21,7 +21,7 @@ codebase. A separate package solves it where it belongs.
 The same package is the natural home for the other three things a MAUI app needs and currently
 collects from four different pages: the `SecureStorage`-backed encryption key
 ([32](32-default-encryption-key.md)), backup exclusion
-([48](48-exclude-store-from-os-backup.md)), and whatever [53](53-aot-json-serialization.md)
+([48](Done/48-exclude-store-from-os-backup.md)), and whatever [53](53-aot-json-serialization.md)
 concludes about AOT.
 
 ## The decision this actually asks for
@@ -56,7 +56,7 @@ But two things follow that need deciding rather than assuming:
 - `AddHyperwycForMaui()` or similar on `MauiAppBuilder`, registering the handler, the store and
   connectivity together
 - Optionally the `SecureStorage` key provider from [32](32-default-encryption-key.md)
-- Optionally the backup-exclusion call from [48](48-exclude-store-from-os-backup.md), which on
+- Optionally the backup-exclusion call from [48](Done/48-exclude-store-from-os-backup.md), which on
   iOS is a one-line `NSUrl` call at startup and has no good home in a consumer's code either
 
 ## Acceptance Criteria

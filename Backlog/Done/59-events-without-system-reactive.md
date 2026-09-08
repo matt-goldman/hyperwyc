@@ -17,8 +17,18 @@ the page says so.
 
 ## Status
 
-⬜ Open. Filed 2026-09-08, from the author's own TODO on the snippet. **Blocks first publish** —
-it is the main example on the page.
+✅ Done, 2026-09-09. **Two snippets were affected, not one.** `Subscribe(Action<T>)` is also an Rx
+extension — `IObservable<T>` declares only `Subscribe(IObserver<T>)` — so the page's opening
+one-liner, the "here is how you subscribe" example, did not compile either. Confirmed rather than
+assumed:
+
+```
+error CS1660: Cannot convert lambda expression to type 'IObserver<HyperwycEvent>'
+              because it is not a delegate type
+```
+
+Both are fixed. The opening example is a plain `IObserver<HyperwycEvent>`; the outcome-handling
+example keeps its Rx form, labelled, because that is what most applications will want.
 
 ## Not a case for removing the Rx version
 
@@ -33,7 +43,7 @@ The two forms have different readers, which is a placement question rather than 
 | Form | Where it belongs | Why |
 |---|---|---|
 | Plain `IObserver<HyperwycEvent>`, `switch` inside `OnNext` | `docs/events.md` — reference | Compiles against `Hyperwyc` alone. Shows the event shape without asking anything of the reader's project. This is the page that documents what the library emits |
-| Rx query | **Patterns** — see [56](Done/56-documentation-restructure.md) | This is how you actually wire outcomes into a view model, which is a pattern rather than a fact about the library. It sits alongside correlating a `202` to a local record and marking unsynced then synced |
+| Rx query | **Patterns** — see [56](56-documentation-restructure.md) | This is how you actually wire outcomes into a view model, which is a pattern rather than a fact about the library. It sits alongside correlating a `202` to a local record and marking unsynced then synced |
 
 That split is a small argument for the restructure rather than against it: the reason the current
 page is wrong is that it is trying to be reference and pattern at once, and the pattern half
@@ -44,7 +54,7 @@ problem exists without Hyperwyc and has an owner called `System.Reactive`.
 
 ## Adjacent
 
-The same snippet needs the correction from [58](Done/58-docs-code-reconciliation.md): its `else`
+The same snippet needs the correction from [58](58-docs-code-reconciliation.md): its `else`
 branch is unreachable, because `OnFailed` is only published from `DeadLetterAsync` and a
 transport failure publishes no event at all.
 
@@ -53,11 +63,11 @@ either form without correcting it just ports the error into two places instead o
 
 ## Acceptance Criteria
 
-- [ ] The primary example on `docs/events.md` compiles against `Hyperwyc` alone.
-- [ ] The Rx form survives somewhere a reader will find it, labelled as needing Rx.
-- [ ] The unreachable branch is gone, and the page says plainly that silence is what a transport
+- [x] The primary example on `docs/events.md` compiles against `Hyperwyc` alone.
+- [x] The Rx form survives somewhere a reader will find it, labelled as needing Rx.
+- [x] The unreachable branch is gone, and the page says plainly that silence is what a transport
       failure looks like from the event stream.
-- [ ] Nothing elsewhere in `docs/` or the README uses an `IObservable` operator without saying so
+- [x] Nothing elsewhere in `docs/` or the README uses an `IObservable` operator without saying so
       — the same shape may exist in more than one place.
 
 ## Notes
@@ -67,6 +77,10 @@ either form without correcting it just ports the error into two places instead o
   dependency graph, not the consumer's, and the pages currently blur the two — a reader can
   come away thinking Rx is discouraged for them, which is not the position. Worth a clause
   there while this is being fixed.
-- The snippet in [62](62-reset-store-on-failure.md)'s earlier draft had the same problem, which
+- The snippet in [62](../62-reset-store-on-failure.md)'s earlier draft had the same problem, which
   suggests the Rx form is simply what gets reached for when writing an example. That is the
   argument for having a correct one on the page rather than none.
+
+- **The acceptance criterion about "nothing elsewhere" is what found the second one.** Checking it
+  properly meant compiling the snippets rather than reading them, and the opening example turned out
+  to be the worse of the two: a reader hits it before anything else on the page.

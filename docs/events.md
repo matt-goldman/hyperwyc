@@ -5,8 +5,17 @@ Hyperwyc reports what it did. Subscribe to find out that a write was queued, del
 Subscribe to `IObservable<HyperwycEvent>` to observe requests moving through the sync lifecycle:
 
 ```csharp
-hyperwyc.Events.Subscribe(e => Console.WriteLine($"{e.Type}: {e.Url}"));
+hyperwyc.Events.Subscribe(new EventLogger());
+
+sealed class EventLogger : IObserver<HyperwycEvent>
+{
+    public void OnNext(HyperwycEvent e) => Console.WriteLine($"{e.Type}: {e.Url}");
+    public void OnError(Exception error) { }
+    public void OnCompleted() { }
+}
 ```
+
+A plain `IObserver<T>`, because `IObservable<T>` is in the BCL and Hyperwyc takes no `System.Reactive` dependency. **That is about Hyperwyc's dependencies, not yours** — if your app already has Rx, and in a UI app it very likely should, use it: `Subscribe(Action<T>)` and the query operators below are Rx extensions, not BCL members.
 
 | Event               | Meaning                                                                                     | Carries an outcome              |
 | ------------------- | ------------------------------------------------------------------------------------------- | ------------------------------- |
@@ -51,17 +60,7 @@ Events also carry `RequestId` (Hyperwyc's own unique envelope id, which a diagno
 
 `DeliveryOutcome` is what the server or the network actually resulted in:
 
-TODO: this snipped requires Rx doesn't it?
-
-[comment: Yes. .Where() over IObservable<T> is System.Reactive.Linq. HyperwycEventStream is a hand-rolled IObservable with no operators on it, so this snippet does not compile against Hyperwyc alone, and nothing on the page says so.
-
-My first instinct was to replace it with the plain IObserver form. That is only half right: Rx belongs in most UI applications, and a MAUI or WPF consumer reaching for it is doing the right thing rather than taking on an unnecessary dependency. Dropping the version most people should ideally use, to keep a snippet dependency-free, trades the better advice for the more portable one.
-
-So it is a placement question rather than a choice, and the two forms have different readers. The plain IObserver form is reference - it compiles against Hyperwyc alone and shows the event shape without asking anything of the reader's project, which is what this page is for. The Rx query is a pattern: it is how you actually wire outcomes into a view model, and it belongs alongside correlating a 202 to a local record and marking unsynced then synced. That is the patterns page in the restructure.
-
-Which is a small argument for the restructure rather than against it - the reason this snippet is wrong is that the page is trying to be reference and pattern at once, and the pattern half carries a dependency the reference half must not.
-
-One clause worth adding somewhere while this is fixed: the no-Rx decision is about Hyperwyc's dependency graph, not yours. connectivity.md states it twice without that distinction, so a reader can come away thinking Rx is discouraged for them, which is not the position. Filed as 59.]
+**This one needs `System.Reactive`** — `.Where` over `IObservable<T>` is `System.Reactive.Linq`. It is the form most applications will want; the plain-observer equivalent is a `switch` on `e.Type` inside `OnNext`.
 
 ```csharp
 hyperwyc.Events

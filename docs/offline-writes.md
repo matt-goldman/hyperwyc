@@ -86,8 +86,6 @@ Hyperwyc does not only queue when `IConnectivityService` says offline. If a writ
 
 This matters because every connectivity implementation is wrong sometimes — a captive portal, a signal that drops between the check and the send, or `AlwaysOnlineConnectivityService` on a device that is not. Without this, being wrong would cost the write. With it, being wrong costs an attempt.
 
-[comment: This section is the answer to "what happens when my connectivity implementation is wrong", which is the question the whole connectivity page raises and never quite closes. It is also near the bottom of a page a reader may not reach, and connectivity.md's summary table describes exactly this behaviour in its first row without saying where it is documented. At minimum, link back to here from that table.]
-
 > **Only when nothing was sent.** Hyperwyc queues on the transport errors that mean no connection
 > was ever established — DNS failure, connection refused, TLS handshake failure, proxy tunnel
 > failure. If a connection *was* made and the failure came later, the request is not queued and

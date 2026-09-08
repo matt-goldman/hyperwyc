@@ -36,9 +36,9 @@ Hyperwyc makes **one delivery attempt per queued write per flush** — it does n
 
 ## Replays and `ReplayTransport`
 
-For the fallback case — a handler registered without a client name — `options.ReplayTransport` sets the transport replays use. It's also useful for exercising a flush in tests without network access, by supplying a stub. Hyperwyc never disposes it; one you provide stays yours to dispose.
+`AddHyperwycHandler()` works on a typed client as well as a named one: `AddHttpClient<IProductsApi, ProductsApi>()` sets the builder's name to the type name, so the capture works and replays go back through that client's pipeline. That is the registration most applications actually use.
 
-[comment: Worth adding here: AddHyperwycHandler() works on a typed client too. AddHttpClient<TClient>() sets builder.Name to the type name, so the capture works and replays go back through that client's pipeline. That is the registration most MAUI apps actually use, and nothing in the docs confirms it - a reader who has only seen the named-client example has to guess.]
+For the fallback case — a handler registered without a client name — `options.ReplayTransport` sets the transport replays use. It's also useful for exercising a flush in tests without network access, by supplying a stub. Hyperwyc never disposes it; one you provide stays yours to dispose.
 
 ## Hyperwyc short-circuits the pipeline when it answers
 

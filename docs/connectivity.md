@@ -127,6 +127,8 @@ writes — so **prefer erring toward connected**.
 
 The full argument, including why probing your API or resolving its host name makes this worse
 rather than better, is in [Design](design.md#connectivity-is-an-optimisation-not-a-correctness-input).
+What it costs you in practice when an implementation is wrong the *safe* way is in
+[Offline writes](offline-writes.md#writes-are-queued-on-transport-failure-too-not-just-when-you-are-offline).
 
 ## Also
 

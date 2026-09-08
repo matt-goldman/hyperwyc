@@ -42,13 +42,13 @@ Renaming costs one file operation and removes the entire objection:
 - Nothing is destroyed, so the defaults-test question about quietly producing the failure the
   library exists to prevent no longer fires.
 - The recoverable case stays recoverable. The usual cause is a key or path change rather than
-  corruption — see [48](48-exclude-store-from-os-backup.md) for the iOS restore case where the
+  corruption — see [48](Done/48-exclude-store-from-os-backup.md) for the iOS restore case where the
   derived key stops matching — so the bytes are usually intact and merely unopenable. A developer
   with the key, or a support case with device access, still has them.
 - It is the self-healing half of 49 that never shipped. The backlog's own convention note says
   "reinstall after any shape change until 49 makes that self-healing"; 49 made it *reportable*,
   not self-healing. This is the rest.
-- It preserves [48](48-exclude-store-from-os-backup.md)'s accidental mitigation: a restored
+- It preserves [48](Done/48-exclude-store-from-os-backup.md)'s accidental mitigation: a restored
   backup whose derived key no longer matches gets quarantined rather than replayed, so the
   duplicate-delivery hazard stays closed.
 
@@ -98,7 +98,7 @@ at 2×.
   opposite of what was asked. Different verb, different behaviour; worth naming so the two do not
   get conflated during implementation.
 - **Where does the orphan live?** A sibling directory keeps `CabinetStoreOptions.DefaultDirectoryPath()`
-  meaningful as the thing to exclude from OS backup ([48](48-exclude-store-from-os-backup.md)); a
+  meaningful as the thing to exclude from OS backup ([48](Done/48-exclude-store-from-os-backup.md)); a
   suffix on the same directory means the exclusion path needs a wildcard or a second entry.
 - **What does the event carry?** [23](23-v1-diagnostics-view.md) is the surface where a
   quarantined store would actually be visible. Sequence with it, or at least do not design the

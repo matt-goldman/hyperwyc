@@ -97,7 +97,7 @@ read again.
 
 ## Additional pressure: Android's backup quota
 
-[Issue 48](48-exclude-store-from-os-backup.md) notes that Android Auto Backup caps an app at
+[Issue 48](Done/48-exclude-store-from-os-backup.md) notes that Android Auto Backup caps an app at
 25 MB and, on exceeding it, silently stops backing up **the entire app** rather than just the
 offending files. An unbounded response cache can therefore take an app's settings and databases
 down with it.

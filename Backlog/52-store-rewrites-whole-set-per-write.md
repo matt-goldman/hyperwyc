@@ -72,7 +72,7 @@ fix is Cabinet supporting an append or per-document write. Options, roughly in o
 - [Issue 51](Done/51-cabinet-store-not-thread-safe.md) — the crash this was found under, and the
   concurrency window this widens.
 - [Issue 42](42-cache-eviction.md) — bounding the cache limits how bad this gets.
-- [Issue 48](48-exclude-store-from-os-backup.md) — the same unbounded growth is what threatens
+- [Issue 48](Done/48-exclude-store-from-os-backup.md) — the same unbounded growth is what threatens
   Android's 25 MB backup quota.
 - [Issue 49](Done/49-unreadable-store-recovery.md) — wants `ResetAsync` to clear files rather than
   enumerate records, which would also fix the reset-is-N-saves case here.

@@ -191,9 +191,7 @@ Hyperwyc has no duplicate suppression, by design, so nothing catches it.
 - **iOS** — set `NSURLIsExcludedFromBackupKey` on the store directory once at startup.
 - **Android** — an `<exclude domain="file" path="…"/>` entry in `data_extraction_rules` (API 31+) or `full_backup_content` below that. Use the `<cloud-backup>` / `<device-transfer>` split: a direct device-to-device transfer does not carry the duplicate-replay risk a cloud restore does.
 
-`CabinetStoreOptions.DefaultDirectoryPath()` gives you the path.
-
-[comment: the path is not helpful here. The code shown gets it at runtime but the exclusions go in the plist and manifest files.]
+The two need the path in different forms, which is the awkward part. **iOS** takes it at runtime — `CabinetStoreOptions.DefaultDirectoryPath()` is the value you set the key on. **Android** takes a static path in XML, relative to the backup domain root, so a runtime call is no help: log `DefaultDirectoryPath()` on a device once, and use the portion below your app's files directory as the `path` attribute.
 
 A secondary reason on Android: Auto Backup caps an app at 25 MB, and exceeding it silently stops backup for the whole app rather than just the offending files. Hyperwyc's cache is not currently bounded, so that ceiling is reachable — see [Storage](storage.md).
 

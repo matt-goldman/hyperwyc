@@ -61,7 +61,7 @@ The tutorial is where "install it, register it, and make a request" actually get
 one and is the reason [57](../57-plugin-maui-hyperwyc.md) exists: MAUI is the core use case and it
 currently has no page of its own. One page carrying the connectivity implementation, the
 `SecureStorage` key ([32](../32-default-encryption-key.md)), backup exclusion
-([48](../48-exclude-store-from-os-backup.md)) and the AOT caveat ([53](../53-aot-json-serialization.md))
+([48](48-exclude-store-from-os-backup.md)) and the AOT caveat ([53](../53-aot-json-serialization.md))
 is worth more than four cross-references.
 
 **3. Reference** — the existing pages, stripped to what the library does. Tables, defaults,
@@ -120,7 +120,7 @@ id, the event stream and the "no data" read one design instead of four decisions
 | Document | |
 |---|---|
 | **[`docs/tutorial/`](../../docs/tutorial/)** | Five pages with previous/next links, building a console app that keeps working when its API goes away. Reads → writes → outcomes → connectivity → policies |
-| **[`docs/maui.md`](../../docs/maui.md)** | The MAUI quick start. Registration, the connectivity implementation, the `SecureStorage` key ([32](../32-default-encryption-key.md)), backup exclusion ([48](../48-exclude-store-from-os-backup.md)) and the AOT caveat ([53](../53-aot-json-serialization.md)) on one page. It opens by telling the reader they can skip `connectivity.md` |
+| **[`docs/maui.md`](../../docs/maui.md)** | The MAUI quick start. Registration, the connectivity implementation, the `SecureStorage` key ([32](../32-default-encryption-key.md)), backup exclusion ([48](48-exclude-store-from-os-backup.md)) and the AOT caveat ([53](../53-aot-json-serialization.md)) on one page. It opens by telling the reader they can skip `connectivity.md` |
 | **[`docs/design.md`](../../docs/design.md)** | The explanation layer. Connectivity as an optimisation, why not to probe, why a `200` and not a `404`, why `null`, why no retry, no position on duplicates, and the calling-code caveat |
 | **[`docs/testing.md`](../../docs/testing.md)** | Faking connectivity, stubbing the replay transport, a store per test — and the point that stopping the API tests the real path rather than a mocked one |
 | **[`docs/README.md`](../../docs/README.md)** | Rebuilt as **Start here / Reference / Why it works this way**, with the start-here row chosen by why the reader came |
@@ -190,7 +190,7 @@ After that it depends on whether the first publish comes before or after the res
 is a scheduling decision rather than a technical one:
 
 - **Publishing first.** [58](58-docs-code-reconciliation.md) and
-  [59](../59-events-without-system-reactive.md) land against the pages as they stand, and this item
+  [59](59-events-without-system-reactive.md) land against the pages as they stand, and this item
   follows. Shipping unstructured documentation is survivable; shipping documentation that names
   an enum member which does not exist is not.
 - **Restructuring first.** Do this item's *skeleton* — decide the page set and where each thing
@@ -202,7 +202,7 @@ item moves or deletes.** The clearest case is the false-positive/false-negative 
 copy". Correcting a passage you are about to delete is the wasted motion, not the other way
 round.
 
-[59](../59-events-without-system-reactive.md) now depends on this item rather than blocking it — the
+[59](59-events-without-system-reactive.md) now depends on this item rather than blocking it — the
 question is no longer which form to show but which page each form belongs on, and that is
 answered here. [60](../60-glossary.md) is independent of both and can be done at any point.
 
@@ -220,5 +220,5 @@ answered here. [60](../60-glossary.md) is independent of both and can be done at
   a claim about which mechanism was doing the work, and it means every output in those five pages
   is a transcript rather than an expectation. Worth repeating for any future guide.
 - Comments and TODOs left in the docs now belong to open items only —
-  [59](../59-events-without-system-reactive.md) on the Rx snippet,
+  [59](59-events-without-system-reactive.md) on the Rx snippet,
   [60](../60-glossary.md) on dead-lettering, [62](../62-reset-store-on-failure.md) on store reset.
