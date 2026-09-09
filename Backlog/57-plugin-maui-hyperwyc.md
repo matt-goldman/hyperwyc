@@ -21,7 +21,7 @@ codebase. A separate package solves it where it belongs.
 The same package is the natural home for the other three things a MAUI app needs and currently
 collects from four different pages: the `SecureStorage`-backed encryption key
 ([32](32-default-encryption-key.md)), backup exclusion
-([48](Done/48-exclude-store-from-os-backup.md)), and whatever [53](53-aot-json-serialization.md)
+([48](Done/48-exclude-store-from-os-backup.md)), and whatever [53](Done/53-aot-json-serialization.md)
 concludes about AOT.
 
 ## The decision this actually asks for

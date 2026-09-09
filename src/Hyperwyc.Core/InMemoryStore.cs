@@ -102,8 +102,23 @@ public sealed class InMemoryStore : IHyperwycStore
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            foreach (var envelope in _store.Values.Where(e => e.Url.StartsWith(urlPrefix, StringComparison.Ordinal)))
-                envelope.Response = null;
+            // Removes the record rather than nulling its Response. A husk with no response is
+            // reachable by nothing — GetCachedResponseAsync skips it for the null, and the outbox
+            // skips it because a cache envelope is IsSynced — so it would sit there until that
+            // exact URL happened to be fetched again. Prefix invalidation means the entries least
+            // likely to be refetched are exactly the ones it leaves behind. See issue #68.
+            //
+            // The filter on Response is what makes deleting safe: it selects entries that have a
+            // cached response to invalidate, which is what this method is for, and can therefore
+            // never match a queued write. Matching on the URL alone also swept up queued writes
+            // under the same prefix and wrote each one back unchanged.
+            var stale = _store.Values
+                .Where(e => e.Response is not null && e.Url.StartsWith(urlPrefix, StringComparison.Ordinal))
+                .Select(e => e.Id)
+                .ToList();
+
+            foreach (var id in stale)
+                _store.Remove(id);
         }
         finally
         {

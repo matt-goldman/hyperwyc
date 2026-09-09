@@ -62,6 +62,20 @@ public interface IHyperwycStore
     /// Removes all cached GET responses whose URL begins with
     /// <paramref name="urlPrefix"/>.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Remove the record, do not merely clear its response.</b> An envelope whose
+    /// <see cref="Envelope.Response"/> is null is reachable by nothing —
+    /// <see cref="GetCachedResponseAsync"/> skips it for the null and
+    /// <see cref="GetPendingOutboxAsync"/> skips it because a cache envelope is synced — so it
+    /// occupies the store until that exact URL is fetched again. Invalidation matches a prefix,
+    /// so the entries it leaves behind are the ones least likely to be refetched.
+    /// </para>
+    /// <para>
+    /// <b>Match only envelopes that have a response.</b> A queued write under the same prefix must
+    /// not be touched, and the filter is what makes removal safe rather than destructive.
+    /// </para>
+    /// </remarks>
     Task InvalidateCacheForPrefixAsync(string urlPrefix, CancellationToken ct = default);
 
     /// <summary>

@@ -52,7 +52,7 @@ is text.
 The issue asked for a decision on `MaxCachedResponseBodyBytes` given binary payloads are larger.
 It stays at 512 KB. Raising it invites unbounded store growth while cache eviction
 ([issue 42](../42-cache-eviction.md)) does not exist and every write rewrites the whole record set
-([issue 52](../52-store-rewrites-whole-set-per-write.md)); a consumer who wants to cache large
+([issue 52](52-store-rewrites-whole-set-per-write.md)); a consumer who wants to cache large
 binaries can raise it themselves. Adding headroom nobody asked for, against a store that has no
 eviction, is the move [ADR 0004](../../docs/decisions/0004-default-to-removal.md) exists to stop.
 
@@ -60,7 +60,7 @@ eviction, is the move [ADR 0004](../../docs/decisions/0004-default-to-removal.md
 
 Bytes land in the record as base64, which System.Text.Json does automatically for `byte[]`. That
 is 33% bloat on a store where every write rewrites the whole record set
-([issue 52](../52-store-rewrites-whole-set-per-write.md)) — a 500 KB image becomes 667 KB
+([issue 52](52-store-rewrites-whole-set-per-write.md)) — a 500 KB image becomes 667 KB
 rewritten on every cache write. Cabinet has an attachments feature that would fix exactly this,
 storing the body as a separate encrypted file instead. It was investigated and rejected for now.
 

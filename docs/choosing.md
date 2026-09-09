@@ -42,7 +42,6 @@ For reads (e.g. `GET`) there is rarely a reason not to use it; you just have to 
 - **`Cache-Control` is not honoured**, including `no-store`. A response the server asked you not to store is stored. Use a `NetworkOnly` route policy for anything that matters.
 - **The cache is not bounded.** Individual response bodies are capped at 512 KB, but the store as a whole grows without limit and nothing evicts. On a long-lived mobile app that is the number to watch, and on Android it is what runs into the 25 MB backup quota — see [Storage](storage.md).
 - **`Vary` is not honoured.** The cache is keyed on URL alone, so a content-negotiated endpoint can serve the wrong variant.
-- **Not AOT-safe.** There is no `JsonSerializerContext`, so the store falls back to reflection-based serialisation. This matters most on iOS, where release builds have AOT on by default.
 
 These are known and tracked, not surprises; they are the reason Hyperwyc is pre-1.0.
 

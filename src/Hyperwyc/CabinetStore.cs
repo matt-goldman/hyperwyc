@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Cabinet.Core;
 using Cabinet.Security;
 using Hyperwyc.Interfaces;
@@ -92,7 +93,20 @@ public sealed class CabinetStore : IHyperwycStore
         _root = dbDirectory;
 
         var crypto = new AesGcmEncryptionProvider(encryptionKey);
-        var store = new FileOfflineStore(dbDirectory, crypto, null);
+
+        // The JSON options are what make the store AOT- and trim-safe. Without them Cabinet
+        // falls back to its own reflection-based default, which works in a debug build and
+        // fails on a trimmed or AOT-compiled one — iOS release builds have AOT on by default,
+        // so that failure lands at store submission rather than in development. See issue #53.
+        //
+        // Named argument on the indexer because the two constructors differ only in this
+        // position: a bare null binds to the overload taking IIndexProvider?, which is how the
+        // options came to be missing in the first place.
+        var store = new FileOfflineStore(
+            dbDirectory,
+            crypto,
+            new JsonSerializerOptions { TypeInfoResolver = HyperwycJsonContext.Default },
+            indexer: null);
         _records = new RecordSet<Envelope>(store, new RecordSetOptions<Envelope>
         {
             IdSelector = e => e.Id,
@@ -110,7 +124,11 @@ public sealed class CabinetStore : IHyperwycStore
         try
         {
             var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
-            return all.FirstOrDefault(e => e.Url == url && e.Response is not null && !e.IsDeadLettered);
+            var match = all.FirstOrDefault(e => e.Url == url && e.Response is not null && !e.IsDeadLettered);
+
+            // Hydrated after the filter, never before: loading the record set decrypts no bodies
+            // at all, and this reads exactly the one body that is about to be served.
+            return match is null ? null : await HydrateAsync(match, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -125,9 +143,19 @@ public sealed class CabinetStore : IHyperwycStore
         try
         {
             var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
-            return [.. all
+            var pending = all
                 .Where(e => !e.IsSynced && !e.IsDeadLettered)
-                .OrderBy(e => e.CreatedUtc)];
+                .OrderBy(e => e.CreatedUtc)
+                .ToList();
+
+            // Bodies are read for the outbox and not for the cache, which is the asymmetry worth
+            // having: the outbox is bounded by what is queued and every envelope in it is about to
+            // be replayed, whereas the cache is unbounded and one entry of it gets served.
+            var hydrated = new List<Envelope>(pending.Count);
+            foreach (var envelope in pending)
+                hydrated.Add(await HydrateAsync(envelope, ct).ConfigureAwait(false));
+
+            return hydrated;
         }
         finally
         {
@@ -144,10 +172,22 @@ public sealed class CabinetStore : IHyperwycStore
         try
         {
             var existing = await _records.GetByIdAsync(envelope.Id, ct).ConfigureAwait(false);
+
+            // Blobs first, then the record that references them. An interruption between the two
+            // leaves bytes nothing points at, which CompactAttachmentsAsync reclaims; the reverse
+            // order leaves a queued write whose body is missing, which would replay wrong. The
+            // record write is the commit point. See issue #70.
+            await WriteBodiesAsync(envelope, sweepStale: existing is not null, ct).ConfigureAwait(false);
+
+            // What is stored carries no bodies. This is the whole point: RecordSet rewrites the
+            // entire set on every single-record change, so anything left inline is re-serialised,
+            // re-encrypted and rewritten on every subsequent write — at a 33% base64 premium.
+            var stored = WithBodies(envelope, null, null, null);
+
             if (existing is null)
-                await _records.AddAsync(envelope, ct).ConfigureAwait(false);
+                await _records.AddAsync(stored, ct).ConfigureAwait(false);
             else
-                await _records.UpdateAsync(envelope.Id, envelope, ct).ConfigureAwait(false);
+                await _records.UpdateAsync(envelope.Id, stored, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -200,11 +240,20 @@ public sealed class CabinetStore : IHyperwycStore
         try
         {
             var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
-            foreach (var envelope in all.Where(e => e.Url.StartsWith(urlPrefix, StringComparison.Ordinal)).ToList())
-            {
-                envelope.Response = null;
-                await _records.UpdateAsync(envelope.Id, envelope, ct).ConfigureAwait(false);
-            }
+
+            // See InMemoryStore for why this removes rather than nulls, and why the filter on
+            // Response is what makes removing safe. Issue #68.
+            //
+            // RemoveAsync also deletes the record's attachments, which is where the response body
+            // now lives — so the bytes go with the entry rather than orphaning. That is the whole
+            // reason this change comes before issue #70 rather than after it.
+            var stale = all
+                .Where(e => e.Response is not null && e.Url.StartsWith(urlPrefix, StringComparison.Ordinal))
+                .Select(e => e.Id)
+                .ToList();
+
+            foreach (var id in stale)
+                await _records.RemoveAsync(id, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -222,7 +271,7 @@ public sealed class CabinetStore : IHyperwycStore
             // Enumerating means decrypting and deserialising, which is precisely what a store
             // worth resetting cannot do — the remedy would have been unavailable in the only
             // case that needs it. See issue #49.
-            foreach (var directory in new[] { "records", "attachments", "index" })
+            foreach (var directory in new[] { "records", "index" })
             {
                 var path = Path.Combine(_root, directory);
                 if (!Directory.Exists(path)) continue;
@@ -230,6 +279,15 @@ public sealed class CabinetStore : IHyperwycStore
                 foreach (var file in Directory.GetFiles(path))
                     File.Delete(file);
             }
+
+            // Attachments are nested one directory per record — attachments/{hash(id)}/ — so a
+            // top-level file sweep misses every blob in the store. Now that bodies live there,
+            // that would have left the reset holding exactly the bytes worth clearing. See #70.
+            var attachments = Path.Combine(_root, "attachments");
+            if (Directory.Exists(attachments))
+                Directory.Delete(attachments, recursive: true);
+
+            Directory.CreateDirectory(attachments);
 
             // The RecordSet holds its own in-memory copy, which the file deletion knows nothing
             // about. Refreshing drops it so the next read loads from an empty directory.
@@ -248,4 +306,119 @@ public sealed class CabinetStore : IHyperwycStore
     private static byte[] DeriveKey(string path) =>
         System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(path));
+
+    // -------------------------------------------------------------------------
+    // Bodies (issue #70)
+    // -------------------------------------------------------------------------
+
+    // Fixed names rather than anything derived: an envelope has at most one of each, and the
+    // names have to survive a round trip through Cabinet's attachment-name hashing.
+    private const string RequestBodyName  = "request";
+    private const string ResponseBodyName = "response";
+    private const string OutcomeBodyName  = "outcome";
+
+    // Cabinet records a content type but nothing here reads it back — the media type a consumer
+    // sees comes from the captured headers, which is the only source that survived issue #25.
+    private const string BodyContentType = "application/octet-stream";
+
+    private async Task WriteBodiesAsync(Envelope envelope, bool sweepStale, CancellationToken ct)
+    {
+        // One manifest read covers all three slots, and only on the update path. A record being
+        // added has nothing to sweep; an orphan under a reused id is CompactAttachmentsAsync's
+        // job, which is what that method exists for.
+        var existing = sweepStale
+            ? await _records.ListAttachmentsAsync(envelope.Id, ct).ConfigureAwait(false)
+            : [];
+
+        await WriteBodyAsync(envelope.Id, RequestBodyName,  envelope.RequestBody,      existing, ct).ConfigureAwait(false);
+        await WriteBodyAsync(envelope.Id, ResponseBodyName, envelope.Response?.Body,   existing, ct).ConfigureAwait(false);
+        await WriteBodyAsync(envelope.Id, OutcomeBodyName,  envelope.LastOutcome?.Body, existing, ct).ConfigureAwait(false);
+    }
+
+    private async Task WriteBodyAsync(
+        string id,
+        string name,
+        byte[]? body,
+        IReadOnlyList<AttachmentInfo> existing,
+        CancellationToken ct)
+    {
+        if (body is not null)
+        {
+            // Replaces an attachment of the same name, so a refetched URL overwrites rather than
+            // accumulating — the same property the deterministic cache id gives the record.
+            await _records.AddAttachmentAsync(id, new FileAttachment(name, BodyContentType, body), ct)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        // A body that has gone from present to absent takes its blob with it, or the bytes outlive
+        // the record that explained them and nothing will ever look for them again.
+        if (existing.Any(a => a.Name == name))
+            await _records.RemoveAttachmentAsync(id, name, ct).ConfigureAwait(false);
+    }
+
+    private async Task<Envelope> HydrateAsync(Envelope stored, CancellationToken ct)
+    {
+        var request  = await ReadBodyAsync(stored.Id, RequestBodyName, ct).ConfigureAwait(false);
+
+        // Skipped entirely when the enclosing object is absent, so a cache entry costs no probe
+        // for an outcome body it cannot have.
+        var response = stored.Response is null
+            ? null
+            : await ReadBodyAsync(stored.Id, ResponseBodyName, ct).ConfigureAwait(false);
+
+        var outcome = stored.LastOutcome is null
+            ? null
+            : await ReadBodyAsync(stored.Id, OutcomeBodyName, ct).ConfigureAwait(false);
+
+        return WithBodies(stored, request, response, outcome);
+    }
+
+    private async Task<byte[]?> ReadBodyAsync(string id, string name, CancellationToken ct)
+    {
+        // Null when there is no such attachment, which is how "no body" survives the round trip
+        // as distinct from an empty one. Cabinet probes the file before reading, so an absent
+        // body costs an existence check rather than a decrypt.
+        var stream = await _records.OpenAttachmentAsync(id, name, ct).ConfigureAwait(false);
+        if (stream is null) return null;
+
+        await using (stream.ConfigureAwait(false))
+        {
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer, ct).ConfigureAwait(false);
+            return buffer.ToArray();
+        }
+    }
+
+    /// <summary>
+    /// A copy of <paramref name="source"/> carrying the supplied bodies in place of its own.
+    /// </summary>
+    /// <remarks>
+    /// A copy rather than a mutation, and that is load-bearing in both directions. `RecordSet`
+    /// hands out the instances it holds in memory and writes those same instances back on the
+    /// next `SaveAllAsync`, so hydrating one in place would put the bodies straight back into the
+    /// document this change exists to keep them out of.
+    /// </remarks>
+    private static Envelope WithBodies(Envelope source, byte[]? request, byte[]? response, byte[]? outcome) =>
+        new()
+        {
+            Id              = source.Id,
+            CorrelationId   = source.CorrelationId,
+            Url             = source.Url,
+            Method          = source.Method,
+            ClientName      = source.ClientName,
+            RequestHeaders  = source.RequestHeaders,
+            RequestBody     = request,
+            CreatedUtc      = source.CreatedUtc,
+            IsSynced        = source.IsSynced,
+            IsDeadLettered  = source.IsDeadLettered,
+            Response        = source.Response is null ? null : new CachedResponse
+            {
+                StatusCode  = source.Response.StatusCode,
+                Headers     = source.Response.Headers,
+                Body        = response,
+                CachedAt    = source.Response.CachedAt,
+            },
+            LastOutcome     = source.LastOutcome is null ? null : source.LastOutcome with { Body = outcome },
+        };
 }

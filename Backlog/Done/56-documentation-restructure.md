@@ -61,7 +61,7 @@ The tutorial is where "install it, register it, and make a request" actually get
 one and is the reason [57](../57-plugin-maui-hyperwyc.md) exists: MAUI is the core use case and it
 currently has no page of its own. One page carrying the connectivity implementation, the
 `SecureStorage` key ([32](../32-default-encryption-key.md)), backup exclusion
-([48](48-exclude-store-from-os-backup.md)) and the AOT caveat ([53](../53-aot-json-serialization.md))
+([48](48-exclude-store-from-os-backup.md)) and the AOT caveat ([53](53-aot-json-serialization.md))
 is worth more than four cross-references.
 
 **3. Reference** — the existing pages, stripped to what the library does. Tables, defaults,
@@ -120,7 +120,7 @@ id, the event stream and the "no data" read one design instead of four decisions
 | Document | |
 |---|---|
 | **[`docs/tutorial/`](../../docs/tutorial/)** | Five pages with previous/next links, building a console app that keeps working when its API goes away. Reads → writes → outcomes → connectivity → policies |
-| **[`docs/maui.md`](../../docs/maui.md)** | The MAUI quick start. Registration, the connectivity implementation, the `SecureStorage` key ([32](../32-default-encryption-key.md)), backup exclusion ([48](48-exclude-store-from-os-backup.md)) and the AOT caveat ([53](../53-aot-json-serialization.md)) on one page. It opens by telling the reader they can skip `connectivity.md` |
+| **[`docs/maui.md`](../../docs/maui.md)** | The MAUI quick start. Registration, the connectivity implementation, the `SecureStorage` key ([32](../32-default-encryption-key.md)), backup exclusion ([48](48-exclude-store-from-os-backup.md)) and the AOT caveat ([53](53-aot-json-serialization.md)) on one page. It opens by telling the reader they can skip `connectivity.md` |
 | **[`docs/design.md`](../../docs/design.md)** | The explanation layer. Connectivity as an optimisation, why not to probe, why a `200` and not a `404`, why `null`, why no retry, no position on duplicates, and the calling-code caveat |
 | **[`docs/testing.md`](../../docs/testing.md)** | Faking connectivity, stubbing the replay transport, a store per test — and the point that stopping the API tests the real path rather than a mocked one |
 | **[`docs/README.md`](../../docs/README.md)** | Rebuilt as **Start here / Reference / Why it works this way**, with the start-here row chosen by why the reader came |
