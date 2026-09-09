@@ -12,7 +12,8 @@ namespace Hyperwyc.Models;
 /// <see cref="HttpRequestMessage"/> that no implementation ever used.
 /// </para>
 /// <para>
-/// Policies are matched to routes by <see cref="RoutePolicyMap"/>, first match wins.
+/// Policies are matched to routes by <see cref="RoutePolicyMap"/>: registered from general
+/// to specific, with the last matching registration winning.
 /// </para>
 /// </remarks>
 public sealed record RoutePolicy

@@ -17,10 +17,6 @@ namespace Hyperwyc;
 /// </remarks>
 internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
 {
-    /// <summary>
-    /// Ceiling on a computed backoff, so a generous retry budget cannot schedule an
-    /// attempt absurdly far out — or overflow the arithmetic getting there.
-    /// </summary>
     private readonly IHyperwycStore _store;
     private readonly IConnectivityService _connectivity;
     private readonly HyperwycEventStream _events;
@@ -97,10 +93,10 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// If a flush is already in progress this call returns immediately.
     /// </summary>
     /// <remarks>
-    /// One attempt each, not a retry loop. An envelope that fails transiently is left
-    /// queued with a scheduled next-attempt time, so a single undeliverable write cannot
-    /// hold up everything behind it — which is what a per-envelope backoff loop does when
-    /// the outbox drains sequentially.
+    /// One attempt each, not a retry loop, and nothing is scheduled. Any answer from the
+    /// server is final: a success leaves the outbox and anything else is dead-lettered. Only
+    /// a transport failure leaves an envelope queued — and it ends the flush rather than
+    /// moving to the next one, because an unusable network is a fact about those too.
     /// </remarks>
     public async Task FlushAsync(CancellationToken ct = default)
     {
@@ -158,15 +154,15 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Lives here rather than on <c>HyperwycService</c> because it needs two things only the
-    /// processor has: the flush gate, and the scheduled follow-up.
+    /// Lives here rather than on <c>HyperwycService</c> because it needs the flush gate, which
+    /// only the processor has.
     /// </para>
     /// <para>
     /// The gate is acquired <em>blocking</em>, unlike <see cref="FlushAsync"/>'s
     /// try-acquire. A flush that is mid-loop holds a list of envelopes read before the wipe
     /// and keeps acting on them: it would go on sending writes the caller just asked to
     /// discard, and — worse — <c>RecordOutcomeAsync</c> and <c>MarkDeliveredAsync</c> write back, so a
-    /// transiently-failing envelope would be <em>re-inserted</em> into a store that had just
+    /// transport-failed envelope would be <em>re-inserted</em> into a store that had just
     /// been emptied. On the logout this method exists for, that resurrects the previous
     /// user's data.
     /// </para>
@@ -211,7 +207,10 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
         /// <summary>Delivered; the envelope is out of the outbox.</summary>
         Delivered,
 
-        /// <summary>Rejected or out of budget; the envelope will not be attempted again.</summary>
+        /// <summary>
+        /// The server answered with a non-success status; the envelope will not be attempted
+        /// again.
+        /// </summary>
         DeadLettered,
 
         /// <summary>The network is unreachable, so the rest of the flush is pointless.</summary>
@@ -237,9 +236,9 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
             // portal, DNS failure, or signal that dropped mid-flush. Every remaining
             // envelope would fail identically, so report it and let the flush stop.
             //
-            // Recorded on the envelope even though no event fires and the budget is not
-            // charged: "last attempt could not reach the host" is exactly what a diagnostics
-            // view needs to explain an outbox that is not draining.
+            // Recorded on the envelope even though no event fires: "last attempt could not
+            // reach the host" is exactly what a diagnostics view needs to explain an outbox
+            // that is not draining. See issue 23 — it is the only place this is visible.
             await RecordOutcomeAsync(envelope, TransportOutcome(ex), ct).ConfigureAwait(false);
             return SendOutcome.ConnectivityLost;
         }
@@ -394,9 +393,9 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// <remarks>
     /// The outcome is written before the move rather than as part of it, which keeps
     /// <see cref="IHyperwycStore"/> unchanged. The two writes are not atomic: a crash between them
-    /// leaves the envelope carrying its outcome but still in the outbox, so it is retried and
-    /// — classification being deterministic on the status code — reaches the same verdict. A
-    /// retry that should have been terminal, once, on a crash. That is a better trade than a
+    /// leaves the envelope carrying its outcome but still in the outbox, so it is sent once
+    /// more on the next flush and — any answer being final — dead-lettered again. One delivery
+    /// that should have been terminal, once, on a crash. That is a better trade than a
     /// breaking change to a public interface.
     /// </remarks>
     private async Task DeadLetterAsync(Envelope envelope, DeliveryOutcome outcome, CancellationToken ct)
@@ -518,9 +517,9 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// cancellation before returning.
     /// </summary>
     /// <remarks>
-    /// The wait is bounded by cancellation, not by the retry budget: the flush
-    /// loop breaks at its next envelope boundary and any in-progress send and
-    /// backoff delay are cancelled. This does not wait for queued work to finish
+    /// The wait is bounded by cancellation: the flush loop breaks at its next
+    /// envelope boundary and any in-progress send is cancelled. This does not
+    /// wait for queued work to finish
     /// sending — see <see cref="Dispose"/> for why shutdown is not a flush trigger.
     /// </remarks>
     public async ValueTask DisposeAsync()

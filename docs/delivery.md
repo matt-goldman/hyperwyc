@@ -1,27 +1,43 @@
-# Caching, deliver, and route policies
+# Delivery and Route Policies
 
-Where a response comes from, how long it stays usable, and how to vary both per route.
+This document explains where a response comes from, how long it stays usable, and how to vary both per route.
 
-Hyperwyc sits in your `HttpClient` pipeline as a `DelegatingHandler` — the same interception point that a Service Worker occupies for browser `fetch()`. It transparently handles all outgoing requests:
+Hyperwyc sits in your `HttpClient` pipeline as a `DelegatingHandler`, the same interception point that a Service Worker occupies for browser `fetch()`. It transparently handles all outgoing requests:
 
 - **Online:** Requests are sent immediately. Responses are optionally cached according to your staleness policy.
 - **Offline writes:** Requests are serialised and queued locally. The caller receives a [`202 Accepted` with an `X-Hyperwyc-Status: Queued` header](responses.md). When connectivity is restored, the queue is replayed in order. The eventual outcome arrives on [`Events`](events.md), correlated back to the write that produced it.
-- **Offline reads:** Served from cache if it is still within its TTL. Otherwise the caller receives a [`200 OK` with `X-Hyperwyc-Status: Offline`](responses.md) and a body of `null`. A read whose transport cannot answer is treated identically, whatever the connectivity service claimed — so a read never throws where being offline would not have thrown.
+- **Offline reads:** Served from cache if it is still within its TTL. Otherwise the caller receives a [`200 OK` with `X-Hyperwyc-Status: Offline`](responses.md) and a body of `null`. A read whose transport cannot answer is treated identically, whatever the connectivity service claimed, so a read never throws where being offline would not have thrown.
 - **Online reads (GET/HEAD/OPTIONS):** Served from cache if fresh; fetched from the API if stale or missing.
 
-## Caching strategies
+## Route Policies
 
-| Strategy | Online | Offline |
-|---|---|---|
-| `RoutePolicy.CacheFirst()` | Serve a fresh cached response; otherwise fetch | Serve the cached response even if stale |
-| `RoutePolicy.CacheFirst(ttl)` | As above, with the freshness window stated | As above |
-| `RoutePolicy.NetworkFirst()` | Always fetch; fall back to the cache only if the request fails | Serve the cached response even if stale |
-| `RoutePolicy.NetworkOnly()` | Always fetch; never read or write the store | **Writes are not queued** — see below |
+Route policies affect how Hyperwyc handles read (`GET`, `OPTIONS`, `HEAD`) and write (`POST`, `PUT`, `PATCH`, `DELETE`) requests when online and offline.
+
+### Reads
+
+Hyperwyc lets you control when responses should be prioritised from the cache over the network, and vice versa.
+
+| Strategy                    | Online                                                                    | Offline                                                                |
+| --------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `RoutePolicy.CacheFirst()`  | Serve a stored response within its TTL; otherwise fetch                   | Serve a stored response within its TTL; otherwise the offline response |
+| `RoutePolicy.NetworkFirst()`| Always fetch; fall back to a stored response within its TTL if that fails  | Serve a stored response within its TTL; otherwise the offline response |
+| `RoutePolicy.NetworkOnly()` | Always fetch; never read or write the store                               | The offline response — nothing to serve, and nothing to pass through to |
+
+Each has a `(ttl)` overload that sets [`Ttl`](#understanding-ttl) and changes nothing else. **The TTL means the same thing offline as online**: past it, a stored response is not served, and if offline the caller gets the [offline response](responses.md) as though nothing were cached.
+
+Hyperwyc *always* refreshes the cache and resets the TTL on a successful network fetch (except for `NetworkOnly`).
+
+### Writes
+
+Hyperwyc behaves the same way when online whatever the strategy, with one exception below: it attempts the request, and returns the response if one is received. It doesn't matter what the response is or whether the request failed; that's none of Hyperwyc's business, it just returns the response to the caller.
+
+**Hyperwyc queues the request to send later *only* if a response is not received.** A request that failed on the API side was still sent successfully, and as a transport layer tool, Hyperwyc is no longer needed. A request that *failed to send* is Hyperwyc's business, so a transport failure that means no connection was ever established is queued — see [Offline writes](offline-writes.md#writes-are-queued-on-transport-failure-too-not-just-when-you-are-offline) for exactly which those are.
+
+The exception is `NetworkOnly`, which declines to queue in either case. Offline it does not take custody, and online a transport failure is allowed to throw.
 
 ## Per-route policies
 
-The default applies to everything. Override it per route, **registering from general to
-specific — each rule refines the ones before it**:
+The default is `RoutePolicy.CacheFirst()` — cache-first, a TTL of one day, `InvalidateCacheOnWrite` on — and it applies to everything. Set it on `options.Routes.Default`. Override it per route, **registering from general to specific — each rule refines the ones before it**:
 
 ```csharp
 services.AddHyperwyc(options =>
@@ -33,67 +49,80 @@ services.AddHyperwyc(options =>
 });
 ```
 
-Written out that forms a pyramid — the shortest line at the top, widening as each rule narrows
-— which is the order you think in, and a shape you can check at a glance. It's the same model as `.gitignore` and the CSS cascade: state the
-general rule, then carve out the exceptions. Where two patterns both match, the one registered
-later applies, so a broad rule placed *after* a narrow one will override it.
+It's the same model as `.gitignore` and the CSS cascade: state the general rule, then carve out the exceptions. Where two patterns both match, the one registered later applies, so a broad rule placed *after* a narrow one will override it.
 
-Patterns match on the URL **path** only — scheme, host, port and query string are ignored, so a
-pattern works whatever your `BaseAddress` is. `/api/sales/*` covers `/api/sales` and everything
-beneath it; `*` matches everything; matching is case-insensitive.
+Patterns match on the URL **path** only — scheme, host, port and query string are ignored, so a pattern works whatever your `BaseAddress` is. `/api/sales/*` covers `/api/sales` and everything beneath it; `*` matches everything; matching is case-insensitive.
 
 A policy carries three things:
 
-| Member | Default | |
-|---|---|---|
-| `Strategy` | `CacheFirst` | How reads are served |
-| `Ttl` | 1 day | How old a stored response may be and still be served, online or offline |
-| `InvalidateCacheOnWrite` | `true` | Whether a successful write clears stored responses under the same path prefix |
+| Member                   | Default      |                                                                               |
+| ------------------------ | ------------ | ----------------------------------------------------------------------------- |
+| `Strategy`               | `CacheFirst` | How reads are served                                                          |
+| `Ttl`                    | 1 day        | How old a stored response may be and still be served, online or offline       |
+| `InvalidateCacheOnWrite` | `true`       | Whether a successful write clears stored responses under the same path prefix |
 
-Compose with `with` for anything the factories don't cover:
+Use the factory methods (as per [Route Policies](#route-policies)) and compose with `with` for anything the factories don't cover:
 
 ```csharp
 .For("/api/audit/*", RoutePolicy.CacheFirst(TimeSpan.FromDays(7)) with { InvalidateCacheOnWrite = false })
 ```
 
-> **`NetworkOnly` governs writes as well as reads.** It's the one strategy that does. An offline
-> write to a `NetworkOnly` route is **not queued** — it goes to the transport and fails as it
+> **`NetworkOnly` governs writes as well as reads.** It's the one strategy that does. A write to
+> a `NetworkOnly` route is **never queued** — not when offline, and not when the transport fails
+> after Hyperwyc believed it was online. It goes to the transport and fails as it
 > would without Hyperwyc installed. Use it where deferring a write is the wrong answer even
 > though deferring a read would be fine: a payment, a seat reservation, anything contending for a
-> shared mutable resource. Declining to take custody is more honest than a `202` Hyperwyc might
-> honour hours later.
+> shared mutable resource.
 
-> **TTL says how old a cached response may be and still be served — nothing else.** It means the
-> same thing online and offline. Past it, the response is not served: online it is refetched,
-> offline the caller gets the same "no data" answer as if nothing were cached.
->
-> So set it to how long the data is genuinely useful, not to how often you would like to
-> refresh. "Always fetch when I can" is `NetworkFirst`, which is a strategy — using a short TTL
-> to force refetching would leave you nothing to serve offline, which is the opposite of the
-> point. The default is one day.
+## Understanding TTL
+
+TTL (time to live) in a Hyperwyc cache defines *whether or not a response is still valid*, not whether to refetch.
+
+It means the same thing online and offline. Once it expires, the response is not served: online it is refetched, offline the caller gets the same "no data" answer as if nothing were cached.
+
+```mermaid
+sequenceDiagram
+    participant C as your code
+    participant H as Hyperwyc
+    participant S as the store
+    participant A as your API
+
+    Note over C,A: a CacheFirst route, with a response stored earlier
+    C->>H: GET /products
+    H->>S: is there a stored response for this URL?
+
+    alt within its TTL
+        S-->>H: yes — stored 3 hours ago
+        H-->>C: the stored response
+        Note over H,A: no request is made at all — the same, online or offline
+    else past its TTL, and the network answers
+        H->>A: GET /products
+        A-->>H: 200 and a body
+        H->>S: store it — the TTL restarts here
+        H-->>C: the response
+    else past its TTL, and it does not
+        H-->>C: 200, X-Hyperwyc-Status: Offline, body null
+    end
+```
+
+The first branch is the point: inside the TTL there is no request, and connectivity does not come into it. `NetworkFirst` reverses the order — it always tries the network first and consults the store only when that fails — but the TTL means the same thing in both, because it governs whether a stored response may be *served*, not when to go looking for a fresh one.
+
+So set it to how long the data is genuinely useful, not to how often you would like to refresh. "Always fetch when I can" is `NetworkFirst`, which is a strategy; using a short TTL to force refetching would leave you nothing to serve offline, which is the opposite of the point. The default is one day.
 
 `NetworkOnly` opts out of the store entirely, so it has nothing to offer offline.
 
 The app doesn't need to know the difference. Your existing code doesn't change.
 
-> **Why "no data" instead of "no connection"?** Connectivity is an infrastructure concern, not an application one. Your code already has to handle the empty-result path (a search with no matches, a feed with no items); offline simply produces the same shape. A caller that does want to know reads the [`X-Hyperwyc-Status` header](responses.md) — or, for a write, the `202`, which no ordinary success is.
+## What a caller gets when there is nothing to give
 
-## Designing your responses
-
-When Hyperwyc has nothing to give you — an offline read with no cached copy, or a write it has
-only queued — it returns the JSON `null` literal, not an empty body. That distinction matters
-more than it looks:
+An offline read with no cached copy, and a write that has only been queued, both return the JSON `null` literal rather than an empty body:
 
 ```csharp
 var product  = await http.GetFromJsonAsync<Product>("/products/1");        // null
 var products = await http.GetFromJsonAsync<List<Product>>("/products");    // null
 ```
 
-Both return `null` rather than throwing. An *empty* body would throw `JsonException` from inside
-the extension method — for a single object every bit as much as for a collection — because an
-empty body is not "no data", it is not JSON at all.
-
-So the case you need to handle is the one you already handle: a `null` result.
+Both return `null` rather than throwing, with or without the JSON extension methods. [Why `null` and not an empty body](design.md#null-rather-than-an-empty-body) is on the design page; the short version is that an empty body is not JSON at all, so `GetFromJsonAsync<T>` throws on it.
 
 ```csharp
 var products = await http.GetFromJsonAsync<List<Product>>("/products");
@@ -106,13 +135,8 @@ if (products is null)
 }
 ```
 
-**A collection comes back as `null`, not empty.** Returning `[]` would need Hyperwyc to know the
-route returns a collection, which is knowledge it does not have. A null-coalesce at the call
-site covers it — and you need one for the online path anyway, since a server returning an empty
-response or a `204` produces the same shape.
+In almost every case your code already needs to handle a `null` result, whether using the JSON extension methods, using plain `HttpClient`, or even calling other API types (like SOAP/XML). At some point you need to deserialise the response, which can return `null` — `JsonSerializer.Deserialize<T>` and the `HttpClient` JSON extensions all return `T?` — or you need to read string content. This last scenario is the only one where you may need to do something different - if you are reading literal string content, your code needs to check for the exact string match `null`.
 
-If you would rather branch on status codes than on `null`, read
-[`X-Hyperwyc-Status`](responses.md) to find out. And if your API
-already uses an envelope or result type — [`Ardalis.Result`](https://github.com/ardalis/Result)
-or a hand-rolled `ApiResponse<T>` — that keeps working, since the envelope simply deserialises
-to `null` and your existing handling takes over.
+**A collection comes back as `null`, not empty**, which may differ from what your API does. A null-coalesce at the call site covers it, and you need one for the online path anyway.
+
+If you would rather branch on status codes than on `null`, read [`X-Hyperwyc-Status`](responses.md) to find out. And if your API already uses an envelope or result type — [`Ardalis.Result`](https://github.com/ardalis/Result) or a hand-rolled `ApiResponse<T>` — that keeps working, since the envelope simply deserialises to `null` and your existing handling takes over.

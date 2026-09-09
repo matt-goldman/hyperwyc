@@ -12,7 +12,7 @@ to an empty store, and stop there. Do not throw, do not delete, do not attempt r
 ## Status
 
 ✅ **Done.** 2026-09-05. The question predates
-[issue 48](../48-exclude-store-from-os-backup.md); 48 only supplied a likely trigger.
+[issue 48](48-exclude-store-from-os-backup.md); 48 only supplied a likely trigger.
 
 ## It has already happened once, for real
 
@@ -217,7 +217,7 @@ Worth restating because it reduces how often any of this is reached.
 
 The derived key fails because it is `SHA256` of a **volatile absolute path**. On iOS that path
 contains the app container UUID, which changes on reinstall or restore
-([issue 48](../48-exclude-store-from-os-backup.md)). Deriving from something stable instead — a fixed
+([issue 48](48-exclude-store-from-os-backup.md)). Deriving from something stable instead — a fixed
 salt plus an application identity — makes the store readable across exactly the events that
 currently break it, leaving genuine corruption as the only trigger.
 
@@ -248,7 +248,7 @@ compatibility cost; nothing is released.
 
 ## Notes
 
-- Raised by the author while reviewing [issue 48](../48-exclude-store-from-os-backup.md): "how do we
+- Raised by the author while reviewing [issue 48](48-exclude-store-from-os-backup.md): "how do we
   handle a failed decryption... this question should have existed before we knew this anyway."
 - **The scope correction is the point of this item.** The first draft reasoned its way to a
   branching recovery policy because the analysis of *recoverability* was interesting. Interesting

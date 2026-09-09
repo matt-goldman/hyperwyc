@@ -29,7 +29,7 @@ true after the fact:
   send them.
 
 Hyperwyc has no duplicate suppression by design
-([ADR 0001](../docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md)), so nothing catches
+([ADR 0001](../../docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md)), so nothing catches
 this. It is the application's API that eats the duplicate order.
 
 Worth being precise about the blame here: Hyperwyc is behaving correctly at every step. It was
@@ -44,7 +44,7 @@ whole app** — not just for the offending files, and with no user-visible error
 that grows past the cap therefore takes the app's settings and databases down with it.
 
 `MaxCachedResponseBodyBytes` caps a single entry at 512 KB, but nothing caps the total: cache
-eviction is [issue 42](42-cache-eviction.md), still open. Fifty cached responses is enough to be
+eviction is [issue 42](../42-cache-eviction.md), still open. Fifty cached responses is enough to be
 a meaningful fraction of the budget. This is the argument that applies even to consumers who do
 not care about the outbox.
 
@@ -70,11 +70,11 @@ Two things follow:
 - It accidentally mitigates hazard 1 above. That is not a defence — an accident that depends on
   an implementation detail of key derivation is not a design, and it stops working the moment a
   consumer supplies their own stable key from secure storage, which is precisely what
-  [issue 32](32-default-encryption-key.md) recommends. **The better a consumer's key management,
+  [issue 32](../32-default-encryption-key.md) recommends. **The better a consumer's key management,
   the more exposed they are to the replay hazard.** That inversion is the thing to document.
 - It is a defect in its own right, independent of backup: any iOS reinstall-with-restore silently
   loses the store. Needs verifying on device, then recording against 32.
-- What Hyperwyc *does* on encountering that store is [issue 49](Done/49-unreadable-store-recovery.md),
+- What Hyperwyc *does* on encountering that store is [issue 49](49-unreadable-store-recovery.md),
   which is a real defect rather than documentation: today it throws a raw `CryptographicException`
   from wherever the store is first read. 49 settles on reporting it and degrading to an empty
   store — Hyperwyc does not delete the files or refuse to start, since neither is a
@@ -130,7 +130,7 @@ about their domain, not ours.
 
 ## Why documentation and not implementation
 
-Through [the scope test](../docs/decisions/README.md#the-standing-scope-test):
+Through [the scope test](../../docs/decisions/README.md#the-standing-scope-test):
 
 | Question | Answer |
 |---|---|
@@ -139,7 +139,7 @@ Through [the scope test](../docs/decisions/README.md#the-standing-scope-test):
 | Can the application already do it? | **Yes** — an `NSUrl` call and a manifest file. Neither is hard once you know the path |
 | Does it depend on something only Hyperwyc knows? | **The path does.** That is Hyperwyc's choice, and it is the one thing the consumer cannot work out for themselves |
 
-So the split falls where it did for [issue 13](Done/13-connectivity-reference-implementation.md):
+So the split falls where it did for [issue 13](13-connectivity-reference-implementation.md):
 Hyperwyc makes the path knowable and explains the consequence; the consumer applies it. Doing the
 iOS exclusion in the library would need iOS APIs, which is the same MAUI-dependency argument that
 kept `MauiConnectivityService` out of the package.
@@ -158,8 +158,8 @@ Nothing needs to be built for the documentation to be actionable.
       Open Questions.
 - [ ] The inverted-risk note is recorded: a consumer with good key management loses the accidental
       protection the derived key provides.
-- [ ] Cross-referenced from [issue 32](32-default-encryption-key.md) and
-      [issue 42](42-cache-eviction.md).
+- [ ] Cross-referenced from [issue 32](../32-default-encryption-key.md) and
+      [issue 42](../42-cache-eviction.md).
 - [ ] The iOS key-derivation defect is either confirmed and filed against 32, or ruled out.
 
 ## Open Questions
@@ -184,7 +184,7 @@ Nothing needs to be built for the documentation to be actionable.
 
 ## Notes
 
-- Raised by the author while reviewing [issue 16](Done/16-reset-store-async.md), on the observation
+- Raised by the author while reviewing [issue 16](16-reset-store-async.md), on the observation
   that mobile consumers may want the store kept out of iCloud and Google Drive backups.
 - Suggested milestone **v1.2**. It is documentation and cheap, but the hazard is real enough that
   it should not wait for a milestone where it might be deprioritised. It could reasonably land

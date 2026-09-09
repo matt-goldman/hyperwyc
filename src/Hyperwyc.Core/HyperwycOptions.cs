@@ -25,13 +25,19 @@ public sealed class HyperwycOptions
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Per-route policies, matched first-registered-wins, plus the default for routes matching
-    /// nothing.
+    /// Per-route policies, plus the default for routes matching nothing.
     /// </summary>
     /// <remarks>
-    /// Register most specific first — see <see cref="RoutePolicyMap"/>. The matched policy is
-    /// the single source of cache strategy, TTL and write-invalidation; there is no second
-    /// place a TTL can come from, which is what caused issue #29.
+    /// <para>
+    /// <b>Register from general to specific — each rule refines the ones before it.</b> Where
+    /// two patterns both match, the one registered <em>later</em> applies, so a broad rule
+    /// placed after a narrow one overrides it. See <see cref="RoutePolicyMap"/>, which carries
+    /// the reasoning and a worked example.
+    /// </para>
+    /// <para>
+    /// The matched policy is the single source of cache strategy, TTL and write-invalidation;
+    /// there is no second place a TTL can come from, which is what caused issue #29.
+    /// </para>
     /// </remarks>
     public RoutePolicyMap Routes { get; } = new();
 
@@ -74,21 +80,28 @@ public sealed class HyperwycOptions
     public IConnectivityService? Connectivity { get; set; }
 
     /// <summary>
-    /// The transport used to replay queued writes from the outbox. Leave
-    /// <see langword="null"/> to use a default <see cref="HttpClientHandler"/>.
+    /// The <b>fallback</b> transport for replaying queued writes, used only when an envelope's
+    /// originating pipeline cannot be resolved. Leave <see langword="null"/> for a default
+    /// <see cref="HttpClientHandler"/>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Replayed requests do not travel through your application's
-    /// <see cref="HttpClient"/> pipeline — they are sent directly, bypassing
-    /// <see cref="HyperwycHandler"/> so that a replay is not queued again. That
-    /// means handler-level concerns you rely on for ordinary requests (certificate
-    /// pinning, proxies, timeouts, logging) do not reach replays unless you supply
-    /// a transport that includes them here.
+    /// <b>This is not the normal replay path.</b> A write queued on a client registered with
+    /// <c>AddHyperwycHandler()</c> is replayed back through that same client, so every handler
+    /// after Hyperwyc's — auth above all — applies to the replay exactly as it does to an
+    /// ordinary request. See <c>docs/decisions/0002-replays-traverse-the-pipeline.md</c>.
     /// </para>
     /// <para>
-    /// Supplying a stub is also how you exercise a flush in tests without network
-    /// access.
+    /// A replay falls back to this transport when that is not possible: the handler was added
+    /// with <c>AddHttpMessageHandler&lt;HyperwycHandler&gt;()</c> rather than
+    /// <c>AddHyperwycHandler()</c>, so no client name was captured, or no
+    /// <c>IHttpClientFactory</c> is registered. Handler-level concerns you rely on for
+    /// ordinary requests — certificate pinning, proxies, timeouts, logging — do not reach a
+    /// replay sent this way unless the transport you supply here includes them.
+    /// </para>
+    /// <para>
+    /// So prefer correcting the registration over configuring this. Supplying a stub here is
+    /// also how you exercise a flush in tests without network access.
     /// </para>
     /// <para>
     /// <b>Ownership:</b> Hyperwyc never disposes this handler, whether you supplied

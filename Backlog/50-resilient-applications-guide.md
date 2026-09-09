@@ -87,7 +87,7 @@ Not a specification — a list of what has accumulated and would belong here.
   a deferred write has no result yet, and modelling one is how applications end up lying to
   users.
 - **Restore and reinstall.** A restored backup can re-assert writes that already happened
-  ([issue 48](48-exclude-store-from-os-backup.md)). What an application-owned store lets you do
+  ([issue 48](Done/48-exclude-store-from-os-backup.md)). What an application-owned store lets you do
   about it that Hyperwyc cannot.
 - **When the store is unusable.** Hyperwyc degrades to pass-through and reports it; what a
   resilient application does with that.

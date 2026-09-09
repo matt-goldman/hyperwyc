@@ -90,7 +90,7 @@ consumers a first-class extension point, and keeps platform APIs out of the core
 
 ## Related: the derived key is not stable across an iOS restore
 
-Found while writing [issue 48](48-exclude-store-from-os-backup.md), and unverified on device.
+Found while writing [issue 48](Done/48-exclude-store-from-os-backup.md), and unverified on device.
 
 `DeriveKey` is `SHA256(UTF8(DirectoryPath))` over the absolute path. On iOS that path contains
 the app container UUID, which changes when the app is reinstalled or restored onto a new device.

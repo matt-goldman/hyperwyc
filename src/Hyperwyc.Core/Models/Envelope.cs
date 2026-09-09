@@ -63,14 +63,26 @@ public sealed class Envelope
     public byte[]? RequestBody { get; init; }
 
     /// <summary>
-    /// Indicates whether the request has been successfully synchronised
-    /// (sent to the remote server) at least once.
+    /// Whether this envelope is <b>excluded from the outbox</b>. Not what the name says.
     /// </summary>
+    /// <remarks>
+    /// A queued write carries <see langword="false"/> until it is delivered. A cached response
+    /// carries <see langword="true"/> from the moment it is created, having been "synced"
+    /// nowhere — it is simply not a pending write, and the outbox is defined by the negation of
+    /// this flag.
+    /// <para>
+    /// The name is wrong and there is no honest replacement for what it currently does:
+    /// <c>IsDelivered</c> would be actively false on a cached response where this is merely
+    /// vague. That is the tell that the model rather than the name is the problem, and it is
+    /// tracked as issue 55 — <see cref="Envelope"/> is two kinds of record wearing one type.
+    /// Deliberately left alone by the vocabulary pass rather than renamed into something worse.
+    /// </para>
+    /// </remarks>
     public bool IsSynced { get; set; }
 
     /// <summary>
-    /// Indicates whether the envelope has been moved to the dead-letter store
-    /// after exhausting all retry attempts.
+    /// Whether the envelope has been moved to the dead-letter store, which happens as soon as
+    /// the server answers with a non-success status. There are no retry attempts to exhaust.
     /// </summary>
     public bool IsDeadLettered { get; set; }
 
