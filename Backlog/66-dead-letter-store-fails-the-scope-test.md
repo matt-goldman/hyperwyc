@@ -12,12 +12,12 @@ That retention is Hyperwyc holding application data on the basis of a distinctio
 
 ### What landed
 
-| | |
-|---|---|
-| Removed | `IHyperwycStore.MoveToDeadLetterAsync`, `Envelope.IsDeadLettered`, `HyperwycEventType.OnFailed`, and `DeliveryOutcomeKind.Succeeded`/`Rejected` — which collapse into `Delivered` |
-| Renamed | `MarkDeliveredAsync` → `RemoveDeliveredAsync`. It deletes the record now, request body and headers included, and a method called *Mark* that deletes is the kind of name this repo files items about |
-| Changed | `FlushOnStartup` defaults to `false`. See below — it is the condition this item put on itself |
-| Kept | `DeliveryOutcome`, and `Envelope.LastOutcome`, which now only ever holds a transport failure. That is [23](23-v1-diagnostics-view.md)'s read path and the only account of an outbox that is not draining |
+|         |                                                                                                                                                                                                          |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Removed | `IHyperwycStore.MoveToDeadLetterAsync`, `Envelope.IsDeadLettered`, `HyperwycEventType.OnFailed`, and `DeliveryOutcomeKind.Succeeded`/`Rejected` — which collapse into `Delivered`                        |
+| Renamed | `MarkDeliveredAsync` → `RemoveDeliveredAsync`. It deletes the record now, request body and headers included, and a method called *Mark* that deletes is the kind of name this repo files items about     |
+| Changed | `FlushOnStartup` defaults to `false`. See below — it is the condition this item put on itself                                                                                                            |
+| Kept    | `DeliveryOutcome`, and `Envelope.LastOutcome`, which now only ever holds a transport failure. That is [23](23-v1-diagnostics-view.md)'s read path and the only account of an outbox that is not draining |
 
 **One place still reads the status code**, and it is worth knowing about rather than discovering: `InvalidateCacheOnWrite` drops cached reads only on a `2xx`. That is a cache-freshness judgement about Hyperwyc's own data and it follows RFC 9111 §4.4, which invalidates on a *non-error* response to an unsafe method. Invalidating on a `422` would throw away good cached reads for nothing. The line is who owns the data: the cache is ours, the response is the application's.
 

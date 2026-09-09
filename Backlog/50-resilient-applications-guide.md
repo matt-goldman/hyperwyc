@@ -109,3 +109,5 @@ Not a specification — a list of what has accumulated and would belong here.
   I build on it", which is a different reader on a different day.
 - When it is written, the scattered caveats it collects should link *to* it rather than being
   duplicated into it.
+- Must also include consideration for durable events.([72](72-events-as-an-outbox.md)). If we don't build that into Hyperwyc (and we almost certainly won't) it should be demonstrated as a pattern.
+- Consider a delete protection mechanism. This is something to go into the sample and patterns, and not Hyperwyc. Essentially would prevent resetting the store if there are items in the outbox. This applies only to destructive actions, e.g. archiving and creating a new one to recover from an unreadable store wouldn't be affected (and couldn't, as you wouldn't be able to determine if any items are pending), but calling ResetAsync should be blocked on a non-empty outbox, and so should deleting individual items, if we ship that capability.
