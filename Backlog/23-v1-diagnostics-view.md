@@ -49,12 +49,11 @@ This page is for developer reference and POC validation; it does not need to be 
 
 ## Acceptance Criteria
 
-- [ ] `GetPendingOutboxAsync()` ~~and `GetDeadLetteredAsync()`~~ added to `IHyperwyc` (or a diagnostics interface).
-- [ ] Implemented by the concrete Hyperwyc service, delegating to `IHyperwycStore`.
-- [ ] `PendingItem` and `DeadLetteredItem` record types defined, carrying `CorrelationId` and
+- [x] `GetPendingOutboxAsync()` ~~and `GetDeadLetteredAsync()`~~ added to `IHyperwyc` (or a diagnostics interface). (note: went with a new interface to respect the interface segregation principle)
+- [x] Implemented by the concrete Hyperwyc service, delegating to `IHyperwycStore`. (note done via Outbox processor)
+- [x] `PendingItem` ~~and `DeadLetteredItem`~~ record types defined, carrying `CorrelationId` and
       `LastOutcome` from [issue 40](Done/40-surface-deferred-outcomes.md).
-- [ ] A read path exists for dead-lettered envelopes, which is what turns 40's persisted failure
-      detail into something observable after a restart.
+- [ ] ~~A read path exists for dead-lettered envelopes, which is what turns 40's persisted failure detail into something observable after a restart.~~
 - [ ] `DiagnosticsPage` added to the MAUI sample app.
 - [ ] Unit tests cover both query methods (empty, populated, mixed states).
 

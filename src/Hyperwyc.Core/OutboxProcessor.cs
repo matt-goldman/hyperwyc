@@ -195,6 +195,16 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the pending outbox items and returns a read only list of PendingItem derived from them
+    /// </summary>
+    /// <returns></returns>
+    internal async Task<IReadOnlyList<PendingItem>> GetDiagnosticViewAsync(CancellationToken ct = default)
+    {
+        var outbox = await _store.GetPendingOutboxAsync(ct);
+
+        return [.. outbox.Select(qw => qw.GetDiagnosticView())];
+    }
 
     // -------------------------------------------------------------------------
     // Sending
@@ -350,6 +360,7 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     private async Task RecordOutcomeAsync(QueuedWrite write, DeliveryOutcome outcome, CancellationToken ct)
     {
         write.LastOutcome = outcome;
+        write.RetryCount++;
         await _store.UpsertQueuedWriteAsync(write, ct).ConfigureAwait(false);
     }
 
