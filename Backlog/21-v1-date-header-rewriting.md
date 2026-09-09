@@ -1,5 +1,7 @@
 # Issue 21 — [v1.0] `Date` Header Rewriting on Cached Responses
 
+**NOTE:** This needs further consideration. Callers may also expect to see the date header that truthfully represents the content. If we implement this, it must be configurable. In the meantime this is deprioritised.
+
 ## Summary
 
 When serving a response from the local cache, rewrite the `Date` header to the current time so callers cannot inadvertently rely on the original response timestamp.
