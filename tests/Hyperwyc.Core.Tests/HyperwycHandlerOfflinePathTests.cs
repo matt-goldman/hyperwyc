@@ -30,25 +30,21 @@ public class HyperwycHandlerOfflinePathTests
         return handler;
     }
 
-    private static Envelope SeedCachedEnvelope(string url, string body = "{}")
-    {
-        var envelope = new Envelope { Url = url, Method = "GET" };
-        envelope.Response = new CachedResponse
+    private static CachedResponse SeedCachedResponse(string url, string body = "{}") =>
+        new()
         {
+            Url = url,
             StatusCode = 200,
             Body = System.Text.Encoding.UTF8.GetBytes(body),
             CachedAt = DateTimeOffset.UtcNow,
         };
-        envelope.IsSynced = true; // cached responses are already synced; must not show in outbox
-        return envelope;
-    }
 
     // -------------------------------------------------------------------------
     // Offline write path
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task OfflineWrite_AddsEnvelopeToOutbox()
+    public async Task OfflineWrite_AddsWriteToOutbox()
     {
         var store = new InMemoryStore();
         using var client = new HttpClient(BuildOfflineHandler(store));
@@ -60,18 +56,6 @@ public class HyperwycHandlerOfflinePathTests
         Assert.Single(outbox);
         Assert.Equal("https://example.com/api/orders", outbox[0].Url);
         Assert.Equal("POST", outbox[0].Method);
-    }
-
-    [Fact]
-    public async Task OfflineWrite_EnvelopeIsNotSynced()
-    {
-        var store = new InMemoryStore();
-        using var client = new HttpClient(BuildOfflineHandler(store));
-
-        await client.PostAsync("https://example.com/api/orders", content: null);
-
-        var outbox = await store.GetPendingOutboxAsync();
-        Assert.False(outbox[0].IsSynced);
     }
 
     [Fact]
@@ -129,7 +113,7 @@ public class HyperwycHandlerOfflinePathTests
     public async Task OfflineRead_CacheAvailable_ReturnsCachedResponse()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", "[1,2,3]"));
+        await store.PutCachedResponseAsync(SeedCachedResponse("https://example.com/api/items", "[1,2,3]"));
 
         using var client = new HttpClient(BuildOfflineHandler(store));
         var response = await client.GetAsync("https://example.com/api/items");
@@ -143,7 +127,7 @@ public class HyperwycHandlerOfflinePathTests
     public async Task OfflineRead_CacheAvailable_DoesNotAddToOutbox()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items"));
+        await store.PutCachedResponseAsync(SeedCachedResponse("https://example.com/api/items"));
 
         using var client = new HttpClient(BuildOfflineHandler(store));
         await client.GetAsync("https://example.com/api/items");
@@ -156,7 +140,7 @@ public class HyperwycHandlerOfflinePathTests
     public async Task OfflineRead_ServesCachedResponseWithinItsTtl()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", "cached-data"));
+        await store.PutCachedResponseAsync(SeedCachedResponse("https://example.com/api/items", "cached-data"));
 
         var handler = new HyperwycHandler(
             store,
@@ -176,7 +160,7 @@ public class HyperwycHandlerOfflinePathTests
     public async Task OfflineRead_PastItsTtl_ServesNothingRatherThanSomethingTooOld()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", "too-old"));
+        await store.PutCachedResponseAsync(SeedCachedResponse("https://example.com/api/items", "too-old"));
 
         // The TTL means the same thing offline as online: how old a stored response may be and
         // still be served. Past it the caller gets the offline response as though nothing were

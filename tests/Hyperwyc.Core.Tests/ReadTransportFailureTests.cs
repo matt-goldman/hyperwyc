@@ -35,18 +35,13 @@ public class ReadTransportFailureTests
         new((Func<HttpRequestMessage, HttpResponseMessage>)(
             _ => throw new HttpRequestException(error, "the transport could not answer")));
 
-    private static Envelope Cached(string url, string body, TimeSpan age) =>
+    private static CachedResponse Cached(string url, string body, TimeSpan age) =>
         new()
         {
             Url = url,
-            Method = "GET",
-            IsSynced = true,
-            Response = new CachedResponse
-            {
-                StatusCode = 200,
-                Body = Encoding.UTF8.GetBytes(body),
-                CachedAt = DateTimeOffset.UtcNow - age,
-            },
+            StatusCode = 200,
+            Body = Encoding.UTF8.GetBytes(body),
+            CachedAt = DateTimeOffset.UtcNow - age,
         };
 
     private const string Url = "https://example.com/api/items";
@@ -80,7 +75,7 @@ public class ReadTransportFailureTests
         options.Routes.For("*", new RoutePolicy { SourcePriority = priority, Ttl = TimeSpan.FromMinutes(5) });
 
         var store = new InMemoryStore();
-        await store.UpsertAsync(Cached(Url, """{"v":1}""", age: TimeSpan.FromHours(2)));
+        await store.PutCachedResponseAsync(Cached(Url, """{"v":1}""", age: TimeSpan.FromHours(2)));
         using var client = Client(store, connected: true, Dead(), options);
 
         var response = await client.GetAsync(Url);
@@ -97,7 +92,7 @@ public class ReadTransportFailureTests
         options.Routes.For("*", new RoutePolicy { SourcePriority = priority, Ttl = TimeSpan.FromHours(1) });
 
         var store = new InMemoryStore();
-        await store.UpsertAsync(Cached(Url, """{"v":1}""", age: TimeSpan.FromMinutes(1)));
+        await store.PutCachedResponseAsync(Cached(Url, """{"v":1}""", age: TimeSpan.FromMinutes(1)));
         using var client = Client(store, connected: true, Dead(), options);
 
         var response = await client.GetAsync(Url);
@@ -111,7 +106,7 @@ public class ReadTransportFailureTests
         // The point of the whole change: a caller cannot tell whether the connectivity service
         // was right, so being wrong cannot cost correctness.
         var store = new InMemoryStore();
-        await store.UpsertAsync(Cached(Url, """{"v":1}""", age: TimeSpan.FromDays(9)));
+        await store.PutCachedResponseAsync(Cached(Url, """{"v":1}""", age: TimeSpan.FromDays(9)));
 
         using var wrong = Client(store, connected: true, Dead());
         using var right = Client(store, connected: false, Dead());
@@ -133,7 +128,7 @@ public class ReadTransportFailureTests
         options.Routes.For("*", RoutePolicy.NetworkOnly());
 
         var store = new InMemoryStore();
-        await store.UpsertAsync(Cached(Url, """{"v":1}""", age: TimeSpan.Zero));
+        await store.PutCachedResponseAsync(Cached(Url, """{"v":1}""", age: TimeSpan.Zero));
         using var client = Client(store, connected: true, Dead(), options);
 
         // NetworkOnly opts out of the store, so there is nothing to serve — but the caller is

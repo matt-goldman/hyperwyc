@@ -4,8 +4,8 @@ using Hyperwyc.Models;
 namespace Hyperwyc;
 
 /// <summary>
-/// An in-process, non-persistent <see cref="IHyperwycStore"/> backed by a
-/// thread-safe in-memory dictionary. Suitable for testing and for scenarios
+/// An in-process, non-persistent <see cref="IHyperwycStore"/> backed by
+/// thread-safe in-memory dictionaries. Suitable for testing and for scenarios
 /// where durability is not required.
 /// </summary>
 /// <remarks>
@@ -14,17 +14,25 @@ namespace Hyperwyc;
 /// </remarks>
 public sealed class InMemoryStore : IHyperwycStore
 {
-    private readonly Dictionary<string, Envelope> _store = new();
+    // Two dictionaries rather than one keyed by a discriminator: the two kinds have different
+    // keys — a URL and a generated id — and no query has any business seeing both. Issue 55.
+    private readonly Dictionary<string, CachedResponse> _cache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, QueuedWrite> _outbox = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _lock = new(1, 1);
 
+    // -------------------------------------------------------------------------
+    // Cache
+    // -------------------------------------------------------------------------
+
     /// <inheritdoc/>
-    public async Task<Envelope?> GetCachedResponseAsync(string url, CancellationToken ct = default)
+    public async Task<CachedResponse?> GetCachedResponseAsync(string url, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(url);
+
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            return _store.Values
-                .FirstOrDefault(e => e.Url == url && e.Response is not null);
+            return _cache.GetValueOrDefault(url);
         }
         finally
         {
@@ -33,14 +41,15 @@ public sealed class InMemoryStore : IHyperwycStore
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default)
+    public async Task PutCachedResponseAsync(CachedResponse response, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(response);
+
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            return [.. _store.Values
-                .Where(e => !e.IsSynced)
-                .OrderBy(e => e.CreatedUtc)];
+            // Keyed on the URL, so a refetch replaces rather than accumulating.
+            _cache[response.Url] = response;
         }
         finally
         {
@@ -49,14 +58,61 @@ public sealed class InMemoryStore : IHyperwycStore
     }
 
     /// <inheritdoc/>
-    public async Task UpsertAsync(Envelope envelope, CancellationToken ct = default)
+    public async Task InvalidateCacheForPrefixAsync(string urlPrefix, CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(envelope);
+        ArgumentNullException.ThrowIfNull(urlPrefix);
 
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            _store[envelope.Id] = envelope;
+            // Removes the record rather than emptying it. An entry with no body is reachable by
+            // nothing, so it would sit there until that exact URL happened to be fetched again —
+            // and prefix invalidation means the entries least likely to be refetched are exactly
+            // the ones it leaves behind. See issue 68.
+            //
+            // Queued writes are in the other dictionary, so a write under the same prefix is out
+            // of reach by construction. This used to be a filter on Response being non-null,
+            // which was a kind check written as a field check.
+            var stale = _cache.Keys
+                .Where(url => url.StartsWith(urlPrefix, StringComparison.Ordinal))
+                .ToList();
+
+            foreach (var url in stale)
+                _cache.Remove(url);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Outbox
+    // -------------------------------------------------------------------------
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<QueuedWrite>> GetPendingOutboxAsync(CancellationToken ct = default)
+    {
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return [.. _outbox.Values.OrderBy(w => w.CreatedUtc)];
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task UpsertQueuedWriteAsync(QueuedWrite write, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(write);
+
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            _outbox[write.Id] = write;
         }
         finally
         {
@@ -73,7 +129,7 @@ public sealed class InMemoryStore : IHyperwycStore
             // Removed rather than flagged. Hyperwyc holds outstanding work and nothing else, so
             // a delivered write leaves with its request body and headers rather than sitting in
             // the store carrying them. See ADR 0010.
-            _store.Remove(id);
+            _outbox.Remove(id);
         }
         finally
         {
@@ -81,37 +137,9 @@ public sealed class InMemoryStore : IHyperwycStore
         }
     }
 
-    /// <inheritdoc/>
-    public async Task InvalidateCacheForPrefixAsync(string urlPrefix, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(urlPrefix);
-
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            // Removes the record rather than nulling its Response. A husk with no response is
-            // reachable by nothing — GetCachedResponseAsync skips it for the null, and the outbox
-            // skips it because a cache envelope is IsSynced — so it would sit there until that
-            // exact URL happened to be fetched again. Prefix invalidation means the entries least
-            // likely to be refetched are exactly the ones it leaves behind. See issue #68.
-            //
-            // The filter on Response is what makes deleting safe: it selects entries that have a
-            // cached response to invalidate, which is what this method is for, and can therefore
-            // never match a queued write. Matching on the URL alone also swept up queued writes
-            // under the same prefix and wrote each one back unchanged.
-            var stale = _store.Values
-                .Where(e => e.Response is not null && e.Url.StartsWith(urlPrefix, StringComparison.Ordinal))
-                .Select(e => e.Id)
-                .ToList();
-
-            foreach (var id in stale)
-                _store.Remove(id);
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
+    // -------------------------------------------------------------------------
+    // Both
+    // -------------------------------------------------------------------------
 
     /// <inheritdoc/>
     public async Task ResetAsync(CancellationToken ct = default)
@@ -119,7 +147,8 @@ public sealed class InMemoryStore : IHyperwycStore
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            _store.Clear();
+            _cache.Clear();
+            _outbox.Clear();
         }
         finally
         {

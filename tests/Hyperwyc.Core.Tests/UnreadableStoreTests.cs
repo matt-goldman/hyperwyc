@@ -27,16 +27,22 @@ public class UnreadableStoreTests
         private readonly InMemoryStore _inner = new();
         public int WritesAccepted { get; private set; }
 
-        public Task<Envelope?> GetCachedResponseAsync(string url, CancellationToken ct = default) =>
+        public Task<CachedResponse?> GetCachedResponseAsync(string url, CancellationToken ct = default) =>
             throw failure;
 
-        public Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default) =>
+        public Task<IReadOnlyList<QueuedWrite>> GetPendingOutboxAsync(CancellationToken ct = default) =>
             throw failure;
 
-        public Task UpsertAsync(Envelope envelope, CancellationToken ct = default)
+        public Task PutCachedResponseAsync(CachedResponse response, CancellationToken ct = default)
         {
             WritesAccepted++;
-            return _inner.UpsertAsync(envelope, ct);
+            return _inner.PutCachedResponseAsync(response, ct);
+        }
+
+        public Task UpsertQueuedWriteAsync(QueuedWrite write, CancellationToken ct = default)
+        {
+            WritesAccepted++;
+            return _inner.UpsertQueuedWriteAsync(write, ct);
         }
 
         public Task RemoveDeliveredAsync(string id, CancellationToken ct = default) =>
@@ -175,9 +181,10 @@ public class UnreadableStoreTests
     private sealed class AlwaysFailingStore : IHyperwycStore
     {
         private static Exception Fail() => new CryptographicException("unreadable");
-        public Task<Envelope?> GetCachedResponseAsync(string u, CancellationToken ct = default) => throw Fail();
-        public Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default) => throw Fail();
-        public Task UpsertAsync(Envelope e, CancellationToken ct = default) => throw Fail();
+        public Task<CachedResponse?> GetCachedResponseAsync(string u, CancellationToken ct = default) => throw Fail();
+        public Task<IReadOnlyList<QueuedWrite>> GetPendingOutboxAsync(CancellationToken ct = default) => throw Fail();
+        public Task PutCachedResponseAsync(CachedResponse r, CancellationToken ct = default) => throw Fail();
+        public Task UpsertQueuedWriteAsync(QueuedWrite w, CancellationToken ct = default) => throw Fail();
         public Task RemoveDeliveredAsync(string id, CancellationToken ct = default) => throw Fail();
         public Task InvalidateCacheForPrefixAsync(string p, CancellationToken ct = default) => throw Fail();
         public Task ResetAsync(CancellationToken ct = default) => Task.CompletedTask;

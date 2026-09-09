@@ -15,9 +15,9 @@ namespace Hyperwyc.Tests;
 /// write it was and what the server said — whatever it said.
 /// </summary>
 /// <remarks>
-/// Since ADR 0010 the event is the <em>only</em> report of a delivery: the envelope is discarded
+/// Since ADR 0010 the event is the <em>only</em> report of a delivery: the write is discarded
 /// along with what came back, because an ordinary HTTP response is the application's to keep.
-/// The one outcome still written to the store is a transport failure, where the envelope is
+/// The one outcome still written to the store is a transport failure, where the write is
 /// still there to carry it.
 /// </remarks>
 public class DeferredOutcomeTests
@@ -40,7 +40,7 @@ public class DeferredOutcomeTests
         var queued = Assert.Single(await store.GetPendingOutboxAsync());
         Assert.Equal("sale-42", queued.CorrelationId);
 
-        // The envelope id stays Hyperwyc's own: the caller's value carries no uniqueness
+        // The write's id stays Hyperwyc's own: the caller's value carries no uniqueness
         // guarantee and must never become a store key.
         Assert.NotEqual("sale-42", queued.Id);
     }
@@ -102,7 +102,7 @@ public class DeferredOutcomeTests
         // apart, so a per-sale "failed" badge is unimplementable without this.
         var store = new InMemoryStore();
         foreach (var id in new[] { "sale-1", "sale-2", "sale-3" })
-            await store.UpsertAsync(Outbox(correlationId: id, body: id));
+            await store.UpsertQueuedWriteAsync(Outbox(correlationId: id, body: id));
 
         var events = new List<HyperwycEvent>();
         var stream = new HyperwycEventStream();
@@ -139,7 +139,7 @@ public class DeferredOutcomeTests
         const string ServerSaid = """{"error":"Only 20 left in stock.","available":20}""";
 
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox("sale-42"));
+        await store.UpsertQueuedWriteAsync(Outbox("sale-42"));
 
         var events = new List<HyperwycEvent>();
         var stream = new HyperwycEventStream();
@@ -171,7 +171,7 @@ public class DeferredOutcomeTests
         const string Created = """{"id":"srv-77","recordedAt":"2026-08-14T09:12:33Z"}""";
 
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox("sale-42"));
+        await store.UpsertQueuedWriteAsync(Outbox("sale-42"));
 
         var events = new List<HyperwycEvent>();
         var stream = new HyperwycEventStream();
@@ -199,7 +199,7 @@ public class DeferredOutcomeTests
     public async Task TransportFailure_IsDistinguishableFromAnHttpError()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox("sale-42"));
+        await store.UpsertQueuedWriteAsync(Outbox("sale-42"));
 
         var transport = new StubHttpMessageHandler(
             (Func<HttpRequestMessage, HttpResponseMessage>)(
@@ -208,7 +208,7 @@ public class DeferredOutcomeTests
         await using var orchestrator = Orchestrator(store, transport, new HyperwycEventStream());
         await orchestrator.FlushAsync();
 
-        // No event: the flush abandons and the envelope keeps its place. The record is what
+        // No event: the flush abandons and the write keeps its place. The record is what
         // explains an outbox that will not drain.
         var pending = Assert.Single(await store.GetPendingOutboxAsync());
         var outcome = Assert.IsType<DeliveryOutcome>(pending.LastOutcome);
@@ -225,8 +225,8 @@ public class DeferredOutcomeTests
         // consumer needs is not a retry distinction Hyperwyc cannot honour, but the status the
         // server actually gave, so the application can decide what to do about it.
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox("refused", body: "refused"));
-        await store.UpsertAsync(Outbox("unwell", body: "unwell"));
+        await store.UpsertQueuedWriteAsync(Outbox("refused", body: "refused"));
+        await store.UpsertQueuedWriteAsync(Outbox("unwell", body: "unwell"));
 
         var events = new List<HyperwycEvent>();
         var stream = new HyperwycEventStream();
@@ -267,7 +267,7 @@ public class DeferredOutcomeTests
     public async Task OversizedBody_IsClippedAndFlagged()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox("sale-42"));
+        await store.UpsertQueuedWriteAsync(Outbox("sale-42"));
 
         var events = new List<HyperwycEvent>();
         var stream = new HyperwycEventStream();
@@ -298,7 +298,7 @@ public class DeferredOutcomeTests
     public async Task ZeroCap_CapturesNoBodyButStillReportsTheStatus()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox("sale-42"));
+        await store.UpsertQueuedWriteAsync(Outbox("sale-42"));
 
         var events = new List<HyperwycEvent>();
         var stream = new HyperwycEventStream();
@@ -333,7 +333,7 @@ public class DeferredOutcomeTests
     public async Task TransportFailure_CarriesItsOutcomeThroughSerialisation()
     {
         var captured = new OutcomeCapturingStore(new InMemoryStore());
-        await captured.UpsertAsync(Outbox("sale-42"));
+        await captured.UpsertQueuedWriteAsync(Outbox("sale-42"));
 
         var transport = new StubHttpMessageHandler(
             (Func<HttpRequestMessage, HttpResponseMessage>)(
@@ -356,12 +356,12 @@ public class DeferredOutcomeTests
     }
 
     [Fact]
-    public async Task DeliveredEnvelope_IsNotWrittenBackToTheStore()
+    public async Task DeliveredWrite_IsNotWrittenBackToTheStore()
     {
         // The counterpart, and the change ADR 0010 actually makes: a rejection used to be
         // upserted with its outcome and then flagged. Now nothing is written at all.
         var captured = new OutcomeCapturingStore(new InMemoryStore());
-        await captured.UpsertAsync(Outbox("sale-42"));
+        await captured.UpsertQueuedWriteAsync(Outbox("sale-42"));
         captured.ForgetSnapshot();
 
         var transport = new StubHttpMessageHandler(_ =>
@@ -381,7 +381,7 @@ public class DeferredOutcomeTests
     // Helpers
     // -------------------------------------------------------------------------
 
-    private static Envelope Outbox(string correlationId, string? body = null) =>
+    private static QueuedWrite Outbox(string correlationId, string? body = null) =>
         new()
         {
             Url = Url,
@@ -443,9 +443,9 @@ public class DeferredOutcomeTests
     }
 
     /// <summary>
-    /// Delegates to an <see cref="InMemoryStore"/> while snapshotting each upsert as JSON,
-    /// so a test can read back what a durable store would actually have written rather than
-    /// the same object it handed in.
+    /// Delegates to an <see cref="InMemoryStore"/> while snapshotting each queued-write upsert
+    /// as JSON, so a test can read back what a durable store would actually have written rather
+    /// than the same object it handed in.
     /// </summary>
     private sealed class OutcomeCapturingStore(InMemoryStore inner) : IHyperwycStore
     {
@@ -455,19 +455,22 @@ public class DeferredOutcomeTests
 
         public void ForgetSnapshot() => _lastSnapshot = null;
 
-        public Envelope LastSnapshotAsRestored() =>
-            JsonSerializer.Deserialize<Envelope>(_lastSnapshot!)!;
+        public QueuedWrite LastSnapshotAsRestored() =>
+            JsonSerializer.Deserialize<QueuedWrite>(_lastSnapshot!)!;
 
-        public Task UpsertAsync(Envelope envelope, CancellationToken ct = default)
+        public Task UpsertQueuedWriteAsync(QueuedWrite write, CancellationToken ct = default)
         {
-            _lastSnapshot = JsonSerializer.Serialize(envelope);
-            return inner.UpsertAsync(envelope, ct);
+            _lastSnapshot = JsonSerializer.Serialize(write);
+            return inner.UpsertQueuedWriteAsync(write, ct);
         }
 
-        public Task<Envelope?> GetCachedResponseAsync(string url, CancellationToken ct = default) =>
+        public Task PutCachedResponseAsync(CachedResponse response, CancellationToken ct = default) =>
+            inner.PutCachedResponseAsync(response, ct);
+
+        public Task<CachedResponse?> GetCachedResponseAsync(string url, CancellationToken ct = default) =>
             inner.GetCachedResponseAsync(url, ct);
 
-        public Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default) =>
+        public Task<IReadOnlyList<QueuedWrite>> GetPendingOutboxAsync(CancellationToken ct = default) =>
             inner.GetPendingOutboxAsync(ct);
 
         public Task RemoveDeliveredAsync(string id, CancellationToken ct = default) =>

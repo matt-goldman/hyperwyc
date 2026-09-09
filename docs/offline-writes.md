@@ -47,7 +47,7 @@ Not *what* it answered. [Hyperwyc succeeds or fails at delivery](design.md#deliv
 
 | | What happens |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| The server answered — with anything at all | The delivery is complete. `OnDelivered` carries the status, reason phrase and body, and the envelope is discarded. The request reached the API, which was the job |
+| The server answered — with anything at all | The delivery is complete. `OnDelivered` carries the status, reason phrase and body, and the queued write is discarded. The request reached the API, which was the job |
 | No response at all — the connection failed            | Left queued. The flush stops and nothing is held against the remaining writes; the network being down says nothing about them |
 
 ```mermaid
@@ -60,9 +60,9 @@ stateDiagram-v2
     done --> [*]
 ```
 
-Every transition raises an event except one. A delivery attempt that fails at the transport records its outcome on the envelope and stops the flush, and publishes nothing at all — so from the event stream, a write that cannot be delivered simply goes quiet until it can be.
+Every transition raises an event except one. A delivery attempt that fails at the transport records its outcome on the queued write and stops the flush, and publishes nothing at all — so from the event stream, a write that cannot be delivered simply goes quiet until it can be.
 
-**One right-hand state, not two.** Refused and accepted writes are treated the same way, because they are the same thing from Hyperwyc's side: the envelope goes, request body and headers with it, and what the server said reaches you on the event. Nothing about a delivered write is kept — see [ADR 0010](decisions/0010-delivery-ends-hyperwycs-interest.md), which is honest about what that costs you.
+**One right-hand state, not two.** Refused and accepted writes are treated the same way, because they are the same thing from Hyperwyc's side: the record goes, request body and headers with it, and what the server said reaches you on the event. Nothing about a delivered write is kept — see [ADR 0010](decisions/0010-delivery-ends-hyperwycs-interest.md), which is honest about what that costs you.
 
 > **So subscribe before you flush.** The event is the *only* report of a delivery, and absence from the outbox does not distinguish accepted from rejected. If what the server said is something you need — a rejection's body is often the only account of why — read it when the event arrives and file it under your own correlation id, in your own store, which is [the record you were keeping anyway](design.md).
 
@@ -105,5 +105,5 @@ The same rule the rest of the library follows: connectivity is a *hint* about wh
 
 ## Interrupted deliveries
 
-If a flush is cut short, e.g. the app is backgrounded mid-replay, or the process is killed, the envelopes it hadn't delivered stay queued and go out on the next trigger. Nothing is held against them: only a delivery removes an envelope, and an interrupted flush delivered nothing.
+If a flush is cut short, e.g. the app is backgrounded mid-replay, or the process is killed, the writes it hadn't delivered stay queued and go out on the next trigger. Nothing is held against them: only a delivery removes a queued write, and an interrupted flush delivered nothing.
 

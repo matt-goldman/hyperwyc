@@ -8,11 +8,11 @@ namespace Hyperwyc.Cabinet;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Cabinet's <c>RecordSet&lt;Envelope&gt;</c> saves the whole set as a single document, so the
-/// only type that crosses the serialiser is <see cref="List{T}"/> of <see cref="Envelope"/>.
-/// Declaring the element type as well is not required — the generator walks the graph — but it
-/// is what makes the generated metadata for <see cref="Envelope"/> itself addressable, and it
-/// says out loud what the store's persisted shape is.
+/// Cabinet's <c>RecordSet&lt;T&gt;</c> saves the whole set as a single document, so the only
+/// types that cross the serialiser are <see cref="List{T}"/> of <see cref="CachedResponse"/> and
+/// of <see cref="QueuedWrite"/> — one set per kind of record. Declaring the element types as well
+/// is not required — the generator walks the graph — but it is what makes the generated metadata
+/// for each addressable, and it says out loud what the store's persisted shape is.
 /// </para>
 /// <para>
 /// This has to live in Hyperwyc rather than in Cabinet: System.Text.Json's generator cannot see
@@ -26,8 +26,10 @@ namespace Hyperwyc.Cabinet;
 /// from an internal context is legal; the accessibility rule only bites the other way round.
 /// </para>
 /// </remarks>
-[JsonSerializable(typeof(List<Envelope>))]
-[JsonSerializable(typeof(Envelope))]
+[JsonSerializable(typeof(List<CachedResponse>))]
+[JsonSerializable(typeof(CachedResponse))]
+[JsonSerializable(typeof(List<QueuedWrite>))]
+[JsonSerializable(typeof(QueuedWrite))]
 [JsonSourceGenerationOptions(WriteIndented = false)]
 internal sealed partial class HyperwycJsonContext : JsonSerializerContext
 {

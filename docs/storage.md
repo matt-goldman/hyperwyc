@@ -20,6 +20,8 @@ The store serialises through a source-generated `JsonSerializerContext`, so it i
 
 Request and response bodies are held as separate encrypted files rather than inside the record, and are read only on the path that needs them. That matters because the record document is rewritten in full on every write: a body left inline would be re-encrypted and rewritten every time any other entry changed.
 
+Cached responses and queued writes are kept in separate documents, so a burst of cache writes does not rewrite the outbox and a flush does not rewrite the cache.
+
 
 ## Implementing your own
 
@@ -44,28 +46,31 @@ Hyperwyc's own Cabinet-backed store originally shipped without this and corrupte
 
 Both shipped implementations now serialise every operation behind a single `SemaphoreSlim`. That is the simple answer and it is fast enough. Finer-grained locking is ok if you need it, but less will guarantee problems.
 
-### One type, two kinds of record
+### Two kinds of record, two types
 
-`Envelope` is both a **queued write** and a **cached response**, told apart by flags rather than by type:
+Hyperwyc stores two things and they have nothing in common but a URL:
 
-|                 | `IsSynced`               | `Response`          | `Id`                         |
-| --------------- | ------------------------ | ------------------- | ---------------------------- |
-| Queued write    | `false`                  | `null`              | a generated id               |
-| Cached response | **`true` from creation** | the stored response | `cache:{url}`, deterministic |
+|                            | Keyed on         | Holds                                                             |
+| -------------------------- | ---------------- | ----------------------------------------------------------------- |
+| `QueuedWrite`              | a generated `Id` | the captured request — method, headers, body, client name — and the outcome of the last delivery attempt |
+| `CachedResponse`           | its `Url`        | the stored response — status, headers, body — and when it was cached |
 
-A cached response is marked synced because it is *not a pending write* — it was never "synced" anywhere. Nothing ever flips the flag: a delivered write is removed from the store rather than marked, so in practice this says nothing but *which kind of record this is*. The name is wrong and is being dealt with; what matters for you is that **the outbox is defined by the negation of that flag**, so your `GetPendingOutboxAsync` must filter on it.
+Three methods are the cache's, three are the outbox's, and `ResetAsync` clears both. Nothing crosses: a queued write is never returned by a cache method and a cached response is never returned by an outbox one.
 
-The deterministic `cache:{url}` id is what stops cached responses accumulating one per fetch — a second fetch of the same URL upserts over the first. Do not key on anything else.
+These were one `Envelope` type until [issue 55](https://github.com/mattgoldman/hyperwyc/blob/main/Backlog/Done/55-envelope-kind-discriminator.md), told apart by an `IsSynced` boolean set `true` on responses that had been synced nowhere. If you wrote a store against that shape, the port is mechanical — the flag becomes the choice of which method is being called — and your queries get simpler, because every "is this the other kind?" filter goes.
+
+A cached response is keyed by the URL it caches, which is what stops the cache accumulating one entry per fetch: a second fetch of the same URL replaces the first. **Do not key it on anything else.**
 
 ### What each method owes
 
 | Method                          | The part that is not obvious                                                                                                                                                                                                              |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GetPendingOutboxAsync`         | Return **only** envelopes that are not synced, **ordered by `CreatedUtc` ascending**. The ordering is yours to provide — the processor does not sort, and delivery order is a promise Hyperwyc makes to its callers |
-| `GetCachedResponseAsync`        | Match the URL exactly, and return only an envelope that actually has a `Response`. TTL is not your concern — the handler decides staleness                                                                                                |
-| `UpsertAsync`                   | Keyed on `Envelope.Id`. Insert or replace; never append                                                                                                                                                                                   |
+| `GetCachedResponseAsync`        | Match the URL exactly. TTL is not your concern — the handler decides staleness                                                                                                |
+| `PutCachedResponseAsync`        | Keyed on `CachedResponse.Url`. Insert or replace; never append                                                                                                                                                                            |
+| `InvalidateCacheForPrefixAsync` | **Removes the record**, rather than emptying it. An ordinal `StartsWith` on the URL. An entry left with no body is reachable by nothing and nothing will ever come back for it                                                             |
+| `GetPendingOutboxAsync`         | Return every queued write, **ordered by `CreatedUtc` ascending**. The ordering is yours to provide — the processor does not sort, and delivery order is a promise Hyperwyc makes to its callers |
+| `UpsertQueuedWriteAsync`        | Keyed on `QueuedWrite.Id`. Both an insert and a replace are real — the handler queues, and the processor writes back a failed attempt's outcome                                                                                            |
 | `RemoveDeliveredAsync`          | **Delete the record**, do not flag it — request body and headers included. Hyperwyc is finished with a write once it has been delivered ([ADR 0010](decisions/0010-delivery-ends-hyperwycs-interest.md)), and a delivery is any answer from the server, refusal included. Takes an id and must tolerate one it does not recognise |
-| `InvalidateCacheForPrefixAsync` | **Removes the record**, and only records that actually have a `Response`. An ordinal `StartsWith` on the URL. The filter matters twice: a queued write under the same prefix must not be touched, and an entry with no response is not yours to reclaim here |
 | `ResetAsync`                    | Must work **when the store cannot be read** — clear the underlying files rather than enumerating records, because enumerating means deserialising, which is the thing that just failed                                                    |
 
 ### Throwing is how you report failure

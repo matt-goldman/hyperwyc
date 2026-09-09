@@ -31,21 +31,17 @@ public class HyperwycHandlerOnlinePathTests
 
     private static HttpClient MakeClient(HyperwycHandler handler) => new(handler);
 
-    private static Envelope SeedCachedEnvelope(
+    private static CachedResponse SeedCachedResponse(
         string url,
         string body = "{}",
-        int statusCode = 200)
-    {
-        var envelope = new Envelope { Url = url, Method = "GET" };
-        envelope.Response = new CachedResponse
+        int statusCode = 200) =>
+        new()
         {
+            Url = url,
             StatusCode = statusCode,
             Body = System.Text.Encoding.UTF8.GetBytes(body),
             CachedAt = DateTimeOffset.UtcNow,
         };
-        envelope.IsSynced = true; // cached responses are already synced
-        return envelope;
-    }
 
     // -------------------------------------------------------------------------
     // Write path — 2xx
@@ -55,7 +51,7 @@ public class HyperwycHandlerOnlinePathTests
     public async Task OnlineWrite_2xx_InvalidatesCacheForUrl()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/orders"));
+        await store.PutCachedResponseAsync(SeedCachedResponse("https://example.com/api/orders"));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         using var client = MakeClient(BuildHandler(store, stub, shouldInvalidate: true));
@@ -93,7 +89,7 @@ public class HyperwycHandlerOnlinePathTests
     public async Task OnlineWrite_2xx_WithInvalidationDisabled_DoesNotClearCache()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/orders"));
+        await store.PutCachedResponseAsync(SeedCachedResponse("https://example.com/api/orders"));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         using var client = MakeClient(BuildHandler(store, stub, shouldInvalidate: false));
@@ -121,8 +117,8 @@ public class HyperwycHandlerOnlinePathTests
     {
         var store = new InMemoryStore();
         // Both the collection and the specific resource are cached.
-        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/orders"));
-        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/orders/42"));
+        await store.PutCachedResponseAsync(SeedCachedResponse("https://example.com/api/orders"));
+        await store.PutCachedResponseAsync(SeedCachedResponse("https://example.com/api/orders/42"));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         using var client = MakeClient(BuildHandler(store, stub, shouldInvalidate: true));
@@ -140,8 +136,8 @@ public class HyperwycHandlerOnlinePathTests
     {
         var store = new InMemoryStore();
         var id = "550e8400-e29b-41d4-a716-446655440000";
-        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/notes"));
-        await store.UpsertAsync(SeedCachedEnvelope($"https://example.com/api/notes/{id}"));
+        await store.PutCachedResponseAsync(SeedCachedResponse("https://example.com/api/notes"));
+        await store.PutCachedResponseAsync(SeedCachedResponse($"https://example.com/api/notes/{id}"));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.NoContent));
         using var client = MakeClient(BuildHandler(store, stub, shouldInvalidate: true));
@@ -184,7 +180,7 @@ public class HyperwycHandlerOnlinePathTests
     public async Task OnlineWrite_Non2xx_DoesNotInvalidateCache()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/orders"));
+        await store.PutCachedResponseAsync(SeedCachedResponse("https://example.com/api/orders"));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.InternalServerError));
         using var client = MakeClient(BuildHandler(store, stub, shouldInvalidate: true));
@@ -237,7 +233,7 @@ public class HyperwycHandlerOnlinePathTests
     public async Task OnlineRead_FreshCache_DoesNotCallNetwork()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", body: "[1,2,3]"));
+        await store.PutCachedResponseAsync(SeedCachedResponse("https://example.com/api/items", body: "[1,2,3]"));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         using var client = MakeClient(BuildHandler(store, stub, cacheIsStale: false));
@@ -251,7 +247,7 @@ public class HyperwycHandlerOnlinePathTests
     public async Task OnlineRead_FreshCache_ReturnsCachedStatusAndBody()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", body: "[1,2,3]", statusCode: 200));
+        await store.PutCachedResponseAsync(SeedCachedResponse("https://example.com/api/items", body: "[1,2,3]", statusCode: 200));
 
         var stub = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.InternalServerError));
         using var client = MakeClient(BuildHandler(store, stub, cacheIsStale: false));
@@ -271,7 +267,7 @@ public class HyperwycHandlerOnlinePathTests
     public async Task OnlineRead_StaleCache_CallsNetworkAndReturnsFreshResponse()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(SeedCachedEnvelope("https://example.com/api/items", body: "[\"stale\"]"));
+        await store.PutCachedResponseAsync(SeedCachedResponse("https://example.com/api/items", body: "[\"stale\"]"));
 
         var freshResponse = new HttpResponseMessage(HttpStatusCode.OK)
         {

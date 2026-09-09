@@ -60,8 +60,8 @@ public class ResetStoreTests
     public async Task Reset_DiscardsQueuedWritesAndCachedResponses()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox());
-        await store.UpsertAsync(Cached("https://example.com/api/products"));
+        await store.UpsertQueuedWriteAsync(Outbox());
+        await store.PutCachedResponseAsync(Cached("https://example.com/api/products"));
 
         using var sp = Build(store, new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)));
 
@@ -75,17 +75,17 @@ public class ResetStoreTests
     public async Task Reset_LeavesTheStoreUsable()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox());
+        await store.UpsertQueuedWriteAsync(Outbox());
 
         var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         using var sp = Build(store, transport);
         var hyperwyc = sp.GetRequiredService<IHyperwyc>();
 
         await hyperwyc.ResetStoreAsync();
-        await store.UpsertAsync(Outbox());
+        await store.UpsertQueuedWriteAsync(Outbox());
         await hyperwyc.FlushAsync();
 
-        // The envelope queued after the reset is delivered normally.
+        // The write queued after the reset is delivered normally.
         Assert.Equal(1, transport.CallCount);
         Assert.Empty(await store.GetPendingOutboxAsync());
     }
@@ -98,7 +98,7 @@ public class ResetStoreTests
     public async Task Reset_DoesNotSendQueuedWrites()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox());
+        await store.UpsertQueuedWriteAsync(Outbox());
 
         var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         using var sp = Build(store, transport);
@@ -119,7 +119,7 @@ public class ResetStoreTests
     public async Task Reset_WaitsForAnInFlightFlush()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox());
+        await store.UpsertQueuedWriteAsync(Outbox());
 
         var transport = new GatedTransport(HttpStatusCode.OK);
         using var sp = Build(store, transport);
@@ -144,11 +144,11 @@ public class ResetStoreTests
     [Fact]
     public async Task Reset_IsNotUndoneByAFlushWritingBackAfterTheWipe()
     {
-        // The sharp end. A transiently-failing envelope is upserted by DeferAsync when the
-        // attempt completes; if that lands after the wipe the envelope is resurrected, and on
+        // The sharp end. A transiently-failing write is upserted when the attempt completes;
+        // if that lands after the wipe the write is resurrected, and on
         // a logout that means the previous user's queued write comes back.
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox());
+        await store.UpsertQueuedWriteAsync(Outbox());
 
         var transport = new GatedTransport(HttpStatusCode.ServiceUnavailable);
 
@@ -169,8 +169,8 @@ public class ResetStoreTests
     public async Task Reset_ThenFlush_SendsNothing()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox());
-        await store.UpsertAsync(Outbox());
+        await store.UpsertQueuedWriteAsync(Outbox());
+        await store.UpsertQueuedWriteAsync(Outbox());
 
         var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         using var sp = Build(store, transport);
@@ -186,19 +186,14 @@ public class ResetStoreTests
     // Helpers
     // -------------------------------------------------------------------------
 
-    private static Envelope Outbox() => new() { Url = Url, Method = "POST" };
+    private static QueuedWrite Outbox() => new() { Url = Url, Method = "POST" };
 
-    private static Envelope Cached(string url) => new()
+    private static CachedResponse Cached(string url) => new()
     {
         Url = url,
-        Method = "GET",
-        IsSynced = true,
-        Response = new CachedResponse
-        {
-            StatusCode = 200,
-            Body = "[]"u8.ToArray(),
-            CachedAt = DateTimeOffset.UtcNow,
-        },
+        StatusCode = 200,
+        Body = "[]"u8.ToArray(),
+        CachedAt = DateTimeOffset.UtcNow,
     };
 
     private static ServiceProvider Build(IHyperwycStore store, HttpMessageHandler transport)

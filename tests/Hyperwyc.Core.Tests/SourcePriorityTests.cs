@@ -25,22 +25,18 @@ public class SourcePriorityTests
             store,
             new FakeConnectivityService(isConnected),
             new HyperwycEventStream(),
-            // A zero TTL makes every cached entry stale; CachedEnvelope stamps CachedAt as now.
+            // A zero TTL makes every cached entry stale; Cached stamps CachedAt as now.
             OptionsFor(strategy, cacheIsStale), TestHealth())
         { InnerHandler = inner };
 
-    private static Envelope CachedEnvelope(string body = "cached")
-    {
-        var envelope = new Envelope { Url = Url, Method = "GET" };
-        envelope.Response = new CachedResponse
+    private static CachedResponse Cached(string body = "cached") =>
+        new()
         {
+            Url = Url,
             StatusCode = 200,
             Body = System.Text.Encoding.UTF8.GetBytes(body),
             CachedAt = DateTimeOffset.UtcNow,
         };
-        envelope.IsSynced = true;
-        return envelope;
-    }
 
     private static StubHttpMessageHandler NetworkReturning(string body = "network") =>
         new(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
@@ -58,7 +54,7 @@ public class SourcePriorityTests
     public async Task NetworkOnly_IgnoresFreshCache_AndCallsNetwork()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(CachedEnvelope());
+        await store.PutCachedResponseAsync(Cached());
         var stub = NetworkReturning();
         using var client = new HttpClient(BuildHandler(store, stub, SourcePriority.NetworkOnly));
 
@@ -84,7 +80,7 @@ public class SourcePriorityTests
     public async Task NetworkOnly_Offline_DoesNotServeCache()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(CachedEnvelope());
+        await store.PutCachedResponseAsync(Cached());
         var stub = NetworkReturning();
         using var client = new HttpClient(
             BuildHandler(store, stub, SourcePriority.NetworkOnly, isConnected: false));
@@ -107,7 +103,7 @@ public class SourcePriorityTests
     public async Task NetworkFirst_CallsNetwork_EvenWhenCacheIsFresh()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(CachedEnvelope());
+        await store.PutCachedResponseAsync(Cached());
         var stub = NetworkReturning();
         using var client = new HttpClient(BuildHandler(store, stub, SourcePriority.NetworkFirst));
 
@@ -121,7 +117,7 @@ public class SourcePriorityTests
     public async Task NetworkFirst_FallsBackToCache_WhenNetworkThrows()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(CachedEnvelope());
+        await store.PutCachedResponseAsync(Cached());
         var stub = NetworkFailing();
         using var client = new HttpClient(BuildHandler(store, stub, SourcePriority.NetworkFirst));
 
@@ -155,7 +151,7 @@ public class SourcePriorityTests
 
         var cached = await store.GetCachedResponseAsync(Url);
         Assert.NotNull(cached);
-        Assert.Equal("network", cached!.Response!.GetBodyAsText());
+        Assert.Equal("network", cached!.GetBodyAsText());
     }
 
     // -------------------------------------------------------------------------
@@ -166,7 +162,7 @@ public class SourcePriorityTests
     public async Task CacheFirst_ServesFreshCache_WithoutCallingNetwork()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(CachedEnvelope());
+        await store.PutCachedResponseAsync(Cached());
         var stub = NetworkReturning();
         using var client = new HttpClient(BuildHandler(store, stub, SourcePriority.CacheFirst));
 
@@ -180,7 +176,7 @@ public class SourcePriorityTests
     public async Task CacheFirst_StaleCache_CallsNetwork()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(CachedEnvelope());
+        await store.PutCachedResponseAsync(Cached());
         var stub = NetworkReturning();
         using var client = new HttpClient(
             BuildHandler(store, stub, SourcePriority.CacheFirst, cacheIsStale: true));
@@ -195,7 +191,7 @@ public class SourcePriorityTests
     public async Task CacheFirst_NetworkThrows_DoesNotServeTheStaleCache()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(CachedEnvelope());
+        await store.PutCachedResponseAsync(Cached());
         var stub = NetworkFailing();
         using var client = new HttpClient(
             BuildHandler(store, stub, SourcePriority.CacheFirst, cacheIsStale: true));

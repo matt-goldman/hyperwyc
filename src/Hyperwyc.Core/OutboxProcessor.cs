@@ -52,9 +52,9 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// <see cref="HyperwycOptions.ReplayTransport"/> for ownership.
     /// </param>
     /// <param name="httpClientFactory">
-    /// Used to replay an envelope through the named client it was queued on, so that
-    /// downstream handlers such as auth apply to replays. When absent, or when an
-    /// envelope carries no client name, <paramref name="transport"/> is used instead.
+    /// Used to replay a write through the named client it was queued on, so that
+    /// downstream handlers such as auth apply to replays. When absent, or when a
+    /// write carries no client name, <paramref name="transport"/> is used instead.
     /// </param>
     public OutboxProcessor(
         IHyperwycStore store,
@@ -89,14 +89,14 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Drains the outbox, making one delivery attempt per eligible envelope in
-    /// <see cref="Models.Envelope.CreatedUtc"/> ascending order.
+    /// Drains the outbox, making one delivery attempt per queued write in
+    /// <see cref="Models.QueuedWrite.CreatedUtc"/> ascending order.
     /// If a flush is already in progress this call returns immediately.
     /// </summary>
     /// <remarks>
     /// One attempt each, not a retry loop, and nothing is scheduled. Any answer from the
-    /// server is final and the envelope is discarded, whatever the status. Only a transport
-    /// failure leaves an envelope queued — and it ends the flush rather than moving to the next
+    /// server is final and the write is discarded, whatever the status. Only a transport
+    /// failure leaves a write queued — and it ends the flush rather than moving to the next
     /// one, because an unusable network is a fact about those too.
     /// </remarks>
     public async Task FlushAsync(CancellationToken ct = default)
@@ -115,7 +115,7 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
 
         try
         {
-            IReadOnlyList<Envelope> ready;
+            IReadOnlyList<QueuedWrite> ready;
             try
             {
                 ready = await _store.GetPendingOutboxAsync(token).ConfigureAwait(false);
@@ -128,16 +128,16 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
                 return;
             }
 
-            foreach (var envelope in ready)
+            foreach (var write in ready)
             {
                 if (token.IsCancellationRequested) break;
 
-                var outcome = await SendAsync(envelope, token).ConfigureAwait(false);
+                var outcome = await SendAsync(write, token).ConfigureAwait(false);
 
                 if (outcome == SendOutcome.ConnectivityLost)
                 {
                     // The premise of this flush was that the network is reachable. It is
-                    // not, so the remaining envelopes would fail for the same reason.
+                    // not, so the remaining writes would fail for the same reason.
                     // Stop and wait to be told connectivity has returned.
                     break;
                 }
@@ -160,10 +160,10 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// </para>
     /// <para>
     /// The gate is acquired <em>blocking</em>, unlike <see cref="FlushAsync"/>'s
-    /// try-acquire. A flush that is mid-loop holds a list of envelopes read before the wipe
+    /// try-acquire. A flush that is mid-loop holds a list of writes read before the wipe
     /// and keeps acting on them: it would go on sending writes the caller just asked to
     /// discard, and — worse — <c>RecordOutcomeAsync</c> writes back, so a
-    /// transport-failed envelope would be <em>re-inserted</em> into a store that had just
+    /// transport-failed write would be <em>re-inserted</em> into a store that had just
     /// been emptied. On the logout this method exists for, that resurrects the previous
     /// user's data.
     /// </para>
@@ -205,7 +205,7 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// </summary>
     private enum SendOutcome
     {
-        /// <summary>The server answered; the envelope is gone from the store.</summary>
+        /// <summary>The server answered; the write is gone from the store.</summary>
         Delivered,
 
         /// <summary>The network is unreachable, so the rest of the flush is pointless.</summary>
@@ -213,28 +213,28 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     }
 
     /// <summary>
-    /// Makes a single delivery attempt. An envelope stays in the outbox only when no response
+    /// Makes a single delivery attempt. A write stays in the outbox only when no response
     /// was received; any answer from the server is a final outcome.
     /// </summary>
-    private async Task<SendOutcome> SendAsync(Envelope envelope, CancellationToken ct)
+    private async Task<SendOutcome> SendAsync(QueuedWrite write, CancellationToken ct)
     {
-        using var request = BuildRequest(envelope);
+        using var request = BuildRequest(write);
 
         HttpResponseMessage response;
         try
         {
-            response = await ResolveInvoker(envelope).SendAsync(request, ct).ConfigureAwait(false);
+            response = await ResolveInvoker(write).SendAsync(request, ct).ConfigureAwait(false);
         }
         catch (HttpRequestException ex)
         {
             // The device believed it was online but the network is not usable — a captive
             // portal, DNS failure, or signal that dropped mid-flush. Every remaining
-            // envelope would fail identically, so report it and let the flush stop.
+            // write would fail identically, so report it and let the flush stop.
             //
-            // Recorded on the envelope even though no event fires: "last attempt could not
+            // Recorded on the write even though no event fires: "last attempt could not
             // reach the host" is exactly what a diagnostics view needs to explain an outbox
             // that is not draining. See issue 23 — it is the only place this is visible.
-            await RecordOutcomeAsync(envelope, TransportOutcome(ex), ct).ConfigureAwait(false);
+            await RecordOutcomeAsync(write, TransportOutcome(ex), ct).ConfigureAwait(false);
             return SendOutcome.ConnectivityLost;
         }
 
@@ -257,9 +257,9 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
             // resource — server-assigned ids, normalised values — which the caller never saw.
             // Either way this event is the only place it appears.
             var outcome = await OutcomeFromAsync(
-                response, envelope, DeliveryOutcomeKind.Delivered, ct).ConfigureAwait(false);
+                response, DeliveryOutcomeKind.Delivered, ct).ConfigureAwait(false);
 
-            await DeliverAsync(envelope, outcome, response.IsSuccessStatusCode, ct).ConfigureAwait(false);
+            await DeliverAsync(write, outcome, response.IsSuccessStatusCode, ct).ConfigureAwait(false);
             return SendOutcome.Delivered;
         }
     }
@@ -267,20 +267,19 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     // -------------------------------------------------------------------------
     // Outcome capture
     //
-    // A delivery outcome is published and not persisted: the envelope is gone by then, and what
+    // A delivery outcome is published and not persisted: the write is gone by then, and what
     // the server said is an ordinary HTTP response that the application owns rather than
     // Hyperwyc. The event is therefore the only report of it — see ADR 0010, and note that this
     // is why FlushOnStartup defaults to false.
     //
     // A transport failure is the other way round. It publishes nothing and is written to the
-    // envelope, which is still there, because an outbox that is not draining has to be able to
-    // explain itself after a restart. See issue 23.
+    // queued write, which is still there, because an outbox that is not draining has to be able
+    // to explain itself after a restart. See issue 23.
     // -------------------------------------------------------------------------
 
     /// <summary>Builds a <see cref="DeliveryOutcome"/> from a response, reading a capped body.</summary>
     private async Task<DeliveryOutcome> OutcomeFromAsync(
         HttpResponseMessage response,
-        Envelope envelope,
         DeliveryOutcomeKind kind,
         CancellationToken ct)
     {
@@ -347,30 +346,30 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
         }
     }
 
-    /// <summary>Persists <paramref name="outcome"/> against the envelope.</summary>
-    private async Task RecordOutcomeAsync(Envelope envelope, DeliveryOutcome outcome, CancellationToken ct)
+    /// <summary>Persists <paramref name="outcome"/> against the queued write.</summary>
+    private async Task RecordOutcomeAsync(QueuedWrite write, DeliveryOutcome outcome, CancellationToken ct)
     {
-        envelope.LastOutcome = outcome;
-        await _store.UpsertAsync(envelope, ct).ConfigureAwait(false);
+        write.LastOutcome = outcome;
+        await _store.UpsertQueuedWriteAsync(write, ct).ConfigureAwait(false);
     }
 
-    private static HyperwycEvent EventFor(HyperwycEventType type, Envelope envelope, DeliveryOutcome? outcome) =>
+    private static HyperwycEvent EventFor(HyperwycEventType type, QueuedWrite write, DeliveryOutcome? outcome) =>
         new(type,
-            envelope.Url,
-            envelope.Method,
+            write.Url,
+            write.Method,
             DateTimeOffset.UtcNow,
-            CorrelationId: envelope.CorrelationId,
-            RequestId: envelope.Id,
-            RequestBody: envelope.RequestBody,
+            CorrelationId: write.CorrelationId,
+            RequestId: write.Id,
+            RequestBody: write.RequestBody,
             Outcome: outcome);
 
     /// <summary>
-    /// Discards the delivered envelope, publishes the outcome, and invalidates the cache if the
+    /// Discards the delivered write, publishes the outcome, and invalidates the cache if the
     /// route asks for it.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The envelope goes first and the event follows, which is the right order: a crash between
+    /// The record goes first and the event follows, which is the right order: a crash between
     /// them loses the notification, whereas the reverse would announce a delivery for a write
     /// still sitting in the outbox and about to go out again.
     /// </para>
@@ -383,15 +382,15 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// </para>
     /// </remarks>
     private async Task DeliverAsync(
-        Envelope envelope, DeliveryOutcome outcome, bool succeeded, CancellationToken ct)
+        QueuedWrite write, DeliveryOutcome outcome, bool succeeded, CancellationToken ct)
     {
-        await _store.RemoveDeliveredAsync(envelope.Id, ct).ConfigureAwait(false);
+        await _store.RemoveDeliveredAsync(write.Id, ct).ConfigureAwait(false);
 
-        _events.Publish(EventFor(HyperwycEventType.OnDelivered, envelope, outcome));
+        _events.Publish(EventFor(HyperwycEventType.OnDelivered, write, outcome));
 
         if (!succeeded) return;
 
-        using var request = BuildRequest(envelope);
+        using var request = BuildRequest(write);
         if (_options.Routes.PolicyFor(request.RequestUri).InvalidateCacheOnWrite)
         {
             var prefix = HyperwycHandler.DeriveInvalidationPrefix(request.RequestUri);
@@ -415,18 +414,18 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// requests. <see cref="HyperwycHandler"/> recognises the replay marker and steps
     /// aside, so the request is not intercepted a second time.
     /// </remarks>
-    private HttpMessageInvoker ResolveInvoker(Envelope envelope)
+    private HttpMessageInvoker ResolveInvoker(QueuedWrite write)
     {
-        if (_httpClientFactory is not null && !string.IsNullOrEmpty(envelope.ClientName))
-            return _httpClientFactory.CreateClient(envelope.ClientName);
+        if (_httpClientFactory is not null && !string.IsNullOrEmpty(write.ClientName))
+            return _httpClientFactory.CreateClient(write.ClientName);
 
         return _fallbackInvoker;
     }
 
-    private static HttpRequestMessage BuildRequest(Envelope envelope)
+    private static HttpRequestMessage BuildRequest(QueuedWrite write)
     {
-        var method = new HttpMethod(envelope.Method);
-        var request = new HttpRequestMessage(method, envelope.Url);
+        var method = new HttpMethod(write.Method);
+        var request = new HttpRequestMessage(method, write.Url);
 
         // Applied per attempt: BuildRequest constructs a fresh message each retry, so
         // the marker cannot be assumed to carry over.
@@ -440,12 +439,12 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
         // ByteArrayContent, so the bytes go back out exactly as they came in, and — unlike
         // StringContent — it stamps no Content-Type of its own, leaving the captured headers
         // below as the single source of truth.
-        if (envelope.RequestBody is not null)
-            request.Content = new ByteArrayContent(envelope.RequestBody);
+        if (write.RequestBody is not null)
+            request.Content = new ByteArrayContent(write.RequestBody);
 
         // Replayed verbatim, including anything the application set for its own
         // duplicate suppression. Hyperwyc adds nothing of its own.
-        foreach (var (key, value) in envelope.RequestHeaders)
+        foreach (var (key, value) in write.RequestHeaders)
         {
             // Content-Length describes the body being sent, not the caller's intent, and
             // HttpClient computes it. Replaying a captured value risks contradicting the
@@ -490,7 +489,7 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Shutdown is deliberately not a flush trigger. Envelopes are queued only
+    /// Shutdown is deliberately not a flush trigger. Writes are queued only
     /// because connectivity was poor, and shutting down does not improve
     /// connectivity — anything still queued is replayed at next start. An
     /// interrupted flush therefore costs nothing but the current attempt.
@@ -511,7 +510,7 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// The wait is bounded by cancellation: the flush loop breaks at its next
-    /// envelope boundary and any in-progress send is cancelled. This does not
+    /// write boundary and any in-progress send is cancelled. This does not
     /// wait for queued work to finish
     /// sending — see <see cref="Dispose"/> for why shutdown is not a flush trigger.
     /// </remarks>

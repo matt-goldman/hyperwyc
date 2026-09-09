@@ -13,12 +13,13 @@ namespace Hyperwyc.Tests;
 /// previous one.
 /// </summary>
 /// <remarks>
-/// Cache envelopes used to be created with a fresh <c>Guid</c> like any other envelope, and
-/// <c>UpsertAsync</c> keys on that id — so every refetch inserted rather than replaced, and
+/// Cache entries used to be created with a fresh <c>Guid</c> like any other record, and the
+/// store keyed on that id — so every refetch inserted rather than replaced, and
 /// <c>GetCachedResponseAsync</c>'s <c>FirstOrDefault</c> kept returning the oldest. The cache
-/// froze at the first response ever stored and the store grew by an unreadable envelope per
+/// froze at the first response ever stored and the store grew by an unreadable record per
 /// refetch. Found in the sample: recording a sale online updated the quantities on screen, then
-/// going offline showed the original ones again.
+/// going offline showed the original ones again. The entry is now keyed by the URL it caches,
+/// which is the same fix stated as identity rather than as an id convention.
 /// </remarks>
 public class CacheRefreshTests
 {
@@ -66,11 +67,11 @@ public class CacheRefreshTests
         var cached = await store.GetCachedResponseAsync(Url);
 
         Assert.Equal(3, transport.Version);
-        Assert.Equal("stock-v3", cached?.Response?.GetBodyAsText());
+        Assert.Equal("stock-v3", cached?.GetBodyAsText());
     }
 
     [Fact]
-    public async Task Refetching_DoesNotAccumulateEnvelopes()
+    public async Task Refetching_DoesNotAccumulateCacheEntries()
     {
         var store = new CountingStore();
 
@@ -78,7 +79,7 @@ public class CacheRefreshTests
             for (var i = 0; i < 5; i++)
                 await client.GetAsync(Url);
 
-        // Nothing queued, and exactly one envelope in the store — not five.
+        // Nothing queued, and exactly one cache entry in the store — not five.
         Assert.Empty(await store.GetPendingOutboxAsync());
         Assert.Equal(1, store.Count);
     }
@@ -125,8 +126,8 @@ public class CacheRefreshTests
     [Fact]
     public async Task QueuedWritesToACachedUrl_AreNotDisturbed()
     {
-        // Cache ids are prefixed, so they can never collide with a queued write's random id —
-        // even when the write targets a URL that is also cached.
+        // The two kinds are different types in different partitions of the store, so a cached
+        // response and a queued write to the same URL cannot disturb each other.
         var store = new InMemoryStore();
 
         using (var offline = new HttpClient(Handler(
@@ -145,29 +146,32 @@ public class CacheRefreshTests
     }
 
     /// <summary>
-    /// Delegates to an <see cref="InMemoryStore"/> while tracking the ids it has been asked
-    /// to store, so a test can see how many envelopes actually exist rather than only what the
-    /// query methods choose to return. Accumulation is otherwise invisible: an orphaned cache
-    /// envelope is excluded from the outbox and shadowed in the cache lookup.
+    /// Delegates to an <see cref="InMemoryStore"/> while tracking the URLs it has been asked
+    /// to cache, so a test can see how many entries actually exist rather than only what the
+    /// query methods choose to return. Accumulation is otherwise invisible: a shadowed cache
+    /// entry is returned by nothing.
     /// </summary>
     private sealed class CountingStore : IHyperwycStore
     {
         private readonly InMemoryStore _inner = new();
-        private readonly HashSet<string> _ids = [];
+        private readonly HashSet<string> _cached = [];
 
-        public int Count => _ids.Count;
+        public int Count => _cached.Count;
 
-        public Task UpsertAsync(Envelope envelope, CancellationToken ct = default)
+        public Task PutCachedResponseAsync(CachedResponse response, CancellationToken ct = default)
         {
-            _ids.Add(envelope.Id);
-            return _inner.UpsertAsync(envelope, ct);
+            _cached.Add(response.Url);
+            return _inner.PutCachedResponseAsync(response, ct);
         }
 
-        public Task<Envelope?> GetCachedResponseAsync(string url, CancellationToken ct = default) =>
+        public Task<CachedResponse?> GetCachedResponseAsync(string url, CancellationToken ct = default) =>
             _inner.GetCachedResponseAsync(url, ct);
 
-        public Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default) =>
+        public Task<IReadOnlyList<QueuedWrite>> GetPendingOutboxAsync(CancellationToken ct = default) =>
             _inner.GetPendingOutboxAsync(ct);
+
+        public Task UpsertQueuedWriteAsync(QueuedWrite write, CancellationToken ct = default) =>
+            _inner.UpsertQueuedWriteAsync(write, ct);
 
         public Task RemoveDeliveredAsync(string id, CancellationToken ct = default) =>
             _inner.RemoveDeliveredAsync(id, ct);
@@ -177,7 +181,7 @@ public class CacheRefreshTests
 
         public Task ResetAsync(CancellationToken ct = default)
         {
-            _ids.Clear();
+            _cached.Clear();
             return _inner.ResetAsync(ct);
         }
     }

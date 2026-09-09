@@ -8,7 +8,7 @@ The output is **metrics and options**: evidence that Hyperwyc's performance — 
 
 ## `IHyperwycStore` may move under this
 
-**Not a dependency in either direction, and this item is not on anyone's critical path.** A caveat only: [66](66-dead-letter-store-fails-the-scope-test.md) would remove `MoveToDeadLetterAsync`, and [55](55-envelope-kind-discriminator.md) may split `Envelope` in two and `UpsertAsync` with it.
+**Not a dependency in either direction, and this item is not on anyone's critical path.** A caveat only: [66](66-dead-letter-store-fails-the-scope-test.md) would remove `MoveToDeadLetterAsync`, and [55](Done/55-envelope-kind-discriminator.md) may split `Envelope` in two and `UpsertAsync` with it.
 
 That matters for the *alternative implementations* rather than the benchmarks — writing LiteDB and SQLite stores against a shape that is about to change means writing them twice. If this is picked up while either of those is live, do the harness and leave the implementations, or accept the rework knowingly.
 

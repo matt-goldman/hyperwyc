@@ -47,7 +47,7 @@ a word.
 **`Envelope.IsSynced` was deliberately left.** It is set `true` on cached responses, so it means
 "not a pending outbox entry" — renaming it `IsDelivered` would have been actively false rather
 than merely vague. That it could not be renamed is the tell that the model is wrong, not the
-name; tracked as [issue 55](../../Backlog/55-envelope-kind-discriminator.md).
+name; tracked as [issue 55](../../Backlog/Done/55-envelope-kind-discriminator.md).
 
 Run as a pure mechanical pass with no behaviour edits, test count identical either side (29 and
 263). Backlog items in `Done/` keep the old vocabulary, since they record what was decided when.
@@ -61,7 +61,7 @@ free again, which is why it happened before the first package rather than after.
 honest, because it is set on cached responses as well as delivered writes — it means "not a
 pending outbox entry", by negation, on a type that is two things at once. A rename with nowhere
 to go is evidence about the model rather than the name; tracked as
-[issue 55](../../Backlog/55-envelope-kind-discriminator.md).
+[issue 55](../../Backlog/Done/55-envelope-kind-discriminator.md).
 
 **Backlog items in `Done/` keep the old vocabulary.** They record what was decided when, and
 rewriting them would falsify the record.

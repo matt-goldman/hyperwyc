@@ -92,7 +92,7 @@ about ten minutes and found as much again.
 | `Envelope.IsDeadLettered` | "after exhausting all retry attempts" | Same |
 | `IHyperwycStore.MarkDeliveredAsync` | "marks ... as successfully **synced**" | Pre-vocabulary-pass wording. ADR 0005 renamed the method from `MarkSyncedAsync`; its summary did not follow |
 | `HyperwycEventType.OnDelivered` | "successfully **synced** to the server" | Same |
-| `Envelope.IsSynced` | "whether the request has been successfully synchronised (sent to the remote server) at least once" | **Actively false** on a cached response, which carries `true` from creation having been sent nowhere. This is [55](../55-envelope-kind-discriminator.md)'s whole point, and the summary was asserting the thing 55 says is untrue |
+| `Envelope.IsSynced` | "whether the request has been successfully synchronised (sent to the remote server) at least once" | **Actively false** on a cached response, which carries `true` from creation having been sent nowhere. This is [55](55-envelope-kind-discriminator.md)'s whole point, and the summary was asserting the thing 55 says is untrue |
 
 The first two are on `IHyperwycStore`, which is the interface a consumer implements when they
 supply their own store — so it is arguably the most consequential XML in the package, and it was
@@ -134,7 +134,7 @@ owns the model change, and 55's own note says not to fold it into a rename.
   `MarkDeliveredAsync` and `OnSynced` to `OnDelivered`, and both kept summaries saying "synced".
   Same shape as the ADR 0004 leftovers and the same lesson: a rename that changes an identifier
   does not change the prose around it, and nothing fails when it disagrees.
-- **`Envelope.IsSynced` was documented as doing the thing [55](../55-envelope-kind-discriminator.md)
+- **`Envelope.IsSynced` was documented as doing the thing [55](55-envelope-kind-discriminator.md)
   exists to say it does not do.** 55 records that the flag is named after something it is not;
   the XML went further and asserted the false meaning as fact. Corrected in place, not renamed —
   55 still owns the model.

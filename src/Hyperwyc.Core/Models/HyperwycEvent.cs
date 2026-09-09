@@ -16,7 +16,7 @@ namespace Hyperwyc.Models;
 /// <para>
 /// The one thing that is persisted rather than published is a transport failure, which raises no
 /// event at all — the envelope stays queued and carries its own account of why. See
-/// <see cref="Envelope.LastOutcome"/>.
+/// <see cref="QueuedWrite.LastOutcome"/>.
 /// </para>
 /// </remarks>
 /// <param name="Type">The kind of lifecycle transition that occurred.</param>
@@ -37,7 +37,7 @@ namespace Hyperwyc.Models;
 /// <param name="RequestBody">
 /// The body of the queued request as raw bytes, so a consumer can deserialise its own payload
 /// back out without having kept a copy. <see langword="null"/> for bodyless requests. Bytes
-/// rather than a string for the same reason as <see cref="Envelope.RequestBody"/> — a body is
+/// rather than a string for the same reason as <see cref="QueuedWrite.RequestBody"/> — a body is
 /// not necessarily text.
 /// </param>
 /// <param name="Outcome">
@@ -59,7 +59,7 @@ public record HyperwycEvent(
     /// <see cref="RequestBody"/> decoded as UTF-8, or <see langword="null"/> if there is no body.
     /// </summary>
     /// <remarks>
-    /// The convenience for a textual route, matching <see cref="Envelope.GetRequestBodyAsText"/>,
+    /// The convenience for a textual route, matching <see cref="QueuedWrite.GetRequestBodyAsText"/>,
     /// <see cref="CachedResponse.GetBodyAsText"/> and <see cref="DeliveryOutcome.GetBodyAsText"/>.
     /// A caller whose payload is not text has the raw bytes.
     /// </remarks>

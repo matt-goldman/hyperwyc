@@ -3,7 +3,7 @@
 ## Summary
 
 A short page defining the words the documentation uses as though they were already defined:
-outbox, envelope, replay, flush, dead-letter, correlation id, synthetic response, stale, TTL.
+outbox, queued write, cached response, replay, flush, dead-letter, correlation id, synthetic response, stale, TTL.
 
 ## Status
 
@@ -32,7 +32,7 @@ Every one of these is load-bearing and none is defined:
 | Term | Why it needs saying |
 |---|---|
 | **Outbox** | Named after the pattern, but Hyperwyc's is a one-attempt-per-flush queue with no scheduler, which is not what most readers picture |
-| **Envelope** | Two things wearing one type ([55](55-envelope-kind-discriminator.md)), so even the code is unclear |
+| **Queued write** / **Cached response** | The two kinds of stored record, and the two types that hold them since [55](Done/55-envelope-kind-discriminator.md). "Envelope" was one type doing both and is gone; a glossary written before that would have had to define the ambiguity rather than the terms |
 | **Replay** | Specifically means through the application's pipeline ([ADR 0002](../docs/decisions/0002-replays-traverse-the-pipeline.md)), which is the non-obvious half |
 | **Flush** | Three triggers and no scheduler; the word implies more automation than exists |
 | **Dead-letter** | Above — and see the rename question below, which may remove the need for an entry at all |
@@ -56,7 +56,7 @@ So the two terminal states do not differ in whether Hyperwyc succeeded. **They d
 | `2xx` | `MarkDeliveredAsync` | Nothing — there is nothing you need from it |
 | anything else | `MoveToDeadLetterAsync` | The envelope, with status, reason phrase and body, so it can still explain itself after a restart ([40](Done/40-surface-deferred-outcomes.md)) |
 
-That is a real and useful distinction. "Dead-letter" is the wrong name for it: borrowed from message queues, where it means *we gave up on this*, when here it means *delivered, and the answer kept for you*. A reader who knows the term is more likely to be alarmed than one who does not — which is exactly what [ADR 0005](../docs/decisions/0005-vocabulary.md) is about, and the same shape as [55](55-envelope-kind-discriminator.md)'s `IsSynced`.
+That is a real and useful distinction. "Dead-letter" is the wrong name for it: borrowed from message queues, where it means *we gave up on this*, when here it means *delivered, and the answer kept for you*. A reader who knows the term is more likely to be alarmed than one who does not — which is exactly what [ADR 0005](../docs/decisions/0005-vocabulary.md) is about, and the same shape as [55](Done/55-envelope-kind-discriminator.md)'s `IsSynced`.
 
 **Which inverts this item's original purpose.** It was filed to *explain* dead-lettering. If the concept is renamed, there is nothing left to explain — which is the [ADR 0004](../docs/decisions/0004-default-to-removal.md) answer: do not document a bad name, fix it. Decide the rename first; the glossary entry is whatever survives.
 

@@ -318,7 +318,7 @@ public class RequestHeaderFidelityTests
         await orchestrator.FlushAsync();
 
         var stillQueued = Assert.Single(await store.GetPendingOutboxAsync());
-        await store.UpsertAsync(stillQueued);
+        await store.UpsertQueuedWriteAsync(stillQueued);
 
         await orchestrator.FlushAsync();
 

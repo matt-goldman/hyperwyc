@@ -11,8 +11,8 @@ namespace Hyperwyc.Tests;
 /// flush runs on a background task alongside them.
 /// </summary>
 /// <remarks>
-/// Cabinet's <c>FileOfflineStore</c> saves by writing <c>Envelope.dat.tmp</c> and then
-/// <c>File.Move</c>-ing it over <c>Envelope.dat</c>. Two saves in flight at once race: the first
+/// Cabinet's <c>FileOfflineStore</c> saves by writing <c>&lt;set&gt;.dat.tmp</c> and then
+/// <c>File.Move</c>-ing it over <c>&lt;set&gt;.dat</c>. Two saves in flight at once race: the first
 /// Move consumes the temp file and the second throws <see cref="FileNotFoundException"/>. These
 /// tests fail against an unsynchronised store.
 /// </remarks>
@@ -29,17 +29,12 @@ public sealed class CabinetConcurrencyTests : IDisposable
 
     private CabinetStore Store() => new(_dir);
 
-    private static Envelope Cached(string url) => new()
+    private static CachedResponse Cached(string url) => new()
     {
         Url = url,
-        Method = "GET",
-        IsSynced = true,
-        Response = new CachedResponse
-        {
-            StatusCode = 200,
-            Body = "[]"u8.ToArray(),
-            CachedAt = DateTimeOffset.UtcNow,
-        },
+        StatusCode = 200,
+        Body = "[]"u8.ToArray(),
+        CachedAt = DateTimeOffset.UtcNow,
     };
 
     [Fact]
@@ -49,7 +44,7 @@ public sealed class CabinetConcurrencyTests : IDisposable
 
         // The reported crash: two overlapping GETs both caching their response.
         var writes = Enumerable.Range(0, 32)
-            .Select(i => Task.Run(() => store.UpsertAsync(Cached($"https://example.com/api/{i}"))));
+            .Select(i => Task.Run(() => store.PutCachedResponseAsync(Cached($"https://example.com/api/{i}"))));
 
         await Task.WhenAll(writes);
 
@@ -63,10 +58,10 @@ public sealed class CabinetConcurrencyTests : IDisposable
     public async Task ConcurrentUpsertsOfTheSameUrl_DoNotCorruptTheStore()
     {
         var store = Store();
-        var envelope = Cached("https://example.com/api/products");
+        var cached = Cached("https://example.com/api/products");
 
         var writes = Enumerable.Range(0, 16)
-            .Select(_ => Task.Run(() => store.UpsertAsync(envelope)));
+            .Select(_ => Task.Run(() => store.PutCachedResponseAsync(cached)));
 
         await Task.WhenAll(writes);
 
@@ -77,14 +72,14 @@ public sealed class CabinetConcurrencyTests : IDisposable
     public async Task ReadsAndWritesInterleaved_DoNotThrow()
     {
         var store = Store();
-        await store.UpsertAsync(Cached("https://example.com/api/seed"));
+        await store.PutCachedResponseAsync(Cached("https://example.com/api/seed"));
 
         // A flush reading the outbox while the handler writes cache entries.
         var work = new List<Task>();
         for (var i = 0; i < 16; i++)
         {
             var n = i;
-            work.Add(Task.Run(() => store.UpsertAsync(Cached($"https://example.com/api/{n}"))));
+            work.Add(Task.Run(() => store.PutCachedResponseAsync(Cached($"https://example.com/api/{n}"))));
             work.Add(Task.Run(() => store.GetPendingOutboxAsync()));
         }
 
@@ -96,33 +91,33 @@ public sealed class CabinetConcurrencyTests : IDisposable
     {
         var store = Store();
         for (var i = 0; i < 8; i++)
-            await store.UpsertAsync(Cached($"https://example.com/api/{i}"));
+            await store.PutCachedResponseAsync(Cached($"https://example.com/api/{i}"));
 
         var work = new List<Task> { Task.Run(() => store.ResetAsync()) };
         for (var i = 8; i < 24; i++)
         {
             var n = i;
-            work.Add(Task.Run(() => store.UpsertAsync(Cached($"https://example.com/api/{n}"))));
+            work.Add(Task.Run(() => store.PutCachedResponseAsync(Cached($"https://example.com/api/{n}"))));
         }
 
         await Task.WhenAll(work);
     }
 
     [Fact]
-    public async Task ConcurrentMarkDelivered_DoesNotLoseUpdates()
+    public async Task ConcurrentRemoveDelivered_DoesNotLoseUpdates()
     {
         var store = Store();
         var ids = new List<string>();
         for (var i = 0; i < 12; i++)
         {
-            var e = new Envelope { Url = $"https://example.com/api/{i}", Method = "POST" };
-            ids.Add(e.Id);
-            await store.UpsertAsync(e);
+            var write = new QueuedWrite { Url = $"https://example.com/api/{i}", Method = "POST" };
+            ids.Add(write.Id);
+            await store.UpsertQueuedWriteAsync(write);
         }
 
         await Task.WhenAll(ids.Select(id => Task.Run(() => store.RemoveDeliveredAsync(id))));
 
-        // Every envelope is out of the outbox. Without serialisation these are
+        // Every write is out of the outbox. Without serialisation these are
         // read-modify-write races and some updates are silently discarded.
         Assert.Empty(await store.GetPendingOutboxAsync());
     }
