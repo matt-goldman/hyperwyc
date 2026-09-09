@@ -247,7 +247,7 @@ public class InMemoryStoreTests
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task InvalidateCacheForPrefixAsync_MatchingUrl_ClearsResponse()
+    public async Task InvalidateCacheForPrefixAsync_MatchingUrl_RemovesEntry()
     {
         var store = new InMemoryStore();
         var envelope = MakeEnvelope("https://example.com/api/items");
@@ -261,7 +261,7 @@ public class InMemoryStoreTests
     }
 
     [Fact]
-    public async Task InvalidateCacheForPrefixAsync_NonMatchingUrl_PreservesResponse()
+    public async Task InvalidateCacheForPrefixAsync_NonMatchingUrl_PreservesEntry()
     {
         var store = new InMemoryStore();
         var envelope = MakeEnvelope("https://example.com/api/items");
@@ -287,8 +287,31 @@ public class InMemoryStoreTests
 
         await store.InvalidateCacheForPrefixAsync("https://example.com/api/");
 
-        Assert.Null((await store.GetCachedResponseAsync(e1.Url))?.Response);
-        Assert.NotNull((await store.GetCachedResponseAsync(e2.Url))?.Response);
+        Assert.Null(await store.GetCachedResponseAsync(e1.Url));
+        Assert.NotNull(await store.GetCachedResponseAsync(e2.Url));
+    }
+
+    [Fact]
+    public async Task InvalidateCacheForPrefixAsync_LeavesQueuedWritesAlone()
+    {
+        // The loop used to match on the URL alone, so a POST /sales that invalidated /sales also
+        // swept up every queued write under the same prefix. Nulling an already-null Response made
+        // that harmless; removing the record does not, so the filter is now load-bearing rather
+        // than merely wasteful. See issue #68.
+        var store = new InMemoryStore();
+
+        var queued = MakeEnvelope("https://example.com/api/items", method: "POST");
+        await store.UpsertAsync(queued);
+
+        var cached = MakeEnvelope("https://example.com/api/items/1");
+        cached.IsSynced = true;
+        cached.Response = MakeCachedResponse();
+        await store.UpsertAsync(cached);
+
+        await store.InvalidateCacheForPrefixAsync("https://example.com/api/items");
+
+        Assert.Null(await store.GetCachedResponseAsync(cached.Url));
+        Assert.Equal(queued.Id, Assert.Single(await store.GetPendingOutboxAsync()).Id);
     }
 
     [Fact]

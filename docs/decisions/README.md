@@ -13,6 +13,8 @@ reversed.
 | [0005](0005-vocabulary.md) | Name things for the purpose, not the mechanism | Accepted |
 | [0006](0006-a-shipped-implementation-is-not-a-default.md) | A shipped implementation is not a default | Superseded by 0007 |
 | [0007](0007-connectivity-cannot-cost-correctness.md) | Connectivity is an optimisation, not a correctness input | Accepted |
+| [0008](0008-shrink-what-you-store.md) | Shrink what you store before reshaping where you store it | Accepted |
+| [0009](0009-provide-the-seam-not-the-alternatives.md) | Provide the seam, not the alternatives | Proposed |
 
 ## What belongs here
 

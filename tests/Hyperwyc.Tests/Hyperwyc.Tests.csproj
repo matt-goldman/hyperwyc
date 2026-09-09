@@ -4,6 +4,14 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsTestProject>true</IsTestProject>
     <OutputType>Library</OutputType>
+    <!--
+      Turns off System.Text.Json's reflection fallback for this test host, which is what makes
+      the CabinetStore tests an AOT regression test rather than a round-trip test. Without it
+      they pass either way, because reflection works fine under a JIT test runner and the
+      failure only appears once a consumer publishes trimmed or AOT. With it, a store that is
+      not wired to HyperwycJsonContext throws NotSupportedException here. See issue #53.
+    -->
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
 
   <ItemGroup>

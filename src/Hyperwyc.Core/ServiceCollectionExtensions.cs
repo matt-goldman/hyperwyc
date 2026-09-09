@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -40,11 +41,18 @@ public static class ServiceCollectionExtensions
     /// The <see cref="IHyperwycStore"/> implementation to register. Must be constructible
     /// by the container — supply configuration through its own options type rather
     /// than through primitive constructor parameters, or use the factory overload.
+    /// <para>
+    /// The <see cref="DynamicallyAccessedMembersAttribute"/> is what tells the trimmer the
+    /// container will reach for this type's constructors reflectively, so they are kept. It
+    /// also propagates: a caller passing a store here must be somewhere the trimmer can see
+    /// the concrete type, which it can, because the type argument is written at the call site.
+    /// </para>
     /// </typeparam>
     /// <param name="services">The service collection to register with.</param>
     /// <param name="configure">Optional delegate to configure <see cref="HyperwycOptions"/>.</param>
     /// <returns>The original <paramref name="services"/> for chaining.</returns>
-    public static IServiceCollection AddHyperwycCore<TStore>(
+    public static IServiceCollection AddHyperwycCore<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TStore>(
         this IServiceCollection services,
         Action<HyperwycOptions>? configure = null)
         where TStore : class, IHyperwycStore

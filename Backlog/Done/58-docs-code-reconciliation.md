@@ -51,7 +51,7 @@ otherwise, and four of these are consumer-visible and cannot be worked around:
 - `Vary` is not honoured, so a content-negotiated endpoint serves the wrong variant, silently
   ([43](../43-honour-vary-header.md))
 - no `JsonSerializerContext`, so serialisation falls back to reflection — in a library whose
-  primary audience ships iOS release builds with AOT on by default ([53](../53-aot-json-serialization.md))
+  primary audience ships iOS release builds with AOT on by default ([53](53-aot-json-serialization.md))
 
 These are open items rather than defects, which is exactly the argument for documenting them: a
 consumer sizing the library up cannot read the backlog, and 53 in particular belongs in front of
@@ -102,7 +102,7 @@ Only one thing, and it is the finding that mattered most to a reader deciding wh
 **`choosing.md`'s Current limitations** now names `Cache-Control` being ignored
 ([41](../41-honour-cacheability-directives.md)), the unbounded cache
 ([42](../42-cache-eviction.md)), `Vary` ([43](../43-honour-vary-header.md)) and the missing
-`JsonSerializerContext` ([53](../53-aot-json-serialization.md)) alongside buffered bodies, with the
+`JsonSerializerContext` ([53](53-aot-json-serialization.md)) alongside buffered bodies, with the
 AOT one called out as mattering most on iOS.
 
 One sentence was added to `docs/events.md`: nothing at all is published when a delivery attempt

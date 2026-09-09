@@ -143,7 +143,7 @@ implausible stall, it is monotonic rather than intermittent, and clearing app da
 reinstall would reset it — which is enough to make the failure look correlated with whichever
 commit happened to coincide with a clean deploy.
 
-Filed separately as [issue 52](../52-store-rewrites-whole-set-per-write.md), because the write
+Filed separately as [issue 52](52-store-rewrites-whole-set-per-write.md), because the write
 amplification is a defect in its own right regardless of whether it explains this one.
 
 ### Secondary hypothesis, weaker than it first looked
@@ -176,7 +176,7 @@ see whether the crash stops. Not run.
 The race is real, reproduced, and fixed; the lock is required regardless of what triggered it.
 **Why the failure rate changed is open**, with store-growth the leading explanation and the
 resilience handler a likely amplifier rather than the cause. If it recurs after this fix, start
-from [issue 52](../52-store-rewrites-whole-set-per-write.md).
+from [issue 52](52-store-rewrites-whole-set-per-write.md).
 
 ## The fix
 

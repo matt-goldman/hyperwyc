@@ -195,9 +195,11 @@ The two need the path in different forms, which is the awkward part. **iOS** tak
 
 A secondary reason on Android: Auto Backup caps an app at 25 MB, and exceeding it silently stops backup for the whole app rather than just the offending files. Hyperwyc's cache is not currently bounded, so that ceiling is reachable — see [Storage](storage.md).
 
-## 5. Know about AOT
+## 5. AOT and trimming
 
-iOS release builds have AOT on by default, and Hyperwyc's store currently serialises through reflection — there is no `JsonSerializerContext`. Test a release build on a device early rather than discovering it at submission. This is tracked and is not something you can work around from outside the library.
+Nothing to do. iOS release builds have AOT on by default, and Hyperwyc's store serialises through a source-generated `JsonSerializerContext`, so it needs no configuration from you and no `PublishAot` opt-out.
+
+Your own models are unaffected either way: Hyperwyc stores request and response bodies as bytes and never deserialises them, so whatever you do about a context for `GetFromJsonAsync` is the same decision you would be making without Hyperwyc.
 
 ## Then what
 

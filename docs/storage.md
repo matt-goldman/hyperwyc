@@ -16,6 +16,10 @@ services.AddHyperwyc(configureStore: store =>
 
 Losing that key means losing access to everything already stored.
 
+The store serialises through a source-generated `JsonSerializerContext`, so it is safe under trimming and AOT and needs nothing from you to be — see [Hyperwyc in a .NET MAUI app](maui.md#5-aot-and-trimming).
+
+Request and response bodies are held as separate encrypted files rather than inside the record, and are read only on the path that needs them. That matters because the record document is rewritten in full on every write: a body left inline would be re-encrypted and rewritten every time any other entry changed.
+
 
 ## Implementing your own
 
@@ -62,7 +66,7 @@ The deterministic `cache:{url}` id is what stops cached responses accumulating o
 | `UpsertAsync`                   | Keyed on `Envelope.Id`. Insert or replace; never append                                                                                                                                                                                   |
 | `MarkDeliveredAsync`            | Takes an id, and must tolerate one it does not recognise. A crash between two writes can mean it is called twice                                                                                                                          |
 | `MoveToDeadLetterAsync`         | Same, and see the note above — it does not mean the delivery failed                                                                                                                                                                       |
-| `InvalidateCacheForPrefixAsync` | Clears the **response**, not the record. An ordinal `StartsWith` on the URL                                                                                                                                                               |
+| `InvalidateCacheForPrefixAsync` | **Removes the record**, and only records that actually have a `Response`. An ordinal `StartsWith` on the URL. The filter matters twice: a queued write under the same prefix must not be touched, and an entry with no response is not yours to reclaim here |
 | `ResetAsync`                    | Must work **when the store cannot be read** — clear the underlying files rather than enumerating records, because enumerating means deserialising, which is the thing that just failed                                                    |
 
 ### Throwing is how you report failure
@@ -119,11 +123,11 @@ Apple's [iOS Data Storage Guidelines](https://developer.apple.com/icloud/documen
 
 A secondary reason on Android: Auto Backup caps an app at 25 MB, and exceeding it silently stops backup for **the whole app** rather than just the offending files.
 
-## Two things to know before you ship
+## One thing to know before you ship
 
 **The cache is not bounded.** Individual response bodies are capped at 512 KB, but the store as a whole grows without limit and nothing evicts. On a long-lived mobile app that is the number to watch — and it is the same problem as the 25 MB Android quota above, seen from the other end rather than a separate concern.
 
-**Serialisation is reflection-based.** There is no `JsonSerializerContext`, so a trimmed or AOT-compiled build may fail where a debug build did not. This bites iOS hardest, where release builds have AOT on by default. Test a release build on a device early.
+Cached entries are removed when a write invalidates their URL prefix, so the cache does shrink; what it has no answer for is an entry that is simply never invalidated and never re-read.
 
-Both are known and tracked rather than surprises, and neither can be worked around from outside the library.
+That is known and tracked rather than a surprise, and it cannot be worked around from outside the library.
 
