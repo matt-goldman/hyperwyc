@@ -26,7 +26,7 @@ public class OutboxProcessorDisposalTests
             transport,
             TestHealth());
 
-    private static Envelope OutboxEnvelope(string url = "https://example.com/api/orders") =>
+    private static QueuedWrite Queued(string url = "https://example.com/api/orders") =>
         new() { Url = url, Method = "POST" };
 
     /// <summary>
@@ -109,10 +109,10 @@ public class OutboxProcessorDisposalTests
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task Dispose_MidFlush_LeavesEnvelopesQueuedAndDoesNotDeadLetter()
+    public async Task Dispose_MidFlush_LeavesWritesQueued()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(OutboxEnvelope());
+        await store.UpsertQueuedWriteAsync(Queued());
 
         var transport = new BlockingTransport();
         var orchestrator = BuildOrchestrator(store, transport);
@@ -125,7 +125,7 @@ public class OutboxProcessorDisposalTests
         // The flush unwinds via cancellation rather than completing.
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => flush);
 
-        // Nothing lost: the envelope is still queued for the next start, and was
+        // Nothing lost: the write is still queued for the next start, and was
         // not mistaken for a delivery.
         var pending = await store.GetPendingOutboxAsync();
         Assert.Single(pending);
@@ -135,7 +135,7 @@ public class OutboxProcessorDisposalTests
     public async Task DisposeAsync_MidFlush_ReturnsWithoutWaitingOutTheRetryBudget()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(OutboxEnvelope());
+        await store.UpsertQueuedWriteAsync(Queued());
 
         var transport = new BlockingTransport();
         // A budget that would take minutes to exhaust if disposal waited for it.
@@ -163,7 +163,7 @@ public class OutboxProcessorDisposalTests
     public async Task Dispose_ReturnsBeforeTheFlushHasFinishedUnwinding()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(OutboxEnvelope());
+        await store.UpsertQueuedWriteAsync(Queued());
 
         var transport = new SlowUnwindTransport();
         var orchestrator = BuildOrchestrator(store, transport);
@@ -182,7 +182,7 @@ public class OutboxProcessorDisposalTests
     public async Task DisposeAsync_ReturnsOnlyAfterTheFlushHasUnwound()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(OutboxEnvelope());
+        await store.UpsertQueuedWriteAsync(Queued());
 
         var transport = new SlowUnwindTransport();
         var orchestrator = BuildOrchestrator(store, transport);
@@ -207,7 +207,7 @@ public class OutboxProcessorDisposalTests
     public async Task Dispose_CancelsAManualFlushThatPassedNoToken()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(OutboxEnvelope());
+        await store.UpsertQueuedWriteAsync(Queued());
 
         var transport = new BlockingTransport();
         var orchestrator = BuildOrchestrator(store, transport);

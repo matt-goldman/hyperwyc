@@ -13,9 +13,9 @@ namespace Hyperwyc.Tests;
 /// </summary>
 /// <remarks>
 /// There is no retry budget, no backoff and no scheduled follow-up. Any answer from the server
-/// is a final outcome — the request reached the API, which was the job — and the envelope is
+/// is a final outcome — the request reached the API, which was the job — and the write is
 /// discarded whatever it said. Only a transport failure, where no response came back at all,
-/// leaves the envelope in the outbox.
+/// leaves the write in the outbox.
 /// </remarks>
 public class DeliveryFailureTests
 {
@@ -30,7 +30,7 @@ public class DeliveryFailureTests
             transport,
             TestHealth());
 
-    private static Envelope Outbox(string url = "https://example.com/api/orders") =>
+    private static QueuedWrite Outbox(string url = "https://example.com/api/orders") =>
         new() { Url = url, Method = "POST" };
 
     private sealed class CountingTransport(HttpStatusCode status) : HttpMessageHandler
@@ -83,7 +83,7 @@ public class DeliveryFailureTests
     public async Task Rejection_IsFinalOnTheFirstAttempt(HttpStatusCode status)
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox());
+        await store.UpsertQueuedWriteAsync(Outbox());
         var transport = new CountingTransport(status);
         await using var orchestrator = BuildOrchestrator(store, transport);
 
@@ -97,7 +97,7 @@ public class DeliveryFailureTests
     public async Task Rejection_PublishesOnDelivered()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox());
+        await store.UpsertQueuedWriteAsync(Outbox());
         var events = new HyperwycEventStream();
         var received = new List<HyperwycEvent>();
         events.Subscribe(new DelegateObserver<HyperwycEvent>(received.Add));
@@ -121,9 +121,9 @@ public class DeliveryFailureTests
         // and kept indefinitely, request body and Authorization header included, while an
         // accepted one was discarded. Both are deliveries, so both leave.
         var store = new InMemoryStore();
-        var envelope = Outbox();
-        envelope.RequestHeaders["Authorization"] = "Bearer token";
-        await store.UpsertAsync(envelope);
+        var write = Outbox();
+        write.RequestHeaders["Authorization"] = "Bearer token";
+        await store.UpsertQueuedWriteAsync(write);
 
         await using var orchestrator = BuildOrchestrator(
             store, new CountingTransport(HttpStatusCode.Conflict));
@@ -131,7 +131,7 @@ public class DeliveryFailureTests
         await orchestrator.FlushAsync();
 
         Assert.Empty(await store.GetPendingOutboxAsync());
-        Assert.Null(await store.GetCachedResponseAsync(envelope.Url));
+        Assert.Null(await store.GetCachedResponseAsync(write.Url));
     }
 
     // -------------------------------------------------------------------------
@@ -142,8 +142,8 @@ public class DeliveryFailureTests
     public async Task ARejectedWrite_DoesNotDelayOrBlockTheOnesBehindIt()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox("https://example.com/api/rejected"));
-        await store.UpsertAsync(Outbox("https://example.com/api/fine"));
+        await store.UpsertQueuedWriteAsync(Outbox("https://example.com/api/rejected"));
+        await store.UpsertQueuedWriteAsync(Outbox("https://example.com/api/fine"));
 
         // Rejects the first URL, accepts the second.
         var transport = new StubHttpMessageHandler(req =>
@@ -174,7 +174,7 @@ public class DeliveryFailureTests
     public async Task AnyResponse_IsFinal_EvenOnesThatLookRetryable(HttpStatusCode status)
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox());
+        await store.UpsertQueuedWriteAsync(Outbox());
         var transport = new CountingTransport(status);
         await using var orchestrator = BuildOrchestrator(store, transport);
 
@@ -191,7 +191,7 @@ public class DeliveryFailureTests
     public async Task ServerError_IsNotAttemptedAgainByALaterFlush()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox());
+        await store.UpsertQueuedWriteAsync(Outbox());
         var failing = new CountingTransport(HttpStatusCode.ServiceUnavailable);
 
         await using (var orchestrator = BuildOrchestrator(store, failing))
@@ -210,7 +210,7 @@ public class DeliveryFailureTests
     public async Task ServerError_ReportsTheStatusItGot()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox());
+        await store.UpsertQueuedWriteAsync(Outbox());
         var events = new HyperwycEventStream();
         var received = new List<HyperwycEvent>();
         events.Subscribe(new DelegateObserver<HyperwycEvent>(received.Add));
@@ -220,7 +220,7 @@ public class DeliveryFailureTests
 
         await orchestrator.FlushAsync();
 
-        // Discarding the envelope is not discarding the news: the status the server gave is
+        // Discarding the write is not discarding the news: the status the server gave is
         // reported on the event, because it is what the application needs in order to decide
         // whether to raise the write again itself. The event is the only place it appears.
         var delivered = Assert.Single(received, e => e.Type == HyperwycEventType.OnDelivered);
@@ -232,8 +232,8 @@ public class DeliveryFailureTests
     public async Task ServerError_DoesNotStopTheFlush()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox("https://example.com/api/flaky"));
-        await store.UpsertAsync(Outbox("https://example.com/api/fine"));
+        await store.UpsertQueuedWriteAsync(Outbox("https://example.com/api/flaky"));
+        await store.UpsertQueuedWriteAsync(Outbox("https://example.com/api/fine"));
 
         var transport = new StubHttpMessageHandler(req =>
             new HttpResponseMessage(
@@ -261,9 +261,9 @@ public class DeliveryFailureTests
     public async Task TransportFailure_AbandonsTheRestOfTheFlush()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox("https://example.com/api/one"));
-        await store.UpsertAsync(Outbox("https://example.com/api/two"));
-        await store.UpsertAsync(Outbox("https://example.com/api/three"));
+        await store.UpsertQueuedWriteAsync(Outbox("https://example.com/api/one"));
+        await store.UpsertQueuedWriteAsync(Outbox("https://example.com/api/two"));
+        await store.UpsertQueuedWriteAsync(Outbox("https://example.com/api/three"));
 
         var transport = new ThrowingTransport();
         await using var orchestrator = BuildOrchestrator(store, transport);
@@ -277,10 +277,10 @@ public class DeliveryFailureTests
     }
 
     [Fact]
-    public async Task TransportFailure_LeavesTheEnvelopeQueued()
+    public async Task TransportFailure_LeavesTheWriteQueued()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox());
+        await store.UpsertQueuedWriteAsync(Outbox());
         await using var orchestrator = BuildOrchestrator(store, new ThrowingTransport());
 
         await orchestrator.FlushAsync();
@@ -294,10 +294,10 @@ public class DeliveryFailureTests
     }
 
     [Fact]
-    public async Task TransportFailure_LeavesEnvelopesEligibleForTheNextFlush()
+    public async Task TransportFailure_LeavesWritesEligibleForTheNextFlush()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Outbox());
+        await store.UpsertQueuedWriteAsync(Outbox());
         var throwing = new ThrowingTransport();
 
         await using (var orchestrator = BuildOrchestrator(store, throwing))

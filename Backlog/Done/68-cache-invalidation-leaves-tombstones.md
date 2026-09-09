@@ -44,7 +44,7 @@ The 500 individual records are never fetched again and never reclaimed. That sha
 
 ## Candidate fixes
 
-1. **Delete rather than null.** The obvious one, and it needs a store method — `IHyperwycStore` has no delete. Adding one is a public interface change, so it wants doing alongside [55](../55-envelope-kind-discriminator.md) rather than on its own.
+1. **Delete rather than null.** The obvious one, and it needs a store method — `IHyperwycStore` has no delete. Adding one is a public interface change, so it wants doing alongside [55](55-envelope-kind-discriminator.md) rather than on its own.
 2. **Filter the loop to cache envelopes**, which fixes cost 3 on its own and is a two-line change independent of everything else.
 3. **Fold into eviction** ([42](../42-cache-eviction.md)). A store that evicts by age or size collects tombstones as a side effect. Cheapest in effort, slowest in arriving, and it treats a symptom.
 
@@ -52,7 +52,7 @@ The 500 individual records are never fetched again and never reclaimed. That sha
 
 ## What was done: 1 and 2, and no interface change was needed
 
-Both, together, and the premise that 1 needed a public interface change was wrong. `IHyperwycStore` has no *general* delete, which is what [55](../55-envelope-kind-discriminator.md) would bring — but `InvalidateCacheForPrefixAsync` **is already a store method**, and a store deleting its own records inside it needs nothing added. The method's own summary said "Removes all cached GET responses"; nulling the response was the less faithful reading of a contract that was already written.
+Both, together, and the premise that 1 needed a public interface change was wrong. `IHyperwycStore` has no *general* delete, which is what [55](55-envelope-kind-discriminator.md) would bring — but `InvalidateCacheForPrefixAsync` **is already a store method**, and a store deleting its own records inside it needs nothing added. The method's own summary said "Removes all cached GET responses"; nulling the response was the less faithful reading of a contract that was already written.
 
 2 turned out to be a precondition rather than an independent nicety. Nulling an already-null `Response` on a queued write was harmless, so the missing filter was pure waste; **removing** an unfiltered match would delete pending writes. The filter is now load-bearing, and is on `Response is not null` rather than on the `cache:` id prefix — it selects exactly what the method exists to invalidate, and can therefore never reach a queued write or a dead-lettered one.
 

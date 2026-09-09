@@ -56,7 +56,7 @@ public sealed class HyperwycHandler : DelegatingHandler
     /// <param name="health">Shared state tracking whether the store can be read.</param>
     /// <param name="clientName">
     /// The name of the <see cref="HttpClient"/> this handler is registered on, stamped
-    /// onto queued envelopes so a replay can be sent back through the same pipeline.
+    /// onto queued writes so a replay can be sent back through the same pipeline.
     /// <see langword="null"/> when the handler was registered without a name, in which
     /// case replays fall back to <see cref="HyperwycOptions.ReplayTransport"/>. Use
     /// <c>AddHyperwycHandler()</c> to have this captured automatically.
@@ -146,7 +146,7 @@ public sealed class HyperwycHandler : DelegatingHandler
     /// </remarks>
     private async Task<HttpResponseMessage?> TryQueueWriteAsync(HttpRequestMessage request, CancellationToken ct)
     {
-        // Buffer content before the synchronous read inside Envelope.ForRequest.
+        // Buffer content before the synchronous read inside QueuedWrite.For.
         if (request.Content is not null)
         {
             try
@@ -160,8 +160,8 @@ public sealed class HyperwycHandler : DelegatingHandler
             }
         }
 
-        var envelope = Envelope.ForRequest(request, _clientName);
-        if (!await TryStoreAsync(() => _store.UpsertAsync(envelope, ct)).ConfigureAwait(false))
+        var write = QueuedWrite.For(request, _clientName);
+        if (!await TryStoreAsync(() => _store.UpsertQueuedWriteAsync(write, ct)).ConfigureAwait(false))
             return null;
 
         _events.Publish(new HyperwycEvent(
@@ -169,11 +169,11 @@ public sealed class HyperwycHandler : DelegatingHandler
             request.RequestUri?.ToString() ?? string.Empty,
             request.Method.Method,
             DateTimeOffset.UtcNow,
-            CorrelationId: envelope.CorrelationId,
-            RequestId: envelope.Id,
-            RequestBody: envelope.RequestBody));
+            CorrelationId: write.CorrelationId,
+            RequestId: write.Id,
+            RequestBody: write.RequestBody));
 
-        return HyperwycResponseFactory.Queued(envelope.CorrelationId);
+        return HyperwycResponseFactory.Queued(write.CorrelationId);
     }
 
     private Task<HttpResponseMessage> HandleOfflineReadAsync(
@@ -209,7 +209,7 @@ public sealed class HyperwycHandler : DelegatingHandler
 
         var cached = await TryReadAsync(() => _store.GetCachedResponseAsync(url, ct)).ConfigureAwait(false);
         if (cached is not null && !IsStale(cached, policy.Ttl))
-            return BuildResponseFromEnvelope(cached);
+            return BuildResponse(cached);
 
         return HyperwycResponseFactory.Offline();
     }
@@ -281,7 +281,7 @@ public sealed class HyperwycHandler : DelegatingHandler
         {
             var cached = await TryReadAsync(() => _store.GetCachedResponseAsync(url, ct)).ConfigureAwait(false);
             if (cached is not null && !IsStale(cached, policy.Ttl))
-                return BuildResponseFromEnvelope(cached);
+                return BuildResponse(cached);
         }
 
         HttpResponseMessage response;
@@ -334,8 +334,8 @@ public sealed class HyperwycHandler : DelegatingHandler
         if (bodyLength > _options.MaxCachedResponseBodyBytes)
             return;
 
-        var envelope = Envelope.ForCachedResponse(request, response, _clientName);
-        if (!await TryStoreAsync(() => _store.UpsertAsync(envelope, ct)).ConfigureAwait(false))
+        var cached = CachedResponse.For(url, response);
+        if (!await TryStoreAsync(() => _store.PutCachedResponseAsync(cached, ct)).ConfigureAwait(false))
             return;
 
         _events.Publish(new HyperwycEvent(
@@ -371,9 +371,8 @@ public sealed class HyperwycHandler : DelegatingHandler
                             or HttpRequestError.SecureConnectionError
                             or HttpRequestError.ProxyTunnelError;
 
-    private static HttpResponseMessage BuildResponseFromEnvelope(Envelope envelope)
+    private static HttpResponseMessage BuildResponse(CachedResponse cached)
     {
-        var cached = envelope.Response!;
         var response = new HttpResponseMessage((System.Net.HttpStatusCode)cached.StatusCode);
 
         if (cached.Body is not null)
@@ -395,7 +394,7 @@ public sealed class HyperwycHandler : DelegatingHandler
     /// <summary>
     /// Runs a store read, degrading to <see langword="null"/> if the store cannot be read.
     /// </summary>
-    private async Task<Envelope?> TryReadAsync(Func<Task<Envelope?>> read)
+    private async Task<CachedResponse?> TryReadAsync(Func<Task<CachedResponse?>> read)
     {
         try
         {
@@ -437,9 +436,8 @@ public sealed class HyperwycHandler : DelegatingHandler
     /// <c>Cache-Control</c> (issue #41) is where per-response staleness earns an interface
     /// back; until then it is two lines.
     /// </remarks>
-    private static bool IsStale(Envelope cached, TimeSpan ttl) =>
-        cached.Response is null
-        || DateTimeOffset.UtcNow - cached.Response.CachedAt > ttl;
+    private static bool IsStale(CachedResponse cached, TimeSpan ttl) =>
+        DateTimeOffset.UtcNow - cached.CachedAt > ttl;
 
     /// <summary>
     /// Derives the cache-invalidation prefix from the request URI.

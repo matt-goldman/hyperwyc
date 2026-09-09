@@ -25,14 +25,14 @@ public sealed class CabinetResetTests : IDisposable
         if (Directory.Exists(_dir)) Directory.Delete(_dir, recursive: true);
     }
 
-    private static Envelope Queued() =>
+    private static QueuedWrite Queued() =>
         new() { Url = "https://example.com/api/sales", Method = "POST" };
 
     [Fact]
     public async Task Reset_ClearsAStoreThatCanBeRead()
     {
         var store = new CabinetStore(_dir);
-        await store.UpsertAsync(Queued());
+        await store.UpsertQueuedWriteAsync(Queued());
         Assert.Single(await store.GetPendingOutboxAsync());
 
         await store.ResetAsync();
@@ -46,7 +46,7 @@ public sealed class CabinetResetTests : IDisposable
         // Written under one key, opened under another — the shape of a moved store directory,
         // since the default key is derived from the path.
         var written = new CabinetStore(_dir, new byte[32]);
-        await written.UpsertAsync(Queued());
+        await written.UpsertQueuedWriteAsync(Queued());
 
         var otherKey = new byte[32];
         otherKey[0] = 0xFF;
@@ -64,9 +64,9 @@ public sealed class CabinetResetTests : IDisposable
     public async Task Reset_ClearsAStoreWhosePersistedShapeNoLongerDeserialises()
     {
         // The failure that actually happened: a store written by a previous build whose
-        // Envelope shape has since changed.
+        // persisted shape has since changed.
         var store = new CabinetStore(_dir);
-        await store.UpsertAsync(Queued());
+        await store.UpsertQueuedWriteAsync(Queued());
 
         var records = Path.Combine(_dir, "records");
         foreach (var file in Directory.GetFiles(records))
@@ -84,10 +84,10 @@ public sealed class CabinetResetTests : IDisposable
     public async Task Reset_LeavesTheStoreUsable()
     {
         var store = new CabinetStore(_dir);
-        await store.UpsertAsync(Queued());
+        await store.UpsertQueuedWriteAsync(Queued());
         await store.ResetAsync();
 
-        await store.UpsertAsync(Queued());
+        await store.UpsertQueuedWriteAsync(Queued());
 
         Assert.Single(await store.GetPendingOutboxAsync());
     }

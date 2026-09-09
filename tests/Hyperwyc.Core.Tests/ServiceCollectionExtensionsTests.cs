@@ -116,7 +116,7 @@ public sealed class ServiceCollectionExtensionsTests
     public async Task IHyperwyc_FlushAsync_DrainsTheOutbox()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(new Envelope { Url = "https://example.com/api/x", Method = "POST" });
+        await store.UpsertQueuedWriteAsync(new QueuedWrite { Url = "https://example.com/api/x", Method = "POST" });
 
         var transport = new StubHttpMessageHandler(
             new HttpResponseMessage(System.Net.HttpStatusCode.OK));
@@ -482,14 +482,17 @@ public sealed class ServiceCollectionExtensionsTests
 
         public StoreDependency Dependency { get; } = dependency;
 
-        public Task<Envelope?> GetCachedResponseAsync(string url, CancellationToken ct = default) =>
+        public Task<CachedResponse?> GetCachedResponseAsync(string url, CancellationToken ct = default) =>
             _inner.GetCachedResponseAsync(url, ct);
 
-        public Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default) =>
+        public Task PutCachedResponseAsync(CachedResponse response, CancellationToken ct = default) =>
+            _inner.PutCachedResponseAsync(response, ct);
+
+        public Task<IReadOnlyList<QueuedWrite>> GetPendingOutboxAsync(CancellationToken ct = default) =>
             _inner.GetPendingOutboxAsync(ct);
 
-        public Task UpsertAsync(Envelope envelope, CancellationToken ct = default) =>
-            _inner.UpsertAsync(envelope, ct);
+        public Task UpsertQueuedWriteAsync(QueuedWrite write, CancellationToken ct = default) =>
+            _inner.UpsertQueuedWriteAsync(write, ct);
 
         public Task RemoveDeliveredAsync(string id, CancellationToken ct = default) =>
             _inner.RemoveDeliveredAsync(id, ct);

@@ -110,15 +110,13 @@ public class SyntheticResponseBodyTests
     public async Task CachedResponse_IsUnaffected()
     {
         var store = new InMemoryStore();
-        var envelope = new Envelope { Url = "https://example.com/api/products", Method = "GET" };
-        envelope.Response = new CachedResponse
+        await store.PutCachedResponseAsync(new CachedResponse
         {
+            Url = "https://example.com/api/products",
             StatusCode = 200,
             Body = """[{"id":1,"name":"Bucket Tooth"}]"""u8.ToArray(),
             CachedAt = DateTimeOffset.UtcNow,
-        };
-        envelope.IsSynced = true;
-        await store.UpsertAsync(envelope);
+        });
 
         using var client = new HttpClient(BuildHandler(store));
 

@@ -26,32 +26,20 @@ public class OutboxProcessorTests
             transport, TestHealth());
     }
 
-    private static Envelope MakeOutboxEnvelope(string url = "https://example.com/api/orders",
-        string method = "POST",
-        DateTimeOffset? createdUtc = null)
-    {
-        var envelope = new Envelope
-        {
-            Url = url,
-            Method = method,
-        };
-        if (createdUtc.HasValue)
-        {
-            // CreatedUtc is init-only; create a fresh envelope with reflection workaround isn't needed
-            // because we can read the order via store sorting — so just note they're created in sequence.
-        }
-        return envelope;
-    }
+    private static QueuedWrite Queued(
+        string url = "https://example.com/api/orders",
+        string method = "POST") =>
+        new() { Url = url, Method = method };
 
     // -------------------------------------------------------------------------
     // FlushAsync — success
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task FlushAsync_PendingEnvelope_SendsRequest()
+    public async Task FlushAsync_PendingWrite_SendsRequest()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(MakeOutboxEnvelope());
+        await store.UpsertQueuedWriteAsync(Queued());
 
         var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         await using var orchestrator = BuildOrchestrator(store, transport);
@@ -62,11 +50,11 @@ public class OutboxProcessorTests
     }
 
     [Fact]
-    public async Task FlushAsync_SuccessfulSend_MarksEnvelopeDelivered()
+    public async Task FlushAsync_SuccessfulSend_RemovesTheDeliveredWrite()
     {
         var store = new InMemoryStore();
-        var envelope = MakeOutboxEnvelope();
-        await store.UpsertAsync(envelope);
+        var write = Queued();
+        await store.UpsertQueuedWriteAsync(write);
 
         var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         await using var orchestrator = BuildOrchestrator(store, transport);
@@ -81,7 +69,7 @@ public class OutboxProcessorTests
     public async Task FlushAsync_SuccessfulSend_PublishesOnDeliveredEvent()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(MakeOutboxEnvelope());
+        await store.UpsertQueuedWriteAsync(Queued());
 
         var events = new HyperwycEventStream();
         HyperwycEvent? received = null;
@@ -97,21 +85,21 @@ public class OutboxProcessorTests
     }
 
     [Fact]
-    public async Task FlushAsync_MultipleEnvelopes_SentInCreatedUtcOrder()
+    public async Task FlushAsync_MultipleWrites_SentInCreatedUtcOrder()
     {
         var store = new InMemoryStore();
 
         // Insert in reverse order — flush must sort ascending by CreatedUtc.
-        var first  = new Envelope { Url = "https://example.com/a", Method = "POST" };
+        var first  = new QueuedWrite { Url = "https://example.com/a", Method = "POST" };
         await Task.Delay(5);  // ensure distinct timestamps
-        var second = new Envelope { Url = "https://example.com/b", Method = "POST" };
+        var second = new QueuedWrite { Url = "https://example.com/b", Method = "POST" };
         await Task.Delay(5);
-        var third  = new Envelope { Url = "https://example.com/c", Method = "POST" };
+        var third  = new QueuedWrite { Url = "https://example.com/c", Method = "POST" };
 
         // Insert in reverse order to verify ordering is by CreatedUtc, not insertion order.
-        await store.UpsertAsync(third);
-        await store.UpsertAsync(first);
-        await store.UpsertAsync(second);
+        await store.UpsertQueuedWriteAsync(third);
+        await store.UpsertQueuedWriteAsync(first);
+        await store.UpsertQueuedWriteAsync(second);
 
         var sentUrls = new List<string>();
         var transport = new StubHttpMessageHandler(req =>
@@ -127,7 +115,7 @@ public class OutboxProcessorTests
     }
 
     [Fact]
-    public async Task FlushAsync_NoEnvelopes_DoesNotSendAnything()
+    public async Task FlushAsync_NothingQueued_DoesNotSendAnything()
     {
         var store = new InMemoryStore();
         var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
@@ -146,7 +134,7 @@ public class OutboxProcessorTests
     public async Task FlushAsync_ConcurrentCall_SecondCallSkips()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(MakeOutboxEnvelope());
+        await store.UpsertQueuedWriteAsync(Queued());
 
         // The transport blocks until we let it proceed.
         var gate = new TaskCompletionSource<bool>();
@@ -181,16 +169,16 @@ public class OutboxProcessorTests
     // -------------------------------------------------------------------------
 
     // Replaces a test that asserted Hyperwyc re-injected an Idempotency-Key derived from
-    // the envelope id. It no longer adds anything of its own (issue #39); what it must do
+    // the write's id. It no longer adds anything of its own (issue #39); what it must do
     // is carry the application's headers through unchanged.
     [Fact]
     public async Task FlushAsync_ReplaysStoredHeadersVerbatim()
     {
         var store = new InMemoryStore();
-        var envelope = MakeOutboxEnvelope();
-        envelope.RequestHeaders["X-Correlation-Id"] = "abc-123";
-        envelope.RequestHeaders["X-Tenant"] = "acme";
-        await store.UpsertAsync(envelope);
+        var write = Queued();
+        write.RequestHeaders["X-Correlation-Id"] = "abc-123";
+        write.RequestHeaders["X-Tenant"] = "acme";
+        await store.UpsertQueuedWriteAsync(write);
 
         HttpRequestMessage? captured = null;
         var transport = new StubHttpMessageHandler(req =>
@@ -221,16 +209,16 @@ public class OutboxProcessorTests
     }
 
     // -------------------------------------------------------------------------
-    // Delivered envelopes not re-sent
+    // Delivered writes not re-sent
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task FlushAsync_DeliveredEnvelope_NotSentAgain()
+    public async Task FlushAsync_DeliveredWrite_NotSentAgain()
     {
         var store = new InMemoryStore();
-        var envelope = MakeOutboxEnvelope();
-        await store.UpsertAsync(envelope);
-        await store.RemoveDeliveredAsync(envelope.Id);
+        var write = Queued();
+        await store.UpsertQueuedWriteAsync(write);
+        await store.RemoveDeliveredAsync(write.Id);
 
         var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         await using var orchestrator = BuildOrchestrator(store, transport);
@@ -253,8 +241,8 @@ public class OutboxProcessorTests
     public async Task FlushAsync_SuccessfulWrite_InvalidatesTheCacheForItsPrefix()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(CachedGet("https://example.com/api/orders"));
-        await store.UpsertAsync(MakeOutboxEnvelope("https://example.com/api/orders"));
+        await store.PutCachedResponseAsync(CachedGet("https://example.com/api/orders"));
+        await store.UpsertQueuedWriteAsync(Queued("https://example.com/api/orders"));
 
         var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         await using var orchestrator = BuildOrchestrator(store, transport);
@@ -270,8 +258,8 @@ public class OutboxProcessorTests
         // A 422 says the write did not happen, so the cached reads under it are still good.
         // Dropping them would cost an offline read for nothing.
         var store = new InMemoryStore();
-        await store.UpsertAsync(CachedGet("https://example.com/api/orders"));
-        await store.UpsertAsync(MakeOutboxEnvelope("https://example.com/api/orders"));
+        await store.PutCachedResponseAsync(CachedGet("https://example.com/api/orders"));
+        await store.UpsertQueuedWriteAsync(Queued("https://example.com/api/orders"));
 
         var transport = new StubHttpMessageHandler(
             new HttpResponseMessage(HttpStatusCode.UnprocessableEntity));
@@ -281,7 +269,7 @@ public class OutboxProcessorTests
 
         Assert.NotNull(await store.GetCachedResponseAsync("https://example.com/api/orders"));
 
-        // Still delivered, though: the envelope is gone either way.
+        // Still delivered, though: the write is gone either way.
         Assert.Empty(await store.GetPendingOutboxAsync());
     }
 
@@ -289,18 +277,15 @@ public class OutboxProcessorTests
     // Helpers
     // -------------------------------------------------------------------------
 
-    private static Envelope CachedGet(string url)
-    {
-        var envelope = new Envelope { Url = url, Method = "GET", IsSynced = true };
-        envelope.Response = new CachedResponse
+    private static CachedResponse CachedGet(string url) =>
+        new()
         {
+            Url = url,
             StatusCode = 200,
             Headers = [],
             Body = "cached"u8.ToArray(),
             CachedAt = DateTimeOffset.UtcNow,
         };
-        return envelope;
-    }
 
     private sealed class DelegateObserver<T>(Action<T> onNext) : IObserver<T>
     {

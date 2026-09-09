@@ -31,33 +31,35 @@ public class CabinetStoreTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
-    // UpsertAsync / GetCachedResponseAsync
+    // PutCachedResponseAsync / GetCachedResponseAsync
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task UpsertAsync_NewEnvelope_CanBeRetrievedByCachedResponseAsync()
+    public async Task PutCachedResponseAsync_CanBeReadBackByUrl()
     {
-        var envelope = MakeCachedEnvelope("https://example.com/api/items");
-        await _store.UpsertAsync(envelope);
+        await _store.PutCachedResponseAsync(Cached("https://example.com/api/items"));
 
         var result = await _store.GetCachedResponseAsync("https://example.com/api/items");
 
         Assert.NotNull(result);
-        Assert.Equal(200, result!.Response!.StatusCode);
+        Assert.Equal(200, result.StatusCode);
     }
 
     [Fact]
-    public async Task UpsertAsync_UpdatesExistingEnvelope()
+    public async Task PutCachedResponseAsync_SameUrl_ReplacesTheEntry()
     {
-        var envelope = MakeCachedEnvelope("https://example.com/api/items");
-        await _store.UpsertAsync(envelope);
+        await _store.PutCachedResponseAsync(Cached("https://example.com/api/items"));
 
-        // Replace the response and upsert again.
-        envelope.Response = new CachedResponse { StatusCode = 200, Body = "updated"u8.ToArray(), CachedAt = DateTimeOffset.UtcNow };
-        await _store.UpsertAsync(envelope);
+        await _store.PutCachedResponseAsync(new CachedResponse
+        {
+            Url = "https://example.com/api/items",
+            StatusCode = 200,
+            Body = "updated"u8.ToArray(),
+            CachedAt = DateTimeOffset.UtcNow,
+        });
 
         var result = await _store.GetCachedResponseAsync("https://example.com/api/items");
-        Assert.Equal("updated", result!.Response!.GetBodyAsText());
+        Assert.Equal("updated", result!.GetBodyAsText());
     }
 
     [Fact]
@@ -72,18 +74,18 @@ public class CabinetStoreTests : IDisposable
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task GetPendingOutboxAsync_ReturnsPendingEnvelopesInOrder()
+    public async Task GetPendingOutboxAsync_ReturnsQueuedWritesInOrder()
     {
-        var first  = new Envelope { Url = "https://example.com/a", Method = "POST" };
+        var first  = new QueuedWrite { Url = "https://example.com/a", Method = "POST" };
         await Task.Delay(5);
-        var second = new Envelope { Url = "https://example.com/b", Method = "POST" };
+        var second = new QueuedWrite { Url = "https://example.com/b", Method = "POST" };
         await Task.Delay(5);
-        var third  = new Envelope { Url = "https://example.com/c", Method = "POST" };
+        var third  = new QueuedWrite { Url = "https://example.com/c", Method = "POST" };
 
         // Insert in reverse order to verify ordering.
-        await _store.UpsertAsync(third);
-        await _store.UpsertAsync(first);
-        await _store.UpsertAsync(second);
+        await _store.UpsertQueuedWriteAsync(third);
+        await _store.UpsertQueuedWriteAsync(first);
+        await _store.UpsertQueuedWriteAsync(second);
 
         var pending = await _store.GetPendingOutboxAsync();
 
@@ -96,12 +98,11 @@ public class CabinetStoreTests : IDisposable
     [Fact]
     public async Task GetPendingOutboxAsync_ExcludesCacheEntries()
     {
-        var pending = new Envelope { Url = "https://example.com/pending", Method = "POST" };
-        var cached = new Envelope { Url = "https://example.com/synced", Method = "GET" };
-        cached.IsSynced = true;
-
-        await _store.UpsertAsync(pending);
-        await _store.UpsertAsync(cached);
+        // A property of the record sets now rather than of a filter: the two kinds are stored
+        // separately, so the outbox query cannot see a cached response at all. See issue 55.
+        await _store.UpsertQueuedWriteAsync(
+            new QueuedWrite { Url = "https://example.com/pending", Method = "POST" });
+        await _store.PutCachedResponseAsync(Cached("https://example.com/cached"));
 
         var result = await _store.GetPendingOutboxAsync();
 
@@ -114,37 +115,35 @@ public class CabinetStoreTests : IDisposable
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task RemoveDeliveredAsync_RemovesEnvelopeFromPendingOutbox()
+    public async Task RemoveDeliveredAsync_RemovesTheWriteFromPendingOutbox()
     {
-        var envelope = new Envelope { Url = "https://example.com/api/orders", Method = "POST" };
-        await _store.UpsertAsync(envelope);
+        var write = new QueuedWrite { Url = "https://example.com/api/orders", Method = "POST" };
+        await _store.UpsertQueuedWriteAsync(write);
 
-        await _store.RemoveDeliveredAsync(envelope.Id);
+        await _store.RemoveDeliveredAsync(write.Id);
 
-        var pending = await _store.GetPendingOutboxAsync();
-        Assert.Empty(pending);
+        Assert.Empty(await _store.GetPendingOutboxAsync());
     }
 
     [Fact]
     public async Task RemoveDeliveredAsync_DoesNotLeaveTheRecordBehind()
     {
-        // The outbox filter would hide a flagged envelope just as well, so the outbox is not
-        // evidence. Reopening the store is: nothing is left to read back. See ADR 0010 —
+        // Reopening the store is the evidence: nothing is left to read back. See ADR 0010 —
         // the request body and its headers go with the record, which is most of the point.
-        var envelope = new Envelope
+        var write = new QueuedWrite
         {
             Url             = "https://example.com/api/orders",
             Method          = "POST",
             RequestHeaders  = new Dictionary<string, string> { ["Authorization"] = "Bearer token" },
             RequestBody     = "{}"u8.ToArray(),
         };
-        await _store.UpsertAsync(envelope);
+        await _store.UpsertQueuedWriteAsync(write);
 
-        await _store.RemoveDeliveredAsync(envelope.Id);
+        await _store.RemoveDeliveredAsync(write.Id);
 
         var reopened = new CabinetStore(_tempDir, TestKey);
         Assert.Empty(await reopened.GetPendingOutboxAsync());
-        Assert.Null(await reopened.GetCachedResponseAsync("https://example.com/api/orders"));
+        Assert.Empty(AttachmentBlobs());
     }
 
     // -------------------------------------------------------------------------
@@ -152,11 +151,11 @@ public class CabinetStoreTests : IDisposable
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task InvalidateCacheForPrefixAsync_ClearsResponseOnMatchingEnvelopes()
+    public async Task InvalidateCacheForPrefixAsync_RemovesMatchingEntries()
     {
-        await _store.UpsertAsync(MakeCachedEnvelope("https://example.com/api/notes"));
-        await _store.UpsertAsync(MakeCachedEnvelope("https://example.com/api/notes/42"));
-        await _store.UpsertAsync(MakeCachedEnvelope("https://example.com/api/other"));
+        await _store.PutCachedResponseAsync(Cached("https://example.com/api/notes"));
+        await _store.PutCachedResponseAsync(Cached("https://example.com/api/notes/42"));
+        await _store.PutCachedResponseAsync(Cached("https://example.com/api/other"));
 
         await _store.InvalidateCacheForPrefixAsync("https://example.com/api/notes");
 
@@ -167,44 +166,33 @@ public class CabinetStoreTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
-    // -------------------------------------------------------------------------
-
-
-    // -------------------------------------------------------------------------
     // ResetAsync
     // -------------------------------------------------------------------------
 
     [Fact]
     public async Task ResetAsync_ClearsAllData()
     {
-        await _store.UpsertAsync(MakeCachedEnvelope("https://example.com/api/a"));
-        await _store.UpsertAsync(new Envelope { Url = "https://example.com/api/b", Method = "POST" });
+        await _store.PutCachedResponseAsync(Cached("https://example.com/api/a"));
+        await _store.UpsertQueuedWriteAsync(
+            new QueuedWrite { Url = "https://example.com/api/b", Method = "POST" });
 
         await _store.ResetAsync();
 
-        var pending = await _store.GetPendingOutboxAsync();
-        var cached = await _store.GetCachedResponseAsync("https://example.com/api/a");
-
-        Assert.Empty(pending);
-        Assert.Null(cached);
+        Assert.Empty(await _store.GetPendingOutboxAsync());
+        Assert.Null(await _store.GetCachedResponseAsync("https://example.com/api/a"));
     }
 
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
-    private static Envelope MakeCachedEnvelope(string url) =>
+    private static CachedResponse Cached(string url) =>
         new()
         {
             Url = url,
-            Method = "GET",
-            IsSynced = true,
-            Response = new CachedResponse
-            {
-                StatusCode = 200,
-                Body = "{}"u8.ToArray(),
-                CachedAt = DateTimeOffset.UtcNow,
-            },
+            StatusCode = 200,
+            Body = "{}"u8.ToArray(),
+            CachedAt = DateTimeOffset.UtcNow,
         };
 
     // -------------------------------------------------------------------------
@@ -219,13 +207,12 @@ public class CabinetStoreTests : IDisposable
         // in-memory byte[] and the bytes actually going back on the wire.
         byte[] payload = [0x89, 0x50, 0x4E, 0x47, 0x00, 0x80, 0x81, 0xFF, 0xFE, 0x00, 0x01];
 
-        var envelope = new Envelope
+        await _store.UpsertQueuedWriteAsync(new QueuedWrite
         {
             Url = "https://example.com/api/assets",
             Method = "POST",
             RequestBody = payload,
-        };
-        await _store.UpsertAsync(envelope);
+        });
 
         var restored = Assert.Single(await _store.GetPendingOutboxAsync());
         Assert.Equal(payload, restored.RequestBody);
@@ -236,21 +223,19 @@ public class CabinetStoreTests : IDisposable
     {
         byte[] payload = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x80, 0x00, 0xFD];
 
-        var envelope = new Envelope { Url = "https://example.com/api/logo", Method = "GET" };
-        envelope.IsSynced = true;
-        envelope.Response = new CachedResponse
+        await _store.PutCachedResponseAsync(new CachedResponse
         {
+            Url = "https://example.com/api/logo",
             StatusCode = 200,
             Headers = new Dictionary<string, string> { ["Content-Type"] = "image/jpeg" },
             Body = payload,
             CachedAt = DateTimeOffset.UtcNow,
-        };
-        await _store.UpsertAsync(envelope);
+        });
 
         var restored = await _store.GetCachedResponseAsync("https://example.com/api/logo");
 
-        Assert.Equal(payload, restored!.Response!.Body);
-        Assert.Equal("image/jpeg", restored.Response.Headers["Content-Type"]);
+        Assert.Equal(payload, restored!.Body);
+        Assert.Equal("image/jpeg", restored.Headers["Content-Type"]);
     }
 
     // -------------------------------------------------------------------------
@@ -258,7 +243,7 @@ public class CabinetStoreTests : IDisposable
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task FullEnvelopeGraph_SurvivesReopeningTheStore()
+    public async Task FullQueuedWrite_SurvivesReopeningTheStore()
     {
         // Reopens the store rather than reading back through the same instance, which is the
         // whole point: RecordSet keeps an in-memory copy, so a same-instance round trip proves
@@ -268,7 +253,7 @@ public class CabinetStoreTests : IDisposable
         // Every branch of the persisted graph is populated deliberately — a type missing from
         // the context surfaces as a null or a default rather than as an exception, so a test
         // that checked only the top-level fields would pass with the nested types absent.
-        var envelope = new Envelope
+        var write = new QueuedWrite
         {
             Url             = "https://example.com/api/orders",
             Method          = "POST",
@@ -276,81 +261,90 @@ public class CabinetStoreTests : IDisposable
             RequestHeaders  = new Dictionary<string, string> { ["Authorization"] = "Bearer token" },
             RequestBody     = [0x7B, 0x00, 0xFF, 0x7D],
             CreatedUtc      = new DateTimeOffset(2026, 3, 1, 9, 30, 0, TimeSpan.FromHours(11)),
+            LastOutcome     = new DeliveryOutcome
+            {
+                Kind            = DeliveryOutcomeKind.TransportFailure,
+                StatusCode      = 422,
+                ReasonPhrase    = "Unprocessable Content",
+                Body            = [0x04, 0x05],
+                BodyTruncated   = true,
+                Error           = "no response",
+                OccurredUtc     = new DateTimeOffset(2026, 3, 1, 9, 32, 0, TimeSpan.Zero),
+            },
         };
 
-        envelope.IsSynced = true;
-        envelope.Response = new CachedResponse
+        await _store.UpsertQueuedWriteAsync(write);
+
+        var reopened = new CabinetStore(_tempDir, TestKey);
+        var restored = Assert.Single(await reopened.GetPendingOutboxAsync());
+
+        Assert.Equal(write.Id, restored.Id);
+        Assert.Equal(write.CorrelationId, restored.CorrelationId);
+        Assert.Equal("POST", restored.Method);
+        Assert.Equal("orders", restored.ClientName);
+        Assert.Equal("Bearer token", restored.RequestHeaders["Authorization"]);
+        Assert.Equal(write.RequestBody, restored.RequestBody);
+        Assert.Equal(write.CreatedUtc, restored.CreatedUtc);
+
+        Assert.Equal(DeliveryOutcomeKind.TransportFailure, restored.LastOutcome!.Kind);
+        Assert.Equal(422, restored.LastOutcome.StatusCode);
+        Assert.Equal("Unprocessable Content", restored.LastOutcome.ReasonPhrase);
+        Assert.Equal(write.LastOutcome.Body, restored.LastOutcome.Body);
+        Assert.True(restored.LastOutcome.BodyTruncated);
+        Assert.Equal("no response", restored.LastOutcome.Error);
+        Assert.Equal(write.LastOutcome.OccurredUtc, restored.LastOutcome.OccurredUtc);
+    }
+
+    [Fact]
+    public async Task FullCachedResponse_SurvivesReopeningTheStore()
+    {
+        var cached = new CachedResponse
         {
+            Url         = "https://example.com/api/orders",
             StatusCode  = 201,
             Headers     = new Dictionary<string, string> { ["Content-Type"] = "application/json" },
             Body        = [0x01, 0x02, 0x03],
             CachedAt    = new DateTimeOffset(2026, 3, 1, 9, 31, 0, TimeSpan.Zero),
         };
-        envelope.LastOutcome = new DeliveryOutcome
-        {
-            Kind            = DeliveryOutcomeKind.TransportFailure,
-            StatusCode      = 422,
-            ReasonPhrase    = "Unprocessable Content",
-            Body            = [0x04, 0x05],
-            BodyTruncated   = true,
-            Error           = "no response",
-            OccurredUtc     = new DateTimeOffset(2026, 3, 1, 9, 32, 0, TimeSpan.Zero),
-        };
 
-        await _store.UpsertAsync(envelope);
+        await _store.PutCachedResponseAsync(cached);
 
         var reopened = new CabinetStore(_tempDir, TestKey);
-        var restored = await reopened.GetCachedResponseAsync("https://example.com/api/orders");
+        var restored = await reopened.GetCachedResponseAsync(cached.Url);
 
         Assert.NotNull(restored);
-
-        Assert.Equal(envelope.Id, restored.Id);
-        Assert.Equal(envelope.CorrelationId, restored.CorrelationId);
-        Assert.Equal("POST", restored.Method);
-        Assert.Equal("orders", restored.ClientName);
-        Assert.Equal("Bearer token", restored.RequestHeaders["Authorization"]);
-        Assert.Equal(envelope.RequestBody, restored.RequestBody);
-        Assert.Equal(envelope.CreatedUtc, restored.CreatedUtc);
-
-        Assert.Equal(201, restored.Response!.StatusCode);
-        Assert.Equal("application/json", restored.Response.Headers["Content-Type"]);
-        Assert.Equal(envelope.Response.Body, restored.Response.Body);
-        Assert.Equal(envelope.Response.CachedAt, restored.Response.CachedAt);
-
-        Assert.Equal(DeliveryOutcomeKind.TransportFailure, restored.LastOutcome!.Kind);
-        Assert.Equal(422, restored.LastOutcome.StatusCode);
-        Assert.Equal("Unprocessable Content", restored.LastOutcome.ReasonPhrase);
-        Assert.Equal(envelope.LastOutcome.Body, restored.LastOutcome.Body);
-        Assert.True(restored.LastOutcome.BodyTruncated);
-        Assert.Equal("no response", restored.LastOutcome.Error);
-        Assert.Equal(envelope.LastOutcome.OccurredUtc, restored.LastOutcome.OccurredUtc);
+        Assert.Equal(cached.Url, restored.Url);
+        Assert.Equal(201, restored.StatusCode);
+        Assert.Equal("application/json", restored.Headers["Content-Type"]);
+        Assert.Equal(cached.Body, restored.Body);
+        Assert.Equal(cached.CachedAt, restored.CachedAt);
     }
 
     [Fact]
-    public async Task IsSyncedFlag_SurvivesReopeningTheStore()
+    public async Task TheTwoKindsStaySeparate_AcrossAReopen()
     {
-        // The one bool with no observable value of its own — a default of false is
-        // indistinguishable from a correct read unless something downstream keys off it. The
-        // outbox does: it is defined as the negation of this flag, so a cache entry that stays
-        // out of it after a reopen is one whose flag came back.
-        var cached = new Envelope { Url = "https://example.com/api/orders", Method = "GET" };
-        cached.IsSynced = true;
-        await _store.UpsertAsync(cached);
+        // Same URL, both kinds. They used to share an id space, which is why cache ids carried a
+        // deterministic "cache:" prefix to keep them from colliding; separate record sets make
+        // that structural. See issue 55.
+        const string url = "https://example.com/api/orders";
 
-        var pending = new Envelope { Url = "https://example.com/api/items", Method = "POST" };
-        await _store.UpsertAsync(pending);
+        await _store.PutCachedResponseAsync(Cached(url));
+        var queued = new QueuedWrite { Url = url, Method = "POST" };
+        await _store.UpsertQueuedWriteAsync(queued);
 
         var reopened = new CabinetStore(_tempDir, TestKey);
-        var outbox = await reopened.GetPendingOutboxAsync();
 
-        Assert.Equal(pending.Id, Assert.Single(outbox).Id);
+        Assert.Equal(queued.Id, Assert.Single(await reopened.GetPendingOutboxAsync()).Id);
+        Assert.NotNull(await reopened.GetCachedResponseAsync(url));
     }
 
     // -------------------------------------------------------------------------
     // Bodies live outside the record document (issue 70)
     // -------------------------------------------------------------------------
 
-    private string RecordDocument => Path.Combine(_tempDir, "records", "Envelope.dat");
+    // One document per record set — a body inline would be re-encrypted and rewritten on every
+    // subsequent write to the same set.
+    private string CacheDocument => Path.Combine(_tempDir, "records", "CachedResponse.dat");
 
     private string[] AttachmentBlobs()
     {
@@ -370,16 +364,15 @@ public class CabinetStoreTests : IDisposable
         var payload = new byte[256 * 1024];
         Random.Shared.NextBytes(payload);
 
-        var envelope = MakeCachedEnvelope("https://example.com/api/large");
-        envelope.Response = new CachedResponse
+        await _store.PutCachedResponseAsync(new CachedResponse
         {
+            Url        = "https://example.com/api/large",
             StatusCode = 200,
             Body       = payload,
             CachedAt   = DateTimeOffset.UtcNow,
-        };
-        await _store.UpsertAsync(envelope);
+        });
 
-        var documentSize = new FileInfo(RecordDocument).Length;
+        var documentSize = new FileInfo(CacheDocument).Length;
 
         Assert.True(documentSize < 8 * 1024,
             $"record document is {documentSize} bytes; the body should not be in it");
@@ -390,7 +383,7 @@ public class CabinetStoreTests : IDisposable
 
         var restored = await new CabinetStore(_tempDir, TestKey)
             .GetCachedResponseAsync("https://example.com/api/large");
-        Assert.Equal(payload, restored!.Response!.Body);
+        Assert.Equal(payload, restored!.Body);
     }
 
     [Fact]
@@ -399,37 +392,45 @@ public class CabinetStoreTests : IDisposable
         // byte[0] and null mean different things — an empty 204 body versus a request that never
         // had one — and an attachment that exists but is zero length is how the difference
         // survives. Easy to lose to a "if (body.Length == 0) skip" shortcut.
-        var envelope = MakeCachedEnvelope("https://example.com/api/empty");
-        envelope.Response = new CachedResponse
+        await _store.PutCachedResponseAsync(new CachedResponse
         {
+            Url        = "https://example.com/api/empty",
             StatusCode = 204,
             Body       = [],
             CachedAt   = DateTimeOffset.UtcNow,
-        };
-        await _store.UpsertAsync(envelope);
+        });
 
-        var restored = await new CabinetStore(_tempDir, TestKey)
-            .GetCachedResponseAsync("https://example.com/api/empty");
+        await _store.UpsertQueuedWriteAsync(
+            new QueuedWrite { Url = "https://example.com/api/bodyless", Method = "DELETE" });
 
-        Assert.NotNull(restored!.Response!.Body);
-        Assert.Empty(restored.Response.Body);
-        Assert.Null(restored.RequestBody);
+        var reopened = new CabinetStore(_tempDir, TestKey);
+
+        var restored = await reopened.GetCachedResponseAsync("https://example.com/api/empty");
+        Assert.NotNull(restored!.Body);
+        Assert.Empty(restored.Body);
+
+        Assert.Null(Assert.Single(await reopened.GetPendingOutboxAsync()).RequestBody);
     }
 
     [Fact]
-    public async Task UpsertAsync_BodyThatBecomesAbsent_TakesItsBlobWithIt()
+    public async Task UpsertQueuedWriteAsync_BodyThatBecomesAbsent_TakesItsBlobWithIt()
     {
-        var envelope = new Envelope { Url = "https://example.com/api/orders", Method = "POST", RequestBody = [1, 2, 3] };
-        await _store.UpsertAsync(envelope);
+        var write = new QueuedWrite
+        {
+            Url = "https://example.com/api/orders",
+            Method = "POST",
+            RequestBody = [1, 2, 3],
+        };
+        await _store.UpsertQueuedWriteAsync(write);
         Assert.Single(AttachmentBlobs());
 
         // Same id, no request body. The record survives; the bytes must not.
-        await _store.UpsertAsync(new Envelope
+        await _store.UpsertQueuedWriteAsync(new QueuedWrite
         {
-            Id         = envelope.Id,
-            Url        = envelope.Url,
-            Method     = envelope.Method,
-            CreatedUtc = envelope.CreatedUtc,
+            Id         = write.Id,
+            Url        = write.Url,
+            Method     = write.Method,
+            CreatedUtc = write.CreatedUtc,
         });
 
         Assert.Empty(AttachmentBlobs());
@@ -443,23 +444,23 @@ public class CabinetStoreTests : IDisposable
     [Fact]
     public async Task InvalidateCacheForPrefixAsync_RemovesTheRecordAndItsBody()
     {
-        // Invalidation used to null the Response and write the husk back — a record no query
+        // Invalidation used to null the response and write the husk back — a record no query
         // returns and nothing deletes. Measured against the empty-store baseline, because "no
         // longer reachable" and "no longer there" are exactly the two things the old behaviour
         // could not tell apart.
-        var baseline = new FileInfo(RecordDocument).Exists
-            ? new FileInfo(RecordDocument).Length
+        var baseline = new FileInfo(CacheDocument).Exists
+            ? new FileInfo(CacheDocument).Length
             : 0;
 
         for (var i = 0; i < 20; i++)
-            await _store.UpsertAsync(MakeCachedEnvelope($"https://example.com/api/notes/{i}"));
+            await _store.PutCachedResponseAsync(Cached($"https://example.com/api/notes/{i}"));
 
-        var populated = new FileInfo(RecordDocument).Length;
+        var populated = new FileInfo(CacheDocument).Length;
         Assert.Equal(20, AttachmentBlobs().Length);
 
         await _store.InvalidateCacheForPrefixAsync("https://example.com/api/notes");
 
-        var afterwards = new FileInfo(RecordDocument).Length;
+        var afterwards = new FileInfo(CacheDocument).Length;
 
         Assert.True(afterwards < baseline + (populated - baseline) / 4,
             $"document is {afterwards} bytes against a {baseline}-byte empty store and {populated} populated — tombstones remain");
@@ -469,9 +470,14 @@ public class CabinetStoreTests : IDisposable
     [Fact]
     public async Task InvalidateCacheForPrefixAsync_LeavesQueuedWritesAndTheirBodiesAlone()
     {
-        var queued = new Envelope { Url = "https://example.com/api/notes", Method = "POST", RequestBody = [9, 9, 9] };
-        await _store.UpsertAsync(queued);
-        await _store.UpsertAsync(MakeCachedEnvelope("https://example.com/api/notes/1"));
+        var queued = new QueuedWrite
+        {
+            Url = "https://example.com/api/notes",
+            Method = "POST",
+            RequestBody = [9, 9, 9],
+        };
+        await _store.UpsertQueuedWriteAsync(queued);
+        await _store.PutCachedResponseAsync(Cached("https://example.com/api/notes/1"));
 
         await _store.InvalidateCacheForPrefixAsync("https://example.com/api/notes");
 
@@ -487,7 +493,7 @@ public class CabinetStoreTests : IDisposable
         // 2.0 nests attachments one directory per record, so the old top-level file sweep missed
         // every blob. Harmless while nothing wrote attachments; now it would leave the reset
         // holding precisely the bytes worth clearing.
-        await _store.UpsertAsync(MakeCachedEnvelope("https://example.com/api/notes/1"));
+        await _store.PutCachedResponseAsync(Cached("https://example.com/api/notes/1"));
         Assert.NotEmpty(AttachmentBlobs());
 
         await _store.ResetAsync();

@@ -13,7 +13,7 @@ namespace Hyperwyc.Models;
 /// flush.
 /// </para>
 /// <para>
-/// <b>Only a transport failure is persisted.</b> It is written to <see cref="Envelope.LastOutcome"/>
+/// <b>Only a transport failure is persisted.</b> It is written to <see cref="QueuedWrite.LastOutcome"/>
 /// because the envelope is still there to carry it, and it is the only account of why an outbox is
 /// not draining — see
 /// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/Backlog/23-v1-diagnostics-view.md">issue 23</see>.

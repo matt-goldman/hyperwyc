@@ -80,7 +80,7 @@ Reading a status code to decide what to do with the cache is in scope. Reading o
 - [Issue 23](../../Backlog/23-v1-diagnostics-view.md) narrows to the outbox, which is genuinely ours — and stays worth building, because a transport failure publishes no event and the outbox is the only place it can be observed.
 - [Issue 69](../../Backlog/69-expiring-queued-writes.md) gets the word back for what it means. Should a write Hyperwyc has failed to deliver *for long enough* expire? That is dead-lettering, correctly used, and it comes out the **other** side of the scope test: the age of something in the outbox is precisely what only Hyperwyc knows.
 
-**`Envelope.IsSynced` is left with one job.** It marked cache entries, marked delivered writes, and paired with `IsDeadLettered` to define the outbox. Delivery is now a delete and the dead-letter flag is gone, so what remains is a flag whose entire meaning is *this is a cache entry, not an outbox entry* — which is [issue 55](../../Backlog/55-envelope-kind-discriminator.md)'s thesis with the camouflage removed. It also makes 55's two-types option the cheaper one: four of the six remaining store methods are already kind-specific.
+**`Envelope.IsSynced` is left with one job.** It marked cache entries, marked delivered writes, and paired with `IsDeadLettered` to define the outbox. Delivery is now a delete and the dead-letter flag is gone, so what remains is a flag whose entire meaning is *this is a cache entry, not an outbox entry* — which is [issue 55](../../Backlog/Done/55-envelope-kind-discriminator.md)'s thesis with the camouflage removed. It also makes 55's two-types option the cheaper one: four of the six remaining store methods are already kind-specific.
 
 **`Envelope.LastOutcome` now only ever holds a transport failure.** Nothing else survives long enough to be written. It is the record behind [issue 23](../../Backlog/23-v1-diagnostics-view.md), and the reason an outbox that is not draining can still explain itself.
 
@@ -97,4 +97,4 @@ Reading a status code to decide what to do with the cache is in scope. Reading o
 - [ADR 0005](0005-vocabulary.md) — why `MarkDeliveredAsync` could not keep its name once it stopped marking.
 - [Issue 67](../../Backlog/67-configurable-response-retention.md) — the deliberate, later answer to the one real cost.
 - [Issue 65](../../Backlog/65-startup-flush-requires-a-host.md) — the startup trigger seen from the other side.
-- [Issue 55](../../Backlog/55-envelope-kind-discriminator.md) — what is left of `IsSynced` afterwards.
+- [Issue 55](../../Backlog/Done/55-envelope-kind-discriminator.md) — what is left of `IsSynced` afterwards.

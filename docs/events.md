@@ -2,7 +2,7 @@
 
 Hyperwyc reports what it did. Subscribe to find out that a write was queued or delivered, and what the server said when it was.
 
-**Subscribe before anything can flush.** For a delivery this event is the only report there is: the envelope is discarded once the server answers, whatever it answered, so an outcome published to nobody is an outcome nobody learns. That is why `FlushOnStartup` defaults to `false` — [Offline writes](offline-writes.md#which-way-to-flush-at-startup) covers when to turn it on instead.
+**Subscribe before anything can flush.** For a delivery this event is the only report there is: the queued write is discarded once the server answers, whatever it answered, so an outcome published to nobody is an outcome nobody learns. That is why `FlushOnStartup` defaults to `false` — [Offline writes](offline-writes.md#which-way-to-flush-at-startup) covers when to turn it on instead.
 
 Subscribe to `IObservable<HyperwycEvent>` to observe requests moving through the sync lifecycle:
 
@@ -26,7 +26,7 @@ A plain `IObserver<T>`, because `IObservable<T>` is in the BCL and Hyperwyc take
 | `OnUpdated`         | Cached response refreshed                                                                   | No                              |
 | `OnStoreUnreadable` | The local store could not be read; caching and queueing are off for the rest of the session | No                              |
 
-**Nothing is published when a re-delivery attempt fails at the transport.** `OnQueued` is emitted if the initial delivery attempt fails and the request is queued, but for subsequent attempts from the outbox that fail, the outcome is recorded on the envelope and the flush stops. This logic applies **per request**, equally for events and the stopped flush - a failed delivery from the outbox is not retried until the next trigger, but the next request in the queue *is* attempted, and if that fails, it is parked too. And neither raises an event.
+**Nothing is published when a re-delivery attempt fails at the transport.** `OnQueued` is emitted if the initial delivery attempt fails and the request is queued, but for subsequent attempts from the outbox that fail, the outcome is recorded on the queued write and the flush stops. This logic applies **per request**, equally for events and the stopped flush - a failed delivery from the outbox is not retried until the next trigger, but the next request in the queue *is* attempted, and if that fails, it is parked too. And neither raises an event.
 
 These are Hyperwyc's own events, not your app's lifecycle. See below for how the two relate.
 
@@ -55,7 +55,7 @@ sale.CorrelationId = response.Headers.GetValues("X-Hyperwyc-Correlation-Id").Sin
 
 If the request was deferred, rather than delivered successfully immediately, the header is present either way. Hyperwyc neither requires the value to be unique nor deduplicates on it; it is your key, carrying your meaning. It is **not** an idempotency key; see [ADR 0001](decisions/0001-idempotency-is-not-hyperwycs-remit.md).
 
-Events also carry `RequestId` (Hyperwyc's own unique envelope id, which a diagnostics view would use) and `RequestBody`, so you can deserialise your own payload back out if you'd rather not keep a copy.
+Events also carry `RequestId` (Hyperwyc's own unique id for the queued write, which a diagnostics view would use) and `RequestBody`, so you can deserialise your own payload back out if you'd rather not keep a copy.
 
 ## Reading the outcome
 

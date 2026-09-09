@@ -21,17 +21,14 @@ public class PerRoutePolicyTests
         new(store, new FakeConnectivityService(connected), new HyperwycEventStream(), options, TestHealth())
         { InnerHandler = inner };
 
-    private static Envelope Cached(string url, string body)
-    {
-        var envelope = new Envelope { Url = url, Method = "GET", IsSynced = true };
-        envelope.Response = new CachedResponse
+    private static CachedResponse Cached(string url, string body) =>
+        new()
         {
+            Url = url,
             StatusCode = 200,
             Body = Encoding.UTF8.GetBytes(body),
             CachedAt = DateTimeOffset.UtcNow,
         };
-        return envelope;
-    }
 
     // -------------------------------------------------------------------------
     // Strategy varies per route
@@ -41,8 +38,8 @@ public class PerRoutePolicyTests
     public async Task OneRouteServesFromCacheWhileAnotherAlwaysHitsTheNetwork()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Cached(Products, "cached-products"));
-        await store.UpsertAsync(Cached(Payments, "cached-payments"));
+        await store.PutCachedResponseAsync(Cached(Products, "cached-products"));
+        await store.PutCachedResponseAsync(Cached(Payments, "cached-payments"));
 
         var options = new HyperwycOptions();
         options.Routes
@@ -65,8 +62,8 @@ public class PerRoutePolicyTests
     public async Task ARouteWithAShortTtlRefetchesWhileALongOneDoesNot()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Cached(Products, "stale-products"));
-        await store.UpsertAsync(Cached("https://example.com/api/reference/codes", "reference"));
+        await store.PutCachedResponseAsync(Cached(Products, "stale-products"));
+        await store.PutCachedResponseAsync(Cached("https://example.com/api/reference/codes", "reference"));
 
         var options = new HyperwycOptions();
         options.Routes
@@ -132,7 +129,7 @@ public class PerRoutePolicyTests
     public async Task ARouteCanOptOutOfInvalidationOnWrite()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(Cached("https://example.com/api/log", "kept"));
+        await store.PutCachedResponseAsync(Cached("https://example.com/api/log", "kept"));
 
         var options = new HyperwycOptions();
         options.Routes.For("/api/log/*", RoutePolicy.CacheFirst() with { InvalidateCacheOnWrite = false });
@@ -152,8 +149,8 @@ public class PerRoutePolicyTests
         // The orchestrator resolves through the same map, so a replayed write honours the
         // route's decision rather than a global one.
         var store = new InMemoryStore();
-        await store.UpsertAsync(Cached("https://example.com/api/log", "kept"));
-        await store.UpsertAsync(new Envelope { Url = "https://example.com/api/log", Method = "POST" });
+        await store.PutCachedResponseAsync(Cached("https://example.com/api/log", "kept"));
+        await store.UpsertQueuedWriteAsync(new QueuedWrite { Url = "https://example.com/api/log", Method = "POST" });
 
         var options = new HyperwycOptions();
         options.Routes.For("/api/log/*", RoutePolicy.CacheFirst() with { InvalidateCacheOnWrite = false });

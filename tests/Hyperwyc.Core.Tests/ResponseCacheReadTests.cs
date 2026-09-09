@@ -20,7 +20,7 @@ public class ResponseCacheReadTests
     {
         // Staleness is a TTL comparison against CachedAt now that IStalenessEvaluator is gone
         // (ADR 0004). A zero TTL makes every cached entry stale; the default keeps them fresh,
-        // since FreshCachedEnvelope stamps CachedAt as "now".
+        // since FreshCachedResponse stamps CachedAt as "now".
         var options = new HyperwycOptions { MaxCachedResponseBodyBytes = maxBodyBytes };
         options.Routes.Default = Models.RoutePolicy.CacheFirst(
             cacheIsStale ? TimeSpan.Zero : TimeSpan.FromMinutes(5));
@@ -33,21 +33,19 @@ public class ResponseCacheReadTests
         { InnerHandler = inner };
     }
 
-    private static Envelope FreshCachedEnvelope(string url, string body = "{}", string? etag = null)
+    private static CachedResponse FreshCachedResponse(string url, string body = "{}", string? etag = null)
     {
         var headers = new Dictionary<string, string>();
         if (etag is not null) headers["ETag"] = etag;
 
-        var envelope = new Envelope { Url = url, Method = "GET" };
-        envelope.Response = new CachedResponse
+        return new CachedResponse
         {
+            Url = url,
             StatusCode = 200,
             Body = System.Text.Encoding.UTF8.GetBytes(body),
             Headers = headers,
             CachedAt = DateTimeOffset.UtcNow,
         };
-        envelope.IsSynced = true;
-        return envelope;
     }
 
     // Fresh: no network call, cached response returned
@@ -55,7 +53,7 @@ public class ResponseCacheReadTests
     public async Task FreshCacheHit_DoesNotCallNetwork()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(FreshCachedEnvelope("https://example.com/api/items"));
+        await store.PutCachedResponseAsync(FreshCachedResponse("https://example.com/api/items"));
 
         var stub = new Fakes.StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         using var client = new HttpClient(BuildHandler(store, stub, cacheIsStale: false));
@@ -69,7 +67,7 @@ public class ResponseCacheReadTests
     public async Task FreshCacheHit_ReturnsCachedBody()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(FreshCachedEnvelope("https://example.com/api/items", "[1,2,3]"));
+        await store.PutCachedResponseAsync(FreshCachedResponse("https://example.com/api/items", "[1,2,3]"));
 
         var stub = new Fakes.StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
         using var client = new HttpClient(BuildHandler(store, stub, cacheIsStale: false));
@@ -85,7 +83,7 @@ public class ResponseCacheReadTests
     public async Task FreshCacheHit_ResponseHeadersRestored()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(FreshCachedEnvelope("https://example.com/api/items", etag: "\"abc123\""));
+        await store.PutCachedResponseAsync(FreshCachedResponse("https://example.com/api/items", etag: "\"abc123\""));
 
         var stub = new Fakes.StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         using var client = new HttpClient(BuildHandler(store, stub, cacheIsStale: false));
@@ -101,7 +99,7 @@ public class ResponseCacheReadTests
     public async Task StaleCacheHit_CallsNetworkAndUpdatesCache()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(FreshCachedEnvelope("https://example.com/api/items", "old"));
+        await store.PutCachedResponseAsync(FreshCachedResponse("https://example.com/api/items", "old"));
 
         var stub = new Fakes.StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
@@ -118,7 +116,7 @@ public class ResponseCacheReadTests
     public async Task StaleCacheHit_PublishesOnUpdated()
     {
         var store = new InMemoryStore();
-        await store.UpsertAsync(FreshCachedEnvelope("https://example.com/api/items"));
+        await store.PutCachedResponseAsync(FreshCachedResponse("https://example.com/api/items"));
 
         var events = new HyperwycEventStream();
         HyperwycEvent? received = null;
@@ -159,7 +157,7 @@ public class ResponseCacheReadTests
 
         var cached = await store.GetCachedResponseAsync("https://example.com/api/items/1");
         Assert.NotNull(cached);
-        Assert.Equal("{\"id\":1}", cached!.Response!.GetBodyAsText());
+        Assert.Equal("{\"id\":1}", cached!.GetBodyAsText());
     }
 
     // Non-2xx: not cached
