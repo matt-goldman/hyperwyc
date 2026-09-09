@@ -39,11 +39,8 @@ public class UnreadableStoreTests
             return _inner.UpsertAsync(envelope, ct);
         }
 
-        public Task MarkDeliveredAsync(string id, CancellationToken ct = default) =>
-            _inner.MarkDeliveredAsync(id, ct);
-
-        public Task MoveToDeadLetterAsync(string id, CancellationToken ct = default) =>
-            _inner.MoveToDeadLetterAsync(id, ct);
+        public Task RemoveDeliveredAsync(string id, CancellationToken ct = default) =>
+            _inner.RemoveDeliveredAsync(id, ct);
 
         public Task InvalidateCacheForPrefixAsync(string prefix, CancellationToken ct = default) =>
             _inner.InvalidateCacheForPrefixAsync(prefix, ct);
@@ -181,8 +178,7 @@ public class UnreadableStoreTests
         public Task<Envelope?> GetCachedResponseAsync(string u, CancellationToken ct = default) => throw Fail();
         public Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default) => throw Fail();
         public Task UpsertAsync(Envelope e, CancellationToken ct = default) => throw Fail();
-        public Task MarkDeliveredAsync(string id, CancellationToken ct = default) => throw Fail();
-        public Task MoveToDeadLetterAsync(string id, CancellationToken ct = default) => throw Fail();
+        public Task RemoveDeliveredAsync(string id, CancellationToken ct = default) => throw Fail();
         public Task InvalidateCacheForPrefixAsync(string p, CancellationToken ct = default) => throw Fail();
         public Task ResetAsync(CancellationToken ct = default) => Task.CompletedTask;
     }

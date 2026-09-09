@@ -120,7 +120,7 @@ public sealed class CabinetConcurrencyTests : IDisposable
             await store.UpsertAsync(e);
         }
 
-        await Task.WhenAll(ids.Select(id => Task.Run(() => store.MarkDeliveredAsync(id))));
+        await Task.WhenAll(ids.Select(id => Task.Run(() => store.RemoveDeliveredAsync(id))));
 
         // Every envelope is out of the outbox. Without serialisation these are
         // read-modify-write races and some updates are silently discarded.

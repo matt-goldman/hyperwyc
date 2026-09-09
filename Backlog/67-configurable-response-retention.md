@@ -18,11 +18,11 @@ A rejection often carries the only explanation of itself, and that explanation c
 
 The criterion is not a status range. It is: **did the server tell you something you cannot get any other way?**
 
-| | Reconstructable? |
-|---|---|
+|                     | Reconstructable?                                                                                                                                                                 |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `400`, `409`, `422` | **No.** A validation payload, a `ProblemDetails`, an account of what conflicted — this is the whole reason the response existed, and re-reading the resource does not produce it |
-| `401`, `403`, `404` | Usually yes. The code carries the meaning; a re-read gives the same answer |
-| `429` | **Not from the body** — the actionable part is `Retry-After`, a header |
+| `401`, `403`, `404` | Usually yes. The code carries the meaning; a re-read gives the same answer                                                                                                       |
+| `429`               | **Not from the body** — the actionable part is `Retry-After`, a header                                                                                                           |
 
 Any response saying *the problem is at the caller's end* should tell the caller what to do about it, and one that does not is bad API design. `400` and `409` are the two where a well-designed API almost always includes a body, and `400` more often than `409` — `ProblemDetails` exists for exactly this, and ASP.NET Core returns one for model-binding failures without being asked.
 

@@ -6,10 +6,17 @@ namespace Hyperwyc.Models;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Events are transient. A background flush can complete while the application is not
-/// running, so anything a consumer must not miss is also persisted on the envelope — see
-/// <see cref="DeliveryOutcome"/>. Treat the event as the live notification and the store as the
-/// record of truth.
+/// Events are transient, and for a delivery this is the <b>only</b> report there is: a delivered
+/// write leaves the store along with what the server said about it, because keeping an ordinary
+/// HTTP response is the application's business rather than Hyperwyc's. See
+/// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/docs/decisions/0010-delivery-ends-hyperwycs-interest.md">ADR 0010</see>.
+/// The practical consequence is that a consumer has to be subscribed before a flush runs, which
+/// is why <see cref="HyperwycOptions.FlushOnStartup"/> defaults to <see langword="false"/>.
+/// </para>
+/// <para>
+/// The one thing that is persisted rather than published is a transport failure, which raises no
+/// event at all — the envelope stays queued and carries its own account of why. See
+/// <see cref="Envelope.LastOutcome"/>.
 /// </para>
 /// </remarks>
 /// <param name="Type">The kind of lifecycle transition that occurred.</param>
@@ -24,7 +31,7 @@ namespace Hyperwyc.Models;
 /// </param>
 /// <param name="RequestId">
 /// Hyperwyc's own identifier for the envelope. Unique, unlike
-/// <paramref name="CorrelationId"/>, and the handle a diagnostics or dead-letter view uses.
+/// <paramref name="CorrelationId"/>, and the handle a diagnostics view over the outbox uses.
 /// Applications correlating against their own records want <paramref name="CorrelationId"/>.
 /// </param>
 /// <param name="RequestBody">
@@ -34,11 +41,9 @@ namespace Hyperwyc.Models;
 /// not necessarily text.
 /// </param>
 /// <param name="Outcome">
-/// What the server or network said, for events that report a delivery attempt
-/// (<see cref="HyperwycEventType.OnDelivered"/>, <see cref="HyperwycEventType.OnFailed"/>).
-/// <see langword="null"/> on
-/// <see cref="HyperwycEventType.OnQueued"/> and <see cref="HyperwycEventType.OnUpdated"/>, where no
-/// attempt has been made.
+/// What the server said, on <see cref="HyperwycEventType.OnDelivered"/> — the status, the reason
+/// phrase and the body, whatever they were. <see langword="null"/> on every other event type,
+/// where no delivery has completed.
 /// </param>
 public record HyperwycEvent(
     HyperwycEventType Type,

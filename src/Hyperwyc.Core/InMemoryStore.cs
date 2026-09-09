@@ -24,7 +24,7 @@ public sealed class InMemoryStore : IHyperwycStore
         try
         {
             return _store.Values
-                .FirstOrDefault(e => e.Url == url && e.Response is not null && !e.IsDeadLettered);
+                .FirstOrDefault(e => e.Url == url && e.Response is not null);
         }
         finally
         {
@@ -39,7 +39,7 @@ public sealed class InMemoryStore : IHyperwycStore
         try
         {
             return [.. _store.Values
-                .Where(e => !e.IsSynced && !e.IsDeadLettered)
+                .Where(e => !e.IsSynced)
                 .OrderBy(e => e.CreatedUtc)];
         }
         finally
@@ -65,28 +65,15 @@ public sealed class InMemoryStore : IHyperwycStore
     }
 
     /// <inheritdoc/>
-    public async Task MarkDeliveredAsync(string id, CancellationToken ct = default)
+    public async Task RemoveDeliveredAsync(string id, CancellationToken ct = default)
     {
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (_store.TryGetValue(id, out var envelope))
-                envelope.IsSynced = true;
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-
-    /// <inheritdoc/>
-    public async Task MoveToDeadLetterAsync(string id, CancellationToken ct = default)
-    {
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            if (_store.TryGetValue(id, out var envelope))
-                envelope.IsDeadLettered = true;
+            // Removed rather than flagged. Hyperwyc holds outstanding work and nothing else, so
+            // a delivered write leaves with its request body and headers rather than sitting in
+            // the store carrying them. See ADR 0010.
+            _store.Remove(id);
         }
         finally
         {

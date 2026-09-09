@@ -126,10 +126,9 @@ public class OutboxProcessorDisposalTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => flush);
 
         // Nothing lost: the envelope is still queued for the next start, and was
-        // not mistaken for a delivery failure.
+        // not mistaken for a delivery.
         var pending = await store.GetPendingOutboxAsync();
         Assert.Single(pending);
-        Assert.False(pending[0].IsDeadLettered);
     }
 
     [Fact]

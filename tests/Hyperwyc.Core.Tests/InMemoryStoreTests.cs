@@ -58,20 +58,6 @@ public class InMemoryStoreTests
     }
 
     [Fact]
-    public async Task GetCachedResponseAsync_DeadLetteredEnvelope_ReturnsNull()
-    {
-        var store = new InMemoryStore();
-        var envelope = MakeEnvelope();
-        envelope.Response = MakeCachedResponse();
-        envelope.IsDeadLettered = true;
-        await store.UpsertAsync(envelope);
-
-        var result = await store.GetCachedResponseAsync(envelope.Url);
-
-        Assert.Null(result);
-    }
-
-    [Fact]
     public async Task GetCachedResponseAsync_UrlNotMatching_ReturnsNull()
     {
         var store = new InMemoryStore();
@@ -117,22 +103,6 @@ public class InMemoryStoreTests
         var e1 = MakeEnvelope();
         var e2 = MakeEnvelope();
         e1.IsSynced = true;
-        await store.UpsertAsync(e1);
-        await store.UpsertAsync(e2);
-
-        var result = await store.GetPendingOutboxAsync();
-
-        Assert.Single(result);
-        Assert.Equal(e2.Id, result[0].Id);
-    }
-
-    [Fact]
-    public async Task GetPendingOutboxAsync_ExcludesDeadLettered()
-    {
-        var store = new InMemoryStore();
-        var e1 = MakeEnvelope();
-        var e2 = MakeEnvelope();
-        e1.IsDeadLettered = true;
         await store.UpsertAsync(e1);
         await store.UpsertAsync(e2);
 
@@ -195,51 +165,42 @@ public class InMemoryStoreTests
     }
 
     // -------------------------------------------------------------------------
-    // MarkDeliveredAsync
+    // RemoveDeliveredAsync
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task MarkDeliveredAsync_ExistingId_SetsSynced()
+    public async Task RemoveDeliveredAsync_ExistingId_TakesItOutOfTheOutbox()
     {
         var store = new InMemoryStore();
         var envelope = MakeEnvelope();
         await store.UpsertAsync(envelope);
 
-        await store.MarkDeliveredAsync(envelope.Id);
+        await store.RemoveDeliveredAsync(envelope.Id);
 
         var outbox = await store.GetPendingOutboxAsync();
         Assert.Empty(outbox);
     }
 
     [Fact]
-    public async Task MarkDeliveredAsync_MissingId_DoesNotThrow()
+    public async Task RemoveDeliveredAsync_ExistingId_DiscardsTheRecordEntirely()
     {
-        var store = new InMemoryStore();
-        await store.MarkDeliveredAsync("nonexistent-id"); // should not throw
-    }
-
-    // -------------------------------------------------------------------------
-    // MoveToDeadLetterAsync
-    // -------------------------------------------------------------------------
-
-    [Fact]
-    public async Task MoveToDeadLetterAsync_ExistingId_SetsDeadLettered()
-    {
+        // Not merely absent from the outbox — absent. A flag would satisfy the test above
+        // while still holding the request body and its Authorization header. See ADR 0010.
         var store = new InMemoryStore();
         var envelope = MakeEnvelope();
+        envelope.Response = MakeCachedResponse();
         await store.UpsertAsync(envelope);
 
-        await store.MoveToDeadLetterAsync(envelope.Id);
+        await store.RemoveDeliveredAsync(envelope.Id);
 
-        var outbox = await store.GetPendingOutboxAsync();
-        Assert.Empty(outbox);
+        Assert.Null(await store.GetCachedResponseAsync(envelope.Url));
     }
 
     [Fact]
-    public async Task MoveToDeadLetterAsync_MissingId_DoesNotThrow()
+    public async Task RemoveDeliveredAsync_MissingId_DoesNotThrow()
     {
         var store = new InMemoryStore();
-        await store.MoveToDeadLetterAsync("nonexistent-id"); // should not throw
+        await store.RemoveDeliveredAsync("nonexistent-id"); // should not throw
     }
 
     // -------------------------------------------------------------------------

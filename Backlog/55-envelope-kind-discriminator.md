@@ -44,6 +44,39 @@ It also made the [issue 25](Done/25-binary-request-response-bodies.md) cache-ide
 to see: cache envelopes and outbox envelopes share an id space, which is why a deterministic
 `cache:` prefix was needed to keep them from colliding.
 
+## [66](66-dead-letter-store-fails-the-scope-test.md) removes two of the flag's three jobs
+
+Added 2026-09-09. **Do 66 first.** It does not merely make this item easier, it changes which candidate shape is cheaper.
+
+`IsSynced` currently does three things:
+
+1. Marks a cache entry, set `true` at creation by `Envelope.ForCachedResponse`.
+2. Marks a queued write as delivered, set `true` by `MarkDeliveredAsync`.
+3. Pairs with `IsDeadLettered` to define the outbox — `.Where(e => !e.IsSynced && !e.IsDeadLettered)`.
+
+Under 66, a delivered write is **removed** from the store rather than flagged, so job 2 becomes a delete. And the dead-letter partition goes, so `IsDeadLettered` disappears and job 3 loses its other half.
+
+**What is left is job 1 alone** — a flag whose entire meaning is *this is a cache entry, not an outbox entry*. There is no status left for it to plausibly be about, which is this item's thesis with the camouflage removed.
+
+### It also inverts the choice below
+
+The hesitation about two types was that `IHyperwycStore` has one `UpsertAsync` and would need either two or a shared base. Count the interface after 66 removes `MoveToDeadLetterAsync`:
+
+| Method | Applies to |
+|---|---|
+| `GetCachedResponseAsync` | cache only |
+| `InvalidateCacheForPrefixAsync` | cache only |
+| `GetPendingOutboxAsync` | outbox only |
+| `MarkDeliveredAsync` | outbox only |
+| `UpsertAsync` | both |
+| `ResetAsync` | both |
+
+**Four of six are already kind-specific.** The interface is two interfaces wearing one type, and splitting `UpsertAsync` would make it more honest rather than more complicated — which removes the reason option 2 was held back.
+
+### The workaround that keeps reappearing
+
+[68](Done/68-cache-invalidation-leaves-tombstones.md)'s fix had to filter on `Response is not null` so that prefix invalidation would not sweep up queued writes matching the same URL. That filter is a **kind check written as a field check**, because there is no kind to check. Expect more of them until there is.
+
 ## Candidate shapes
 
 1. **An explicit discriminator** — `Envelope.Kind` of `EnvelopeKind { CachedResponse, QueuedWrite }`.

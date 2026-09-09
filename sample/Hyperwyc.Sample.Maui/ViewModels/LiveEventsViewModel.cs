@@ -38,7 +38,7 @@ public partial class LiveEventsViewModel : ObservableObject, IDisposable, IObser
     {
         LiveEvents.Add(new EventViewModel(value));
 
-        //if (value.Outcome?.Kind is null or DeliveryOutcomeKind.Succeeded) return;
+        //if (value.Outcome?.StatusCode is null or (>= 200 and < 300)) return;
 
         var message = $"A {value.Method} call to {value.Url} has failed: {value.Outcome?.Kind}";
         var toast = Toast.Make(message);
@@ -68,7 +68,10 @@ public class EventViewModel
     {
         Url = syncEvent.Url;
 
-        IsSuccess = syncEvent.Outcome?.Kind == DeliveryOutcomeKind.Succeeded;
+        // The status code, not the event: Hyperwyc reports that the server answered and takes no
+        // view on what it said, so deciding whether that is good news is the app's job. See
+        // ADR 0010.
+        IsSuccess = syncEvent.Outcome?.StatusCode is >= 200 and < 300;
 
         TitleColor = IsSuccess ? Colors.Green : Colors.Red;
 
@@ -76,6 +79,8 @@ public class EventViewModel
         EventType = syncEvent.Type.ToString();
         Method = syncEvent.Method;
 
-        Title = IsSuccess ? "Succeeded" : syncEvent.Outcome?.ReasonPhrase ?? syncEvent.Outcome?.Kind.ToString() ?? "Unknown";
+        Title = IsSuccess
+            ? "Succeeded"
+            : syncEvent.Outcome?.ReasonPhrase ?? syncEvent.Outcome?.Kind.ToString() ?? "Unknown";
     }
 }

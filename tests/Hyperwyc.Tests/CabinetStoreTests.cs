@@ -67,17 +67,6 @@ public class CabinetStoreTests : IDisposable
         Assert.Null(result);
     }
 
-    [Fact]
-    public async Task GetCachedResponseAsync_DeadLetteredEnvelope_ReturnsNull()
-    {
-        var envelope = MakeCachedEnvelope("https://example.com/api/items");
-        envelope.IsDeadLettered = true;
-        await _store.UpsertAsync(envelope);
-
-        var result = await _store.GetCachedResponseAsync("https://example.com/api/items");
-        Assert.Null(result);
-    }
-
     // -------------------------------------------------------------------------
     // GetPendingOutboxAsync
     // -------------------------------------------------------------------------
@@ -105,17 +94,14 @@ public class CabinetStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task GetPendingOutboxAsync_ExcludesSyncedAndDeadLettered()
+    public async Task GetPendingOutboxAsync_ExcludesCacheEntries()
     {
         var pending = new Envelope { Url = "https://example.com/pending", Method = "POST" };
-        var synced = new Envelope { Url = "https://example.com/synced", Method = "POST" };
-        synced.IsSynced = true;
-        var dead = new Envelope { Url = "https://example.com/dead", Method = "POST" };
-        dead.IsDeadLettered = true;
+        var cached = new Envelope { Url = "https://example.com/synced", Method = "GET" };
+        cached.IsSynced = true;
 
         await _store.UpsertAsync(pending);
-        await _store.UpsertAsync(synced);
-        await _store.UpsertAsync(dead);
+        await _store.UpsertAsync(cached);
 
         var result = await _store.GetPendingOutboxAsync();
 
@@ -124,35 +110,41 @@ public class CabinetStoreTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
-    // MarkDeliveredAsync
+    // RemoveDeliveredAsync
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task MarkDeliveredAsync_RemovesEnvelopeFromPendingOutbox()
+    public async Task RemoveDeliveredAsync_RemovesEnvelopeFromPendingOutbox()
     {
         var envelope = new Envelope { Url = "https://example.com/api/orders", Method = "POST" };
         await _store.UpsertAsync(envelope);
 
-        await _store.MarkDeliveredAsync(envelope.Id);
+        await _store.RemoveDeliveredAsync(envelope.Id);
 
         var pending = await _store.GetPendingOutboxAsync();
         Assert.Empty(pending);
     }
 
-    // -------------------------------------------------------------------------
-    // MoveToDeadLetterAsync
-    // -------------------------------------------------------------------------
-
     [Fact]
-    public async Task MoveToDeadLetterAsync_RemovesEnvelopeFromPendingOutbox()
+    public async Task RemoveDeliveredAsync_DoesNotLeaveTheRecordBehind()
     {
-        var envelope = new Envelope { Url = "https://example.com/api/orders", Method = "POST" };
+        // The outbox filter would hide a flagged envelope just as well, so the outbox is not
+        // evidence. Reopening the store is: nothing is left to read back. See ADR 0010 —
+        // the request body and its headers go with the record, which is most of the point.
+        var envelope = new Envelope
+        {
+            Url             = "https://example.com/api/orders",
+            Method          = "POST",
+            RequestHeaders  = new Dictionary<string, string> { ["Authorization"] = "Bearer token" },
+            RequestBody     = "{}"u8.ToArray(),
+        };
         await _store.UpsertAsync(envelope);
 
-        await _store.MoveToDeadLetterAsync(envelope.Id);
+        await _store.RemoveDeliveredAsync(envelope.Id);
 
-        var pending = await _store.GetPendingOutboxAsync();
-        Assert.Empty(pending);
+        var reopened = new CabinetStore(_tempDir, TestKey);
+        Assert.Empty(await reopened.GetPendingOutboxAsync());
+        Assert.Null(await reopened.GetCachedResponseAsync("https://example.com/api/orders"));
     }
 
     // -------------------------------------------------------------------------
@@ -296,7 +288,7 @@ public class CabinetStoreTests : IDisposable
         };
         envelope.LastOutcome = new DeliveryOutcome
         {
-            Kind            = DeliveryOutcomeKind.Rejected,
+            Kind            = DeliveryOutcomeKind.TransportFailure,
             StatusCode      = 422,
             ReasonPhrase    = "Unprocessable Content",
             Body            = [0x04, 0x05],
@@ -325,7 +317,7 @@ public class CabinetStoreTests : IDisposable
         Assert.Equal(envelope.Response.Body, restored.Response.Body);
         Assert.Equal(envelope.Response.CachedAt, restored.Response.CachedAt);
 
-        Assert.Equal(DeliveryOutcomeKind.Rejected, restored.LastOutcome!.Kind);
+        Assert.Equal(DeliveryOutcomeKind.TransportFailure, restored.LastOutcome!.Kind);
         Assert.Equal(422, restored.LastOutcome.StatusCode);
         Assert.Equal("Unprocessable Content", restored.LastOutcome.ReasonPhrase);
         Assert.Equal(envelope.LastOutcome.Body, restored.LastOutcome.Body);
@@ -335,15 +327,15 @@ public class CabinetStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task DeadLetterFlag_SurvivesReopeningTheStore()
+    public async Task IsSyncedFlag_SurvivesReopeningTheStore()
     {
-        // The two bool flags are the fields with no observable value of their own — a default
-        // of false is indistinguishable from a correct read unless something downstream keys
-        // off them. The outbox does: it is defined as neither synced nor dead-lettered, so an
-        // envelope that stays out of it after a reopen is one whose flag came back.
-        var deadLettered = new Envelope { Url = "https://example.com/api/orders", Method = "POST" };
-        deadLettered.IsDeadLettered = true;
-        await _store.UpsertAsync(deadLettered);
+        // The one bool with no observable value of its own — a default of false is
+        // indistinguishable from a correct read unless something downstream keys off it. The
+        // outbox does: it is defined as the negation of this flag, so a cache entry that stays
+        // out of it after a reopen is one whose flag came back.
+        var cached = new Envelope { Url = "https://example.com/api/orders", Method = "GET" };
+        cached.IsSynced = true;
+        await _store.UpsertAsync(cached);
 
         var pending = new Envelope { Url = "https://example.com/api/items", Method = "POST" };
         await _store.UpsertAsync(pending);

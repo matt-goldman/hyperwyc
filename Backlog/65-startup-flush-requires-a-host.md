@@ -8,6 +8,8 @@
 
 ⬜ Open. Filed 2026-09-08, found while reviewing the tutorial — the tutorial's own client is a bare `ServiceCollection`, so the page was about to tell readers that delivery is automatic in an app where it is not.
 
+> **[66](66-dead-letter-store-fails-the-scope-test.md) changed the default to `false`**, for its own reason: the event became the only report of a delivery, so a flush inside host startup would race a subscriber that attaches later and lose the outcome in silence. That takes the sting out of this item — a trigger nobody is relying on cannot silently fail to fire — but it does not close it. **Option 1 is still the answer and still unwritten**, and the MAUI question is untouched: whether `MauiApp` starts hosted services at all is a fact about the platform, not about the default.
+
 ## Measured
 
 Same store directory across all three, one write queued with the API down, then the API brought up:

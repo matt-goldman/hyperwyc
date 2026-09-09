@@ -6,6 +6,8 @@
 > anyone whose credential is still valid at replay time. See "Why a deny-list is the wrong
 > answer" below.
 
+> **[66](66-dead-letter-store-fails-the-scope-test.md) shortens the exposure this documents, for one of the two kinds.** If a delivered write is discarded rather than retained, an outbox entry's headers persist only while the write is *outstanding*, instead of indefinitely. Cache entries are unaffected — they still carry the request headers of the `GET` that populated them, for as long as the entry lives. Whatever this item ends up saying should distinguish the two.
+
 ## Summary
 
 `Envelope.ForRequest` persists every request header verbatim, including `Authorization`

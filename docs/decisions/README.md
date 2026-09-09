@@ -15,6 +15,7 @@ reversed.
 | [0007](0007-connectivity-cannot-cost-correctness.md) | Connectivity is an optimisation, not a correctness input | Accepted |
 | [0008](0008-shrink-what-you-store.md) | Shrink what you store before reshaping where you store it | Accepted |
 | [0009](0009-provide-the-seam-not-the-alternatives.md) | Provide the seam, not the alternatives | Proposed |
+| [0010](0010-delivery-ends-hyperwycs-interest.md) | Delivery ends Hyperwyc's interest in a write | Proposed |
 
 ## What belongs here
 

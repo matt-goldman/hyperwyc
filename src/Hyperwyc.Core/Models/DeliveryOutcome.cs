@@ -7,21 +7,26 @@ namespace Hyperwyc.Models;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is the record Hyperwyc persists on the <see cref="Envelope"/>, and
-/// <see cref="HyperwycEvent.Outcome"/> hands out the same instance. That is deliberate: an event
-/// is transient and a mobile app is routinely killed between a background flush and the user
-/// next opening it, so a failure delivered only as an event is a failure nobody hears about.
-/// The durable record is the primary artefact and the event is a live view of it, rather than
-/// two shapes that have to be kept in agreement.
+/// <see cref="Kind"/> alone says whether Hyperwyc is finished with the envelope.
+/// <see cref="DeliveryOutcomeKind.Delivered"/> is final and the envelope is discarded with it;
+/// <see cref="DeliveryOutcomeKind.TransportFailure"/> means it stays in the outbox for the next
+/// flush.
 /// </para>
 /// <para>
-/// It follows that everything here has to survive serialisation, which is why there is no
+/// <b>Only a transport failure is persisted.</b> It is written to <see cref="Envelope.LastOutcome"/>
+/// because the envelope is still there to carry it, and it is the only account of why an outbox is
+/// not draining — see
+/// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/Backlog/23-v1-diagnostics-view.md">issue 23</see>.
+/// A delivery outcome is published on <see cref="HyperwycEvent.Outcome"/> and nowhere else: what the
+/// server said is an ordinary HTTP response, and keeping it is the application's business rather
+/// than Hyperwyc's. See
+/// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/docs/decisions/0010-delivery-ends-hyperwycs-interest.md">ADR 0010</see>,
+/// and note the consequence: <b>the event is the only report of a delivery</b>, so a consumer must
+/// be subscribed before a flush runs.
+/// </para>
+/// <para>
+/// Everything here still has to survive serialisation, which is why there is no
 /// <see cref="Exception"/> — see <see cref="Error"/>.
-/// </para>
-/// <para>
-/// <see cref="Kind"/> alone says whether Hyperwyc is finished with the envelope:
-/// <see cref="DeliveryOutcomeKind.Succeeded"/> and <see cref="DeliveryOutcomeKind.Rejected"/> are final,
-/// the other two mean it stays in the outbox for the next flush.
 /// </para>
 /// </remarks>
 public sealed record DeliveryOutcome

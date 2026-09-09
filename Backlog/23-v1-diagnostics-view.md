@@ -1,8 +1,10 @@
-# Issue 23 — [v1.0] In-App Diagnostics View — Unsynced and Dead-Lettered Records
+# Issue 23 — [v1.0] In-App Diagnostics View — the Outbox
 
 ## Summary
 
-Provide a read-only diagnostics surface so developers (and end users) can inspect the current state of the Hyperwyc store: what's pending in the outbox and what's stuck in dead-letter.
+Provide a read-only diagnostics surface so developers (and end users) can inspect the current state of the Hyperwyc store: what is pending in the outbox, and why it is not moving.
+
+> **Narrowed by [66](66-dead-letter-store-fails-the-scope-test.md), which has landed.** There is no dead-letter store any more, so half of what this item proposed reading has nothing behind it. **The other half survives intact and matters more than it did**: the outbox is named explicitly by scope-test Q4, and since 66 a transport failure — which publishes no event — is the *only* outcome Hyperwyc still writes down. This is the read path to it. Everything below that says "dead-lettered" should be read as struck out; everything about pending items stands.
 
 ## Background
 

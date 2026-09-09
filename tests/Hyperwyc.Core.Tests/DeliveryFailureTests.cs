@@ -8,12 +8,14 @@ namespace Hyperwyc.Tests;
 
 /// <summary>
 /// Covers what a flush does with each class of failure. Issue #38 settled the classification;
-/// ADR 0004 then removed the retry apparatus that had survived it.
+/// ADR 0004 then removed the retry apparatus that had survived it, and ADR 0010 removed the
+/// dead-letter store that was keeping the rejections.
 /// </summary>
 /// <remarks>
 /// There is no retry budget, no backoff and no scheduled follow-up. Any answer from the server
-/// is a final outcome — the request reached the API, which was the job. Only a transport
-/// failure, where no response came back at all, leaves the envelope in the outbox.
+/// is a final outcome — the request reached the API, which was the job — and the envelope is
+/// discarded whatever it said. Only a transport failure, where no response came back at all,
+/// leaves the envelope in the outbox.
 /// </remarks>
 public class DeliveryFailureTests
 {
@@ -68,7 +70,7 @@ public class DeliveryFailureTests
     }
 
     // -------------------------------------------------------------------------
-    // Permanent failures cost one attempt
+    // A rejection costs one attempt, and is kept no longer than an acceptance
     // -------------------------------------------------------------------------
 
     [Theory]
@@ -78,7 +80,7 @@ public class DeliveryFailureTests
     [InlineData(HttpStatusCode.NotFound)]
     [InlineData(HttpStatusCode.Conflict)]
     [InlineData(HttpStatusCode.UnprocessableEntity)]
-    public async Task PermanentFailure_DeadLettersOnTheFirstAttempt(HttpStatusCode status)
+    public async Task Rejection_IsFinalOnTheFirstAttempt(HttpStatusCode status)
     {
         var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
@@ -92,7 +94,7 @@ public class DeliveryFailureTests
     }
 
     [Fact]
-    public async Task PermanentFailure_PublishesOnFailed()
+    public async Task Rejection_PublishesOnDelivered()
     {
         var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
@@ -105,8 +107,31 @@ public class DeliveryFailureTests
 
         await orchestrator.FlushAsync();
 
-        // One attempt, one event. There is no retry to announce.
-        Assert.Single(received, e => e.Type == HyperwycEventType.OnFailed);
+        // One attempt, one event, and it is the same event an acceptance raises: the request
+        // reached the API, which is the only thing Hyperwyc reports on. See ADR 0010.
+        var delivered = Assert.Single(received, e => e.Type == HyperwycEventType.OnDelivered);
+        Assert.Equal(DeliveryOutcomeKind.Delivered, delivered.Outcome?.Kind);
+        Assert.Equal(409, delivered.Outcome?.StatusCode);
+    }
+
+    [Fact]
+    public async Task Rejection_RetainsNothing()
+    {
+        // The heart of ADR 0010. A refused write used to be moved to a dead-letter partition
+        // and kept indefinitely, request body and Authorization header included, while an
+        // accepted one was discarded. Both are deliveries, so both leave.
+        var store = new InMemoryStore();
+        var envelope = Outbox();
+        envelope.RequestHeaders["Authorization"] = "Bearer token";
+        await store.UpsertAsync(envelope);
+
+        await using var orchestrator = BuildOrchestrator(
+            store, new CountingTransport(HttpStatusCode.Conflict));
+
+        await orchestrator.FlushAsync();
+
+        Assert.Empty(await store.GetPendingOutboxAsync());
+        Assert.Null(await store.GetCachedResponseAsync(envelope.Url));
     }
 
     // -------------------------------------------------------------------------
@@ -182,7 +207,7 @@ public class DeliveryFailureTests
     }
 
     [Fact]
-    public async Task ServerError_RecordsTheOutcomeItDeadLetteredOn()
+    public async Task ServerError_ReportsTheStatusItGot()
     {
         var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
@@ -195,11 +220,12 @@ public class DeliveryFailureTests
 
         await orchestrator.FlushAsync();
 
-        // Dead-lettering is not discarding: the status the server gave is reported, because it
-        // is what the application needs in order to decide whether to raise it again itself.
-        var failed = Assert.Single(received, e => e.Type == HyperwycEventType.OnFailed);
-        Assert.Equal(DeliveryOutcomeKind.Rejected, failed.Outcome?.Kind);
-        Assert.Equal(503, failed.Outcome?.StatusCode);
+        // Discarding the envelope is not discarding the news: the status the server gave is
+        // reported on the event, because it is what the application needs in order to decide
+        // whether to raise the write again itself. The event is the only place it appears.
+        var delivered = Assert.Single(received, e => e.Type == HyperwycEventType.OnDelivered);
+        Assert.Equal(DeliveryOutcomeKind.Delivered, delivered.Outcome?.Kind);
+        Assert.Equal(503, delivered.Outcome?.StatusCode);
     }
 
     [Fact]
@@ -251,7 +277,7 @@ public class DeliveryFailureTests
     }
 
     [Fact]
-    public async Task TransportFailure_DoesNotDeadLetter()
+    public async Task TransportFailure_LeavesTheEnvelopeQueued()
     {
         var store = new InMemoryStore();
         await store.UpsertAsync(Outbox());
@@ -260,9 +286,9 @@ public class DeliveryFailureTests
         await orchestrator.FlushAsync();
 
         var pending = Assert.Single(await store.GetPendingOutboxAsync());
-        Assert.False(pending.IsDeadLettered);
 
-        // Being unable to reach the network says nothing about the request.
+        // Being unable to reach the network says nothing about the request. This is the one
+        // outcome that is persisted rather than published — see ADR 0010.
         Assert.Equal(DeliveryOutcomeKind.TransportFailure, pending.LastOutcome?.Kind);
         Assert.Null(pending.LastOutcome?.StatusCode);
     }

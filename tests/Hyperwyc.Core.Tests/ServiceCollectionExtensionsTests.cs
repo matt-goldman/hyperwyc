@@ -1,6 +1,7 @@
 using static Hyperwyc.Tests.TestHealthFactory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Hyperwyc.Interfaces;
 using Hyperwyc.Models;
 using Hyperwyc.Tests.Fakes;
@@ -275,6 +276,31 @@ public sealed class ServiceCollectionExtensionsTests
         Assert.IsType<AlwaysOnlineConnectivityService>(sp.GetRequiredService<IConnectivityService>());
     }
 
+    // -------------------------------------------------------------------------
+    // The startup flush is opt-in (ADR 0010)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void AddHyperwycCore_Defaults_RegistersNoStartupFlush()
+    {
+        // The flush completes inside host startup, and a delivery is reported nowhere but the
+        // event stream, so flushing before the application has subscribed loses the outcome
+        // silently. Off by default; the consumer calls FlushAsync once it is listening.
+        var services = new ServiceCollection();
+        services.AddHyperwycCore<InMemoryStore>();
+
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(IHostedService));
+    }
+
+    [Fact]
+    public void AddHyperwycCore_FlushOnStartupEnabled_RegistersTheHostedService()
+    {
+        var services = new ServiceCollection();
+        services.AddHyperwycCore<InMemoryStore>(o => o.FlushOnStartup = true);
+
+        Assert.Contains(services, d => d.ServiceType == typeof(IHostedService));
+    }
+
     [Fact]
     public void ConnectivityRegisteredAfterHyperwyc_ReachesTheOrchestrator()
     {
@@ -465,11 +491,8 @@ public sealed class ServiceCollectionExtensionsTests
         public Task UpsertAsync(Envelope envelope, CancellationToken ct = default) =>
             _inner.UpsertAsync(envelope, ct);
 
-        public Task MarkDeliveredAsync(string id, CancellationToken ct = default) =>
-            _inner.MarkDeliveredAsync(id, ct);
-
-        public Task MoveToDeadLetterAsync(string id, CancellationToken ct = default) =>
-            _inner.MoveToDeadLetterAsync(id, ct);
+        public Task RemoveDeliveredAsync(string id, CancellationToken ct = default) =>
+            _inner.RemoveDeliveredAsync(id, ct);
 
         public Task InvalidateCacheForPrefixAsync(string urlPrefix, CancellationToken ct = default) =>
             _inner.InvalidateCacheForPrefixAsync(urlPrefix, ct);

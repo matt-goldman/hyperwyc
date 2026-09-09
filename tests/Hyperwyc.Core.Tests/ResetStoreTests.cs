@@ -107,7 +107,7 @@ public class ResetStoreTests
 
         // Reset means discard. Delivering on the way out would, on the logout this exists
         // for, replay through an auth handler whose credentials the app is in the middle of
-        // revoking — every write 401s, dead-letters, and is wiped anyway.
+        // revoking — every write 401s, counts as delivered, and is wiped anyway.
         Assert.Equal(0, transport.CallCount);
     }
 
