@@ -16,7 +16,7 @@ The conformance-suite idea this is sometimes confused with is a different artefa
 
 ## Status
 
-⬜ Open. Filed 2026-09-09. Inherits the benchmark criterion from [52](Done/52-store-rewrites-whole-set-per-write.md), which passed through [70](Done/70-move-bodies-to-cabinet-attachments.md) without being met.
+💭 Under consideration, unscheduled. Filed 2026-09-09; **moved to v2.0+ on 2026-09-10** — it is worth doing and it is not on anyone's critical path, and the v1.2 listing implied otherwise. Inherits the benchmark criterion from [52](Done/52-store-rewrites-whole-set-per-write.md), which passed through [70](Done/70-move-bodies-to-cabinet-attachments.md) without being met.
 
 ## Why this is one item and not two
 

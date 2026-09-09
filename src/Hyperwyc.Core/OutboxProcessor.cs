@@ -241,9 +241,9 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
         using (response)
         {
             // The server answered. Whatever it said, the request reached the API — which was
-            // Hyperwyc's whole job, and it is done. One path, not two: a 409 and a 201 are the
-            // same event from here, and treating them differently was the store deciding what a
-            // status code means on the application's behalf. See ADR 0010.
+            // Hyperwyc's whole job, and it is done. One path, not two: a refusal and an
+            // acceptance are the same event from here, and treating them differently was the
+            // store deciding what a status code means on the application's behalf. See ADR 0010.
             //
             // Retrying a 5xx here would be a worse retry than the one that already ran: the
             // replay traverses the application's pipeline, so its own resilience handler has

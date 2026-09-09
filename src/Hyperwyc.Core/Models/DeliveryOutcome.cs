@@ -20,7 +20,7 @@ namespace Hyperwyc.Models;
 /// A delivery outcome is published on <see cref="HyperwycEvent.Outcome"/> and nowhere else: what the
 /// server said is an ordinary HTTP response, and keeping it is the application's business rather
 /// than Hyperwyc's. See
-/// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/docs/decisions/0010-retain-only-outstanding-work.md">ADR 0010</see>,
+/// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/docs/decisions/0010-delivery-ends-hyperwycs-interest.md">ADR 0010</see>,
 /// and note the consequence: <b>the event is the only report of a delivery</b>, so a consumer must
 /// be subscribed before a flush runs.
 /// </para>

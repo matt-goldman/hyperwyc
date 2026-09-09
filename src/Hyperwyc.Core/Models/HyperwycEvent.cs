@@ -9,7 +9,7 @@ namespace Hyperwyc.Models;
 /// Events are transient, and for a delivery this is the <b>only</b> report there is: a delivered
 /// write leaves the store along with what the server said about it, because keeping an ordinary
 /// HTTP response is the application's business rather than Hyperwyc's. See
-/// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/docs/decisions/0010-retain-only-outstanding-work.md">ADR 0010</see>.
+/// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/docs/decisions/0010-delivery-ends-hyperwycs-interest.md">ADR 0010</see>.
 /// The practical consequence is that a consumer has to be subscribed before a flush runs, which
 /// is why <see cref="HyperwycOptions.FlushOnStartup"/> defaults to <see langword="false"/>.
 /// </para>

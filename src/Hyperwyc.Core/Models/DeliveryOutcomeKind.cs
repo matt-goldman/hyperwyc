@@ -12,7 +12,7 @@ public enum DeliveryOutcomeKind
     /// means the request reached the API, so the delivery is complete and the envelope is gone.
     /// Whether the answer is good news is the application's judgement, on information Hyperwyc
     /// does not have. See
-    /// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/docs/decisions/0010-retain-only-outstanding-work.md">ADR 0010</see>.
+    /// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/docs/decisions/0010-delivery-ends-hyperwycs-interest.md">ADR 0010</see>.
     /// </summary>
     Delivered,
 

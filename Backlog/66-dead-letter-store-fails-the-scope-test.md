@@ -8,7 +8,7 @@ That retention is Hyperwyc holding application data on the basis of a distinctio
 
 ## Status
 
-🟡 **Decided and built, 2026-09-09 — waiting on [ADR 0010](../docs/decisions/0010-retain-only-outstanding-work.md) being accepted.** Option B, as the argument below settles it. The code, tests and documentation are done on `fix-dead-lettering`; this item stays here rather than moving to `Done/` because the ADR that carries the decision is still `Proposed`, and the item is not finished until the decision is.
+🟡 **Decided and built, 2026-09-09 — waiting on [ADR 0010](../docs/decisions/0010-delivery-ends-hyperwycs-interest.md) being accepted.** Option B, as the argument below settles it. The code, tests and documentation are done on `fix-dead-lettering`; this item stays here rather than moving to `Done/` because the ADR that carries the decision is still `Proposed`, and the item is not finished until the decision is.
 
 ### What landed
 
@@ -142,7 +142,7 @@ This item is the hub. Everything below either depends on it or changes shape onc
 
 ## Acceptance Criteria
 
-- [x] An ADR records the distinction — delivery is Hyperwyc's success axis, HTTP's is not — and what it condemns. [ADR 0010](../docs/decisions/0010-retain-only-outstanding-work.md), `Proposed`.
+- [x] An ADR records the distinction — delivery is Hyperwyc's success axis, HTTP's is not — and what it condemns. [ADR 0010](../docs/decisions/0010-delivery-ends-hyperwycs-interest.md), `Proposed`.
 - [x] The `409`-body question has an answer, not an omission. The cost is **accepted**, stated in the ADR and in `docs/events.md`, and [67](67-configurable-response-retention.md) is the deliberate later answer to it.
 - [x] No public member describes a delivered request as failed.
 - [x] `docs/design.md` and `docs/offline-writes.md` stop carrying the "under review" caveat they carry now.

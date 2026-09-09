@@ -4,11 +4,11 @@ What happens to a write made with no network, when it is replayed, and how to fi
 
 ## When Hyperwyc delivers
 
-| Trigger               | When                                                                     |
-| --------------------- | ------------------------------------------------------------------------ |
-| Connectivity restored | Automatic, while the app is running                                      |
-| Application start     | Only if you set `FlushOnStartup`, which defaults to `false`. Needs a host |
-| `FlushAsync()`        | Whenever you call it                                                     |
+| Trigger               | When                                                                |
+| --------------------- | ------------------------------------------------------------------- |
+| Connectivity restored | Automatic, while the app is running                                 |
+| Application start     | If `FlushOnStartup` is `true`. Defaults to `false`, and needs a host |
+| `FlushAsync()`        | Whenever you call it                                                |
 
 ```csharp
 await hyperwyc.FlushAsync();   // IHyperwyc, resolved from DI
@@ -16,12 +16,20 @@ await hyperwyc.FlushAsync();   // IHyperwyc, resolved from DI
 
 Call it for a user-facing "sync now" control — something you should offer if you expose queued writes to your users — and for any lifecycle event in your app that warrants one.
 
-**And call it at startup, once you have subscribed to [`Events`](events.md).** That is what `FlushOnStartup` would have done for you, and it is off by default for a reason: it runs inside host startup, so anything that subscribes later misses whatever it delivered — and since Hyperwyc keeps nothing about a delivered write, that outcome is simply gone. Turning it on is fine if your subscriber is in place before the host starts. Note also that it is an `IHostedService`, so in an app built on a bare `ServiceCollection` it does nothing at all.
+### Which way to flush at startup
+
+Both are supported; the difference is whether you need to hear what the server said.
+
+**Set `FlushOnStartup = true`** if your event subscriber is composed before the host starts, or if you do not need the outcomes at all and simply want the queue drained. It is one line of configuration and nothing else to remember.
+
+**Leave it off and call `FlushAsync()` yourself** if the thing that listens is built later — a page, a view model, a lazily-resolved service. That is the common shape in a UI app, and it is why the default is `false`: the startup flush completes inside host startup, so a subscriber that attaches afterwards misses whatever it delivered, and Hyperwyc keeps nothing about a delivered write for it to catch up from.
 
 ```csharp
 hyperwyc.Events.Subscribe(new MyObserver());
 await hyperwyc.FlushAsync();
 ```
+
+Either way, note that `FlushOnStartup` is implemented as an `IHostedService`, so in an application built on a bare `ServiceCollection` it does nothing at all.
 
 ## You don't need to hook app lifecycle events
 
@@ -54,9 +62,9 @@ stateDiagram-v2
 
 Every transition raises an event except one. A delivery attempt that fails at the transport records its outcome on the envelope and stops the flush, and publishes nothing at all — so from the event stream, a write that cannot be delivered simply goes quiet until it can be.
 
-**One right-hand state, not two.** A `409` and a `201` are the same event from Hyperwyc's side, so they are treated the same way: the envelope goes, request body and headers with it, and what the server said reaches you on the event. Hyperwyc used to keep the non-`2xx` ones in a "dead-letter" store, indefinitely — which was it holding your data on the strength of a distinction it had already said was not its business. [ADR 0010](decisions/0010-retain-only-outstanding-work.md) removed it.
+**One right-hand state, not two.** Refused and accepted writes are treated the same way, because they are the same thing from Hyperwyc's side: the envelope goes, request body and headers with it, and what the server said reaches you on the event. Nothing about a delivered write is kept — see [ADR 0010](decisions/0010-delivery-ends-hyperwycs-interest.md), which is honest about what that costs you.
 
-> **So subscribe before you flush.** The event is the *only* report of a delivery, and absence from the outbox does not distinguish accepted from rejected. If a `409`'s body is the thing you need, read it when the event arrives and file it under your own correlation id, in your own store — which is [the record you were keeping anyway](design.md).
+> **So subscribe before you flush.** The event is the *only* report of a delivery, and absence from the outbox does not distinguish accepted from rejected. If what the server said is something you need — a rejection's body is often the only account of why — read it when the event arrives and file it under your own correlation id, in your own store, which is [the record you were keeping anyway](design.md).
 
 **Any answer is a final outcome, including a `500`, a `429` or a `503`.** Remember that Hyperwyc's job is to make sure your request reaches your back end, and a response, any response, means it has succeeded. Hyperwyc is not responsible for retrying failed requests; it has exactly three triggers — connectivity restored, an explicit `FlushAsync()`, and application start if you opt into it — and none of them correlates with a change to the condition under which the request failed. Requeuing a `503` schedules a retry on an unrelated event, and for a device that never goes offline again it schedules one that never arrives. A write kept on that promise is kept forever.
 

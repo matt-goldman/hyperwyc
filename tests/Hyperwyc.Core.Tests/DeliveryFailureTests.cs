@@ -107,8 +107,8 @@ public class DeliveryFailureTests
 
         await orchestrator.FlushAsync();
 
-        // One attempt, one event, and it is the same event a 201 raises: the request reached
-        // the API, which is the only thing Hyperwyc reports on. See ADR 0010.
+        // One attempt, one event, and it is the same event an acceptance raises: the request
+        // reached the API, which is the only thing Hyperwyc reports on. See ADR 0010.
         var delivered = Assert.Single(received, e => e.Type == HyperwycEventType.OnDelivered);
         Assert.Equal(DeliveryOutcomeKind.Delivered, delivered.Outcome?.Kind);
         Assert.Equal(409, delivered.Outcome?.StatusCode);
@@ -117,9 +117,9 @@ public class DeliveryFailureTests
     [Fact]
     public async Task Rejection_RetainsNothing()
     {
-        // The heart of ADR 0010. A 409 used to be moved to a dead-letter partition and kept
-        // indefinitely, request body and Authorization header included, while a 201 was
-        // discarded. Both are deliveries, so both leave.
+        // The heart of ADR 0010. A refused write used to be moved to a dead-letter partition
+        // and kept indefinitely, request body and Authorization header included, while an
+        // accepted one was discarded. Both are deliveries, so both leave.
         var store = new InMemoryStore();
         var envelope = Outbox();
         envelope.RequestHeaders["Authorization"] = "Bearer token";

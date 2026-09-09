@@ -46,11 +46,11 @@ public interface IHyperwycStore
     /// <remarks>
     /// <para>
     /// Removes rather than flags, and the name says so because the distinction is the contract.
-    /// A write is delivered as soon as the server answers — with anything at all, a <c>409</c> as
-    /// much as a <c>201</c> — and at that point Hyperwyc is finished with it. What the server said
+    /// A write is delivered as soon as the server answers — with anything at all, a refusal as
+    /// much as an acceptance — and at that point Hyperwyc is finished with it. What the server said
     /// goes out on <see cref="IHyperwyc.Events"/> and is not retained: it is an ordinary HTTP
     /// response, and keeping one is the application's business. See
-    /// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/docs/decisions/0010-retain-only-outstanding-work.md">ADR 0010</see>.
+    /// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/docs/decisions/0010-delivery-ends-hyperwycs-interest.md">ADR 0010</see>.
     /// </para>
     /// <para>
     /// The request goes with it, deliberately: its body and headers are the largest and most

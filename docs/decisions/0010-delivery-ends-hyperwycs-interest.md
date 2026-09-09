@@ -1,4 +1,4 @@
-# ADR 0010 — Retain only outstanding work
+# ADR 0010 — Delivery ends Hyperwyc's interest in a write
 
 **Status:** Proposed
 
@@ -23,7 +23,7 @@ Two further things condemn the retention on their own terms:
 
 ## Decision
 
-**Hyperwyc's store holds outstanding work and nothing else. A delivered write is discarded — the request as well as the outcome — whatever the server said about it.**
+**Once a write has been delivered, Hyperwyc is finished with it and keeps nothing.** The request goes as well as the outcome, whatever the server said. What is left in the store is outstanding work and the cache — never a record of what has already happened.
 
 Delivery is one state, not two. The only distinction the store makes is the one that determines whether there is still work to do:
 
@@ -42,7 +42,7 @@ Concretely, and this is the part that is a public API change:
 
 **The request is discarded too, not only the outcome.** The request body and its headers are the largest *and* most sensitive things in the store ([issue 30](../../Backlog/30-sensitive-header-exclusion.md)); keeping them past delivery extends that exposure for nothing.
 
-### The `409` body: the cost is accepted, not overlooked
+### The rejection body: the cost is accepted, not overlooked
 
 The strongest argument against this is real and is not being waved away. A rejection often carries the only explanation of itself — a `ProblemDetails`, a validation payload, an account of what conflicted — and that cannot be recovered by re-reading the resource. Under this decision, an application that misses the event loses it.
 
@@ -56,7 +56,7 @@ Under this decision **the event is not merely the best report of an outcome, it 
 
 That makes the startup flush load-bearing in a way it was not before. `FlushOnStartup` ran inside host startup, so anything subscribing later — a page loading, a view model constructing, a lazily-resolved service — missed whatever it delivered, `HyperwycEventStream` being hot with no replay. Shipping "the event is your only chance" alongside a default that races the subscriber would be shipping a contract the library breaks out of the box.
 
-**So `FlushOnStartup` now defaults to `false`.** Delivery at startup becomes explicit: subscribe, then call `FlushAsync()`. Against [the standing defaults test](README.md#the-standing-defaults-test):
+**So `FlushOnStartup` now defaults to `false`.** The option stays, and turning it on remains a reasonable thing to do — where the subscriber is composed before the host starts, or where the application does not want the outcomes at all and only wants the queue drained. What changes is which way round the choice sits by default. Against [the standing defaults test](README.md#the-standing-defaults-test):
 
 - **Can Hyperwyc choose correctly from what it knows?** No. Whether a subscriber exists yet is a fact about the application's composition, and only the application knows when it is ready to hear.
 - **If the default is wrong, does the consumer find out?** With `true`, no — that is exactly the failure: the outcome is published to nobody and the write is gone from the outbox, which looks identical to a healthy delivery. With `false`, the outbox simply does not drain until something triggers it, which is visible and recoverable. Wrong-and-loud over wrong-and-silent.

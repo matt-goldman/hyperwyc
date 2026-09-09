@@ -2,7 +2,7 @@
 
 Hyperwyc reports what it did. Subscribe to find out that a write was queued or delivered, and what the server said when it was.
 
-**Subscribe before anything can flush.** For a delivery this event is the only report there is: the envelope is discarded once the server answers, whatever it answered, so an outcome published to nobody is an outcome nobody learns. `FlushOnStartup` is off by default for exactly this reason — see [Offline writes](offline-writes.md#when-hyperwyc-delivers).
+**Subscribe before anything can flush.** For a delivery this event is the only report there is: the envelope is discarded once the server answers, whatever it answered, so an outcome published to nobody is an outcome nobody learns. That is why `FlushOnStartup` defaults to `false` — [Offline writes](offline-writes.md#which-way-to-flush-at-startup) covers when to turn it on instead.
 
 Subscribe to `IObservable<HyperwycEvent>` to observe requests moving through the sync lifecycle:
 
@@ -22,7 +22,7 @@ A plain `IObserver<T>`, because `IObservable<T>` is in the BCL and Hyperwyc take
 | Event               | Meaning                                                                                     | Carries an outcome              |
 | ------------------- | ------------------------------------------------------------------------------------------- | ------------------------------- |
 | `OnQueued`          | Request persisted to the outbox — offline, or after a transport failure                     | No — nothing has been attempted |
-| `OnDelivered`       | The server answered — with anything at all, a `409` as much as a `201`                      | Yes                             |
+| `OnDelivered`       | The server answered — with anything at all; the status is where the meaning is              | Yes                             |
 | `OnUpdated`         | Cached response refreshed                                                                   | No                              |
 | `OnStoreUnreadable` | The local store could not be read; caching and queueing are off for the rest of the session | No                              |
 
@@ -89,9 +89,9 @@ The body is worth reading on a success as well as a rejection. A replayed `POST`
 
 > **This is your only chance at it.** Nothing about a delivered write is kept: not the response,
 > not the request. If your app was killed mid-flush, or had not subscribed yet, that answer is
-> gone — re-read the resource if you need certainty, and note that a `400`'s or 409`'s explanation of
+> gone — re-read the resource if you need certainty, and note that a rejection's explanation of
 > *why* cannot be recovered that way. Keeping what you need is your application's job, filed
-> under your own correlation id; [ADR 0010](decisions/0010-retain-only-outstanding-work.md) says
+> under your own correlation id; [ADR 0010](decisions/0010-delivery-ends-hyperwycs-interest.md) says
 > why, and is honest about the cost.
 >
 > **And Hyperwyc has no opinion on what you do with any of this**: prompt, auto-reduce,

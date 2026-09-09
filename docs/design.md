@@ -15,7 +15,7 @@ The first thing to get straight, because HTTP has its own success and failure ax
 
 Almost everything else on this page follows from that. It is why a `503` is not retried — the server answered, so the delivery is done, and the fact that you did not like the answer is not a network condition. It is why the outbox empties on any response rather than only on a `2xx`. And it is why the `202` means *accepted for delivery*, not *accepted by your API*.
 
-It is also why the store keeps nothing once a write has gone out. It used to retain non-`2xx` answers indefinitely and discard `2xx` ones, which is Hyperwyc holding your data on the strength of a distinction it has just said is not its business. Both are deliveries, so both leave: the [event](events.md) tells you what the server said, and keeping that is your application's job — see [ADR 0010](decisions/0010-retain-only-outstanding-work.md), which is honest about what that costs you.
+It is also why the store keeps nothing once a write has gone out. Every delivery leaves, whatever the answer was: the [event](events.md) tells you what the server said, and keeping that is your application's job. [ADR 0010](decisions/0010-delivery-ends-hyperwycs-interest.md) is the record of that decision, and is honest about what it costs you.
 
 ## Connectivity is an optimisation, not a correctness input
 

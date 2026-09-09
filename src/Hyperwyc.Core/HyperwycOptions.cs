@@ -159,10 +159,12 @@ public sealed class HyperwycOptions
     /// delivered, because the event stream is hot and does not replay.
     /// </para>
     /// <para>
-    /// Turning it on is fine where the subscriber is in place before the host starts. Where it is
-    /// not, the cost of leaving it off is a flush that waits for the next connectivity change or
-    /// an explicit call, which is visible; the cost of turning it on is a delivery nobody hears
-    /// about, which is not.
+    /// <b>Turning it on is a reasonable choice</b>, not a mistake — where the subscriber is
+    /// composed before the host starts, or where the application does not want the outcomes at
+    /// all and only wants the queue drained. What the default settles is which way round the
+    /// choice sits when nobody has made it: the cost of leaving it off is a flush that waits for
+    /// the next connectivity change or an explicit call, which is visible; the cost of turning it
+    /// on where a subscriber comes later is a delivery nobody hears about, which is not.
     /// </para>
     /// <para>
     /// Note also that it is implemented as an <see cref="Microsoft.Extensions.Hosting.IHostedService"/>,
