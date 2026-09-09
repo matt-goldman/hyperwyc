@@ -12,8 +12,9 @@ namespace Hyperwyc;
 /// Internal: consumers reach flushing through <see cref="IHyperwyc.FlushAsync"/> rather than
 /// depending on this type. It flushes on exactly two triggers — application start, and
 /// <see cref="IConnectivityService.ConnectivityChanged"/> reporting connectivity restored.
-/// There is no retry budget, no backoff and no scheduled follow-up: a write the server refuses
-/// is dead-lettered, and anything else stays in the outbox for the next flush.
+/// There is no retry budget, no backoff and no scheduled follow-up: a write the server answers
+/// is done with and discarded, and only one it could not reach stays in the outbox for the next
+/// flush.
 /// </remarks>
 internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
 {
@@ -94,9 +95,9 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// One attempt each, not a retry loop, and nothing is scheduled. Any answer from the
-    /// server is final: a success leaves the outbox and anything else is dead-lettered. Only
-    /// a transport failure leaves an envelope queued — and it ends the flush rather than
-    /// moving to the next one, because an unusable network is a fact about those too.
+    /// server is final and the envelope is discarded, whatever the status. Only a transport
+    /// failure leaves an envelope queued — and it ends the flush rather than moving to the next
+    /// one, because an unusable network is a fact about those too.
     /// </remarks>
     public async Task FlushAsync(CancellationToken ct = default)
     {
@@ -161,7 +162,7 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// The gate is acquired <em>blocking</em>, unlike <see cref="FlushAsync"/>'s
     /// try-acquire. A flush that is mid-loop holds a list of envelopes read before the wipe
     /// and keeps acting on them: it would go on sending writes the caller just asked to
-    /// discard, and — worse — <c>RecordOutcomeAsync</c> and <c>MarkDeliveredAsync</c> write back, so a
+    /// discard, and — worse — <c>RecordOutcomeAsync</c> writes back, so a
     /// transport-failed envelope would be <em>re-inserted</em> into a store that had just
     /// been emptied. On the logout this method exists for, that resurrects the previous
     /// user's data.
@@ -204,14 +205,8 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// </summary>
     private enum SendOutcome
     {
-        /// <summary>Delivered; the envelope is out of the outbox.</summary>
+        /// <summary>The server answered; the envelope is gone from the store.</summary>
         Delivered,
-
-        /// <summary>
-        /// The server answered with a non-success status; the envelope will not be attempted
-        /// again.
-        /// </summary>
-        DeadLettered,
 
         /// <summary>The network is unreachable, so the rest of the flush is pointless.</summary>
         ConnectivityLost,
@@ -245,21 +240,10 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
 
         using (response)
         {
-            if (response.IsSuccessStatusCode)
-            {
-                // Captured even on success: a replayed POST may answer with the created
-                // resource — server-assigned ids, normalised values — which the caller never
-                // saw and may want to reconcile against.
-                var succeeded = await OutcomeFromAsync(
-                    response, envelope, DeliveryOutcomeKind.Succeeded, ct).ConfigureAwait(false);
-
-                await MarkDeliveredAsync(envelope, succeeded, ct).ConfigureAwait(false);
-                return SendOutcome.Delivered;
-            }
-
             // The server answered. Whatever it said, the request reached the API — which was
-            // Hyperwyc's whole job, and it is done. What the answer means is the
-            // application's business, not a network condition for Hyperwyc to retry.
+            // Hyperwyc's whole job, and it is done. One path, not two: a 409 and a 201 are the
+            // same event from here, and treating them differently was the store deciding what a
+            // status code means on the application's behalf. See ADR 0010.
             //
             // Retrying a 5xx here would be a worse retry than the one that already ran: the
             // replay traverses the application's pipeline, so its own resilience handler has
@@ -267,20 +251,30 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
             // a connectivity change, which is uncorrelated with a server recovering — and for
             // a device that never goes offline again, never arrives at all. A write kept on
             // that promise is a write kept forever. See ADR 0001.
-            var rejected = await OutcomeFromAsync(
-                response, envelope, DeliveryOutcomeKind.Rejected, ct).ConfigureAwait(false);
+            //
+            // The body is read whatever the status. On a rejection it is usually the only
+            // account of why; on a success a replayed POST may answer with the created
+            // resource — server-assigned ids, normalised values — which the caller never saw.
+            // Either way this event is the only place it appears.
+            var outcome = await OutcomeFromAsync(
+                response, envelope, DeliveryOutcomeKind.Delivered, ct).ConfigureAwait(false);
 
-            await DeadLetterAsync(envelope, rejected, ct).ConfigureAwait(false);
-            return SendOutcome.DeadLettered;
+            await DeliverAsync(envelope, outcome, response.IsSuccessStatusCode, ct).ConfigureAwait(false);
+            return SendOutcome.Delivered;
         }
     }
 
     // -------------------------------------------------------------------------
     // Outcome capture
     //
-    // The persisted record is the primary artefact and the event is a live view of the same
-    // instance — a background flush can complete while the application is not running, so an
-    // outcome delivered only as an event is an outcome nobody hears about. See issue 40.
+    // A delivery outcome is published and not persisted: the envelope is gone by then, and what
+    // the server said is an ordinary HTTP response that the application owns rather than
+    // Hyperwyc. The event is therefore the only report of it — see ADR 0010, and note that this
+    // is why FlushOnStartup defaults to false.
+    //
+    // A transport failure is the other way round. It publishes nothing and is written to the
+    // envelope, which is still there, because an outbox that is not draining has to be able to
+    // explain itself after a restart. See issue 23.
     // -------------------------------------------------------------------------
 
     /// <summary>Builds a <see cref="DeliveryOutcome"/> from a response, reading a capped body.</summary>
@@ -370,17 +364,32 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
             RequestBody: envelope.RequestBody,
             Outcome: outcome);
 
+    /// <summary>
+    /// Discards the delivered envelope, publishes the outcome, and invalidates the cache if the
+    /// route asks for it.
+    /// </summary>
     /// <remarks>
-    /// The outcome is published but not persisted. A delivered envelope leaves the outbox, so
-    /// there is nowhere for its record to live short of a "recently completed" table with its
-    /// own growth and eviction problem. A consumer that must reconcile after being killed
-    /// mid-flush can re-read the resource — see issue 40.
+    /// <para>
+    /// The envelope goes first and the event follows, which is the right order: a crash between
+    /// them loses the notification, whereas the reverse would announce a delivery for a write
+    /// still sitting in the outbox and about to go out again.
+    /// </para>
+    /// <para>
+    /// <paramref name="succeeded"/> is the one place the status code is still read, and it is not
+    /// the rejected/succeeded distinction coming back. Invalidation is a cache-freshness
+    /// judgement about Hyperwyc's own data, and it follows what HTTP specifies for one — RFC 9111
+    /// §4.4 invalidates on a <em>non-error</em> response to an unsafe method. Dropping cached
+    /// reads because a write came back <c>422</c> would cost an offline read for nothing.
+    /// </para>
     /// </remarks>
-    private async Task MarkDeliveredAsync(Envelope envelope, DeliveryOutcome outcome, CancellationToken ct)
+    private async Task DeliverAsync(
+        Envelope envelope, DeliveryOutcome outcome, bool succeeded, CancellationToken ct)
     {
-        await _store.MarkDeliveredAsync(envelope.Id, ct).ConfigureAwait(false);
+        await _store.RemoveDeliveredAsync(envelope.Id, ct).ConfigureAwait(false);
 
         _events.Publish(EventFor(HyperwycEventType.OnDelivered, envelope, outcome));
+
+        if (!succeeded) return;
 
         using var request = BuildRequest(envelope);
         if (_options.Routes.PolicyFor(request.RequestUri).InvalidateCacheOnWrite)
@@ -388,22 +397,6 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
             var prefix = HyperwycHandler.DeriveInvalidationPrefix(request.RequestUri);
             await _store.InvalidateCacheForPrefixAsync(prefix, ct).ConfigureAwait(false);
         }
-    }
-
-    /// <remarks>
-    /// The outcome is written before the move rather than as part of it, which keeps
-    /// <see cref="IHyperwycStore"/> unchanged. The two writes are not atomic: a crash between them
-    /// leaves the envelope carrying its outcome but still in the outbox, so it is sent once
-    /// more on the next flush and — any answer being final — dead-lettered again. One delivery
-    /// that should have been terminal, once, on a crash. That is a better trade than a
-    /// breaking change to a public interface.
-    /// </remarks>
-    private async Task DeadLetterAsync(Envelope envelope, DeliveryOutcome outcome, CancellationToken ct)
-    {
-        await RecordOutcomeAsync(envelope, outcome, ct).ConfigureAwait(false);
-        await _store.MoveToDeadLetterAsync(envelope.Id, ct).ConfigureAwait(false);
-
-        _events.Publish(EventFor(HyperwycEventType.OnFailed, envelope, envelope.LastOutcome));
     }
 
 

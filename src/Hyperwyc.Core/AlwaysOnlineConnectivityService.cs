@@ -15,8 +15,8 @@ namespace Hyperwyc;
 /// <para>
 /// <b><see cref="ConnectivityChanged"/> never emits.</b> Writes are still queued when the
 /// transport cannot deliver them, so nothing is lost, but no signal will ever cause the outbox
-/// to drain: the only triggers left are <c>FlushOnStartup</c> and an explicit
-/// <c>IHyperwyc.FlushAsync()</c>. Under this service, replaying is the application's
+/// to drain: the only triggers left are <c>FlushOnStartup</c>, which is off by default, and an
+/// explicit <c>IHyperwyc.FlushAsync()</c>. Under this service, replaying is the application's
 /// responsibility — a scheduled job, a user-facing control, or a duty cycle on a headless
 /// device. Reads pay a full transport failure before falling back to the store.
 /// </para>

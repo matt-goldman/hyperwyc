@@ -58,13 +58,13 @@ container runtime) does need to be running.
 ASP.NET Core Identity endpoints are mapped alongside, giving the sample a real authentication
 surface to exercise Hyperwyc's handler ordering against.
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| `GET` | `/products` | The catalogue |
-| `GET` | `/products/{id}` | A single product |
+| Method | Route                  | Description                                    |
+| ------ | ---------------------- | ---------------------------------------------- |
+| `GET`  | `/products`            | The catalogue                                  |
+| `GET`  | `/products/{id}`       | A single product                               |
 | `POST` | `/products/regenerate` | Build a brand new catalogue without restarting |
-| `GET` | `/sales` | Sales recorded so far |
-| `POST` | `/sales` | Record a sale; decrements stock |
+| `GET`  | `/sales`               | Sales recorded so far                          |
+| `POST` | `/sales`               | Record a sale; decrements stock                |
 
 ### The catalogue is randomly generated
 
@@ -86,14 +86,14 @@ without a network should not need one to start.
 This is what makes staleness *consequential* rather than cosmetic. Record a sale and the cached
 catalogue is now provably wrong about that product's stock.
 
-It also gives deliberate ways to make a write fail, so the retry and dead-letter paths can be
+It also gives deliberate ways to make a write come back refused, so the rejection path can be
 demonstrated on demand:
 
-| Status | Cause |
-|--------|-------|
-| `400` | Quantity of zero or less |
-| `404` | Unknown product id |
-| `409` | Insufficient stock — the easiest one to trigger, just oversell |
+| Status | Cause                                                          |
+| ------ | -------------------------------------------------------------- |
+| `400`  | Quantity of zero or less                                       |
+| `404`  | Unknown product id                                             |
+| `409`  | Insufficient stock — the easiest one to trigger, just oversell |
 
 ### Duplicate sales
 
@@ -125,7 +125,7 @@ which is the point the sample is making. See
 - Sales recorded offline are queued transparently (`202 Accepted` + `X-Hyperwyc-Status: Queued`)
 - The catalogue stays readable offline, served stale rather than empty
 - Queued sales replay automatically when connectivity returns
-- A sale that keeps failing surfaces as dead-lettered
+- A sale the API refuses surfaces as delivered, carrying the status and body it was refused with
 
 ---
 
@@ -141,21 +141,18 @@ HyperwycHandler (in the HttpClient pipeline)
       │
       └── Offline? ──────▶ Persist to Cabinet store ──▶ OnQueued
                                    │
-                          [App start, or connectivity restored]
+                        [Connectivity restored, or "Sync now"]
                                    │
                                    ▼
                    Replay through the same client pipeline,
                    with HyperwycHandler stepping aside
                                    │
-                          ┌────────┴────────┴────────┐
-                     Success        4xx            5xx
-                        │            │              │
-                    OnDelivered   Dead-letter   Queued for a
-                                    │        later attempt
-                                 OnFailed         │
-                                           (until the budget
-                                            runs out, then
-                                              OnFailed)
+                          ┌────────┴────────┐
+                   Server answered      No answer at all
+                   (2xx, 4xx or 5xx)          │
+                          │            Stays queued for
+                    OnDelivered,       the next trigger
+                    envelope gone       (no event)
 ```
 
 Note the replay path: a queued sale goes back through the *application's* pipeline, not around
@@ -202,16 +199,16 @@ while offline queue locally and replay when connectivity returns.
 
 ### Things worth trying
 
-| To see | Do this |
-|---|---|
-| Offline queueing | Go offline, record a sale, watch it appear as Queued |
-| Automatic replay | Come back online and wait — no interaction needed |
-| Manual replay | Come back online and press "Sync now" |
-| Stale cache | `POST /products/regenerate`, then browse the catalogue in the app |
-| Cache expiry | Regenerate, then wait out the TTL and refresh |
-| Immediate failure | Oversell a product — the `409` dead-letters at once, since retrying cannot change it |
-| Retry and dead-letter | Stop the API mid-sync — writes are retried across attempts, then dead-letter |
-| Idempotent replay | Record a sale offline, come back online, confirm stock drops only once |
+| To see                      | Do this                                                                                             |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| Offline queueing            | Go offline, record a sale, watch it appear as Queued                                                |
+| Automatic replay            | Come back online and wait — no interaction needed                                                   |
+| Manual replay               | Come back online and press "Sync now"                                                               |
+| Stale cache                 | `POST /products/regenerate`, then browse the catalogue in the app                                   |
+| Cache expiry                | Regenerate, then wait out the TTL and refresh                                                       |
+| A refused write             | Oversell a product — the `409` comes back on `OnDelivered`, and is final; retrying cannot change it |
+| A write that cannot be sent | Stop the API mid-sync — the flush stops and the remaining sales stay queued, with no event          |
+| Idempotent replay           | Record a sale offline, come back online, confirm stock drops only once                              |
 
 **Verified on an Android device:** load the catalogue, disable Wi-Fi and mobile data, restart the
 app, and the catalogue still loads — served from the Cabinet store by the offline read path. This
@@ -234,10 +231,10 @@ Worth knowing before you conclude something is broken:
 
 ## Future Sample Targets
 
-| Platform | Status |
-|----------|--------|
-| .NET MAUI (Android) | ✅ This sample |
+| Platform                          | Status                                            |
+| --------------------------------- | ------------------------------------------------- |
+| .NET MAUI (Android)               | ✅ This sample                                    |
 | .NET MAUI (iOS / macOS / Windows) | Should work; not part of the Aspire orchestration |
-| Uno Platform / Avalonia / WinUI | Planned |
-| Blazor (WASM + Server) | Planned — requires an IndexedDB store provider |
-| .NET Nano / embedded | Exploratory |
+| Uno Platform / Avalonia / WinUI   | Planned                                           |
+| Blazor (WASM + Server)            | Planned — requires an IndexedDB store provider    |
+| .NET Nano / embedded              | Exploratory                                       |

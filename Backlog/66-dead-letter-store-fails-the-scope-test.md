@@ -8,7 +8,20 @@ That retention is Hyperwyc holding application data on the basis of a distinctio
 
 ## Status
 
-💭 Under consideration. Filed 2026-09-09. **Scope decision — needs an ADR, not just this item**, per the backlog's own convention.
+🟡 **Decided and built, 2026-09-09 — waiting on [ADR 0010](../docs/decisions/0010-retain-only-outstanding-work.md) being accepted.** Option B, as the argument below settles it. The code, tests and documentation are done on `fix-dead-lettering`; this item stays here rather than moving to `Done/` because the ADR that carries the decision is still `Proposed`, and the item is not finished until the decision is.
+
+### What landed
+
+| | |
+|---|---|
+| Removed | `IHyperwycStore.MoveToDeadLetterAsync`, `Envelope.IsDeadLettered`, `HyperwycEventType.OnFailed`, and `DeliveryOutcomeKind.Succeeded`/`Rejected` — which collapse into `Delivered` |
+| Renamed | `MarkDeliveredAsync` → `RemoveDeliveredAsync`. It deletes the record now, request body and headers included, and a method called *Mark* that deletes is the kind of name this repo files items about |
+| Changed | `FlushOnStartup` defaults to `false`. See below — it is the condition this item put on itself |
+| Kept | `DeliveryOutcome`, and `Envelope.LastOutcome`, which now only ever holds a transport failure. That is [23](23-v1-diagnostics-view.md)'s read path and the only account of an outbox that is not draining |
+
+**One place still reads the status code**, and it is worth knowing about rather than discovering: `InvalidateCacheOnWrite` drops cached reads only on a `2xx`. That is a cache-freshness judgement about Hyperwyc's own data and it follows RFC 9111 §4.4, which invalidates on a *non-error* response to an unsafe method. Invalidating on a `422` would throw away good cached reads for nothing. The line is who owns the data: the cache is ours, the response is the application's.
+
+**A preview store written before this change will re-deliver its dead letters.** `IsDeadLettered` no longer exists, so a persisted envelope carrying it comes back without the flag and `!IsSynced` puts it in the outbox. Accepted rather than mitigated at `0.1.0-preview.1`; anyone carrying a store across resets it.
 
 ## The argument
 
@@ -110,12 +123,29 @@ Removing this does not banish "dead-letter". In a message bus the term means **c
 
 Once that is gone, the question it was standing in front of becomes askable: should a write Hyperwyc has failed to deliver for long enough simply expire? That is dead-lettering, correctly used, and it comes out the *other* side of the scope test — the age of something in the outbox is precisely what only Hyperwyc knows. Filed as [69](69-expiring-queued-writes.md).
 
+## The cluster, and the order to take it in
+
+This item is the hub. Everything below either depends on it or changes shape once it lands, so it is the place to start reading.
+
+**Nothing outside this table is a prerequisite.** The existing test suite is the regression net for reshaping `IHyperwycStore`; no new harness is needed first.
+
+| | | |
+|---|---|---|
+| **66** — this item | Decide it, write the ADR | **First.** Nothing else in the cluster can be assessed until the scope question has an answer |
+| [65](65-startup-flush-requires-a-host.md) | Startup flush needs a host, and races late subscribers | **First or together.** Under this item the event becomes the *only* report of an outcome, so shipping it while the startup flush can fire before a subscriber attaches would be shipping a contract the library breaks by default |
+| [55](55-envelope-kind-discriminator.md) | `Envelope.IsSynced` is a kind discriminator wearing a status name | **After.** This removes two of the flag's three jobs and makes the two-types option the cheaper one rather than the more expensive |
+| [23](23-v1-diagnostics-view.md) | Read-only outbox **and dead-letter** queries | **After.** Narrows rather than dissolves — the outbox half is genuinely ours, and is the only place a transport failure, which publishes no event, can be observed |
+| [69](69-expiring-queued-writes.md) | Should an undelivered write expire? | **After.** Reclaims the word for its correct meaning; building it while the word still means the other thing would be confusing to implement and worse to document |
+| [67](67-configurable-response-retention.md) | Opt-in retention of delivered responses | **Much later, if ever.** The point of removing retention is to find out whether anyone needs it back |
+| [24](24-v1-dead-letter-management.md) | Requeue and dismiss | **Closed already.** Dissolved rather than superseded; its halves went to 69 and 67 |
+| [30](30-sensitive-header-exclusion.md) | Caller-set headers are persisted | **Documentation follow-on.** This item shortens the exposure it describes, for outbox entries only |
+
 ## Acceptance Criteria
 
-- [ ] An ADR records the distinction — delivery is Hyperwyc's success axis, HTTP's is not — and what it condemns.
-- [ ] The `409`-body question has an answer, not an omission.
-- [ ] No public member describes a delivered request as failed.
-- [ ] `docs/design.md` and `docs/offline-writes.md` stop carrying the "under review" caveat they carry now.
+- [x] An ADR records the distinction — delivery is Hyperwyc's success axis, HTTP's is not — and what it condemns. [ADR 0010](../docs/decisions/0010-retain-only-outstanding-work.md), `Proposed`.
+- [x] The `409`-body question has an answer, not an omission. The cost is **accepted**, stated in the ADR and in `docs/events.md`, and [67](67-configurable-response-retention.md) is the deliberate later answer to it.
+- [x] No public member describes a delivered request as failed.
+- [x] `docs/design.md` and `docs/offline-writes.md` stop carrying the "under review" caveat they carry now.
 
 ## Notes
 

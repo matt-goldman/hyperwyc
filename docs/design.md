@@ -15,7 +15,7 @@ The first thing to get straight, because HTTP has its own success and failure ax
 
 Almost everything else on this page follows from that. It is why a `503` is not retried — the server answered, so the delivery is done, and the fact that you did not like the answer is not a network condition. It is why the outbox empties on any response rather than only on a `2xx`. And it is why the `202` means *accepted for delivery*, not *accepted by your API*.
 
-The one place the code does not yet live up to this is the store that retains non-`2xx` answers, which still treats them as a category of failure. That is under review — see the note in [Offline writes](offline-writes.md#what-happens-when-a-write-goes-out).
+It is also why the store keeps nothing once a write has gone out. It used to retain non-`2xx` answers indefinitely and discard `2xx` ones, which is Hyperwyc holding your data on the strength of a distinction it has just said is not its business. Both are deliveries, so both leave: the [event](events.md) tells you what the server said, and keeping that is your application's job — see [ADR 0010](decisions/0010-retain-only-outstanding-work.md), which is honest about what that costs you.
 
 ## Connectivity is an optimisation, not a correctness input
 
@@ -102,7 +102,7 @@ If you're not using the JSON HTTP extensions, you may need to literally handle t
 
 A write the server *answers* is finished with, whatever it said; non-success status codes like `500`, `429` or `503` included. Hyperwyc's job is to get the request to your API, and a response means it succeeded.
 
-Hyperwyc's queue has three triggers: application start, connectivity restored, and an explicit call to `FlushAsync()`. None of them correlates with a change to the condition which resulted in a non-success response. Requeuing a `503` schedules a retry on an unrelated event, and on a device that never goes offline again it schedules one that never arrives.
+Hyperwyc's queue has three triggers: connectivity restored, an explicit call to `FlushAsync()`, and application start if you opt into it. None of them correlates with a change to the condition which resulted in a non-success response. Requeuing a `503` schedules a retry on an unrelated event, and on a device that never goes offline again it schedules one that never arrives.
 
 Meanwhile, your HTTP client handler pipeline has likely already had a better attempt at retrying. A resilience handler such as Polly retries on a schedule that tracks the actual failure, with backoff and `Retry-After`, before Hyperwyc sees the result. A replay traverses the same pipeline, so a second, worse retry on top would duplicate a job that already has an owner. See [ADR 0001](decisions/0001-idempotency-is-not-hyperwycs-remit.md) and ["not" alternatives](choosing.md#not-alternatives).
 

@@ -169,11 +169,8 @@ public class CacheRefreshTests
         public Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default) =>
             _inner.GetPendingOutboxAsync(ct);
 
-        public Task MarkDeliveredAsync(string id, CancellationToken ct = default) =>
-            _inner.MarkDeliveredAsync(id, ct);
-
-        public Task MoveToDeadLetterAsync(string id, CancellationToken ct = default) =>
-            _inner.MoveToDeadLetterAsync(id, ct);
+        public Task RemoveDeliveredAsync(string id, CancellationToken ct = default) =>
+            _inner.RemoveDeliveredAsync(id, ct);
 
         public Task InvalidateCacheForPrefixAsync(string urlPrefix, CancellationToken ct = default) =>
             _inner.InvalidateCacheForPrefixAsync(urlPrefix, ct);

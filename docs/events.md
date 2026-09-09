@@ -1,6 +1,8 @@
 # Events
 
-Hyperwyc reports what it did. Subscribe to find out that a write was queued, delivered or refused, and what the server said when it was.
+Hyperwyc reports what it did. Subscribe to find out that a write was queued or delivered, and what the server said when it was.
+
+**Subscribe before anything can flush.** For a delivery this event is the only report there is: the envelope is discarded once the server answers, whatever it answered, so an outcome published to nobody is an outcome nobody learns. `FlushOnStartup` is off by default for exactly this reason — see [Offline writes](offline-writes.md#when-hyperwyc-delivers).
 
 Subscribe to `IObservable<HyperwycEvent>` to observe requests moving through the sync lifecycle:
 
@@ -20,8 +22,7 @@ A plain `IObserver<T>`, because `IObservable<T>` is in the BCL and Hyperwyc take
 | Event               | Meaning                                                                                     | Carries an outcome              |
 | ------------------- | ------------------------------------------------------------------------------------------- | ------------------------------- |
 | `OnQueued`          | Request persisted to the outbox — offline, or after a transport failure                     | No — nothing has been attempted |
-| `OnDelivered`       | Request successfully delivered                                                              | Yes                             |
-| `OnFailed`          | Delivered, and the server answered with a non-success status                                | Yes                             |
+| `OnDelivered`       | The server answered — with anything at all, a `409` as much as a `201`                      | Yes                             |
 | `OnUpdated`         | Cached response refreshed                                                                   | No                              |
 | `OnStoreUnreadable` | The local store could not be read; caching and queueing are off for the rest of the session | No                              |
 
@@ -64,32 +65,37 @@ Events also carry `RequestId` (Hyperwyc's own unique envelope id, which a diagno
 
 ```csharp
 hyperwyc.Events
-    .Where(e => e.Type == HyperwycEventType.OnFailed)
+    .Where(e => e.Type == HyperwycEventType.OnDelivered)
     .Subscribe(e =>
     {
-        // OnFailed always means the server answered and refused: Kind is Rejected,
-        // StatusCode is what it said, and the reason is in the body.
+        // The server answered. Whether that is good news is your call, not Hyperwyc's.
         var outcome = e.Outcome!;
 
-        ShowRejection(e.CorrelationId!, outcome.StatusCode, outcome.GetBodyAsText());
+        if (outcome.StatusCode is >= 200 and < 300)
+            Reconcile(e.CorrelationId!, outcome.GetBodyAsText());
+        else
+            ShowRejection(e.CorrelationId!, outcome.StatusCode, outcome.GetBodyAsText());
     });
 ```
 
 | Member                                     | What it tells you                                                                                                                       |
 | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `Kind`                                     | `Succeeded`, `Rejected` (the server answered with a non-success status), or `TransportFailure` (no response came back) |
+| `Kind`                                     | `Delivered` (the server answered — the status is where the meaning is) or `TransportFailure` (no response came back)                     |
 | `StatusCode`, `ReasonPhrase`               | As returned, or `null` for a transport failure                                                                                          |
 | `Body`, `GetBodyAsText()`, `BodyTruncated` | The response body, up to `MaxOutcomeBodyBytes` (16 KB by default), clipped rather than dropped if longer                                |
 | `Error`                                    | The transport failure message. A string rather than an exception, because this record is persisted                                      |
 
-`OnDelivered` carries an outcome too. A replayed `POST` may answer with the created resource (server-assigned ids, normalised values) which the caller never saw, so this is how you reconcile your local record with what was actually stored.
+The body is worth reading on a success as well as a rejection. A replayed `POST` may answer with the created resource — server-assigned ids, normalised values — which the caller never saw, so this is how you reconcile your local record with what was actually stored.
 
-> **Two things this does not do.** Failure detail is persisted on the envelope so a dead-lettered
-> write can still explain itself after a restart, but **success detail is not** — a delivered
-> envelope leaves the outbox, so if your app was killed mid-flush that response is gone. Re-read
-> the resource if you need certainty. And Hyperwyc has no opinion on what you do with any of
-> this: prompt, auto-reduce, back-order, escalate, discard. It hands you what the server said and
-> stops there.
+> **This is your only chance at it.** Nothing about a delivered write is kept: not the response,
+> not the request. If your app was killed mid-flush, or had not subscribed yet, that answer is
+> gone — re-read the resource if you need certainty, and note that a `400`'s or 409`'s explanation of
+> *why* cannot be recovered that way. Keeping what you need is your application's job, filed
+> under your own correlation id; [ADR 0010](decisions/0010-retain-only-outstanding-work.md) says
+> why, and is honest about the cost.
+>
+> **And Hyperwyc has no opinion on what you do with any of this**: prompt, auto-reduce,
+> back-order, escalate, discard. It hands you what the server said and stops there.
 
 > **A framing note.** Surfacing outcomes this way nudges you toward describing the action rather
 > than its result — "order **submitted**", not "order **successful**", with the outcome arriving

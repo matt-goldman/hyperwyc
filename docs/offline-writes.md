@@ -4,17 +4,23 @@ What happens to a write made with no network, when it is replayed, and how to fi
 
 ## When Hyperwyc delivers
 
-Queued writes are flushed automatically by two triggers:
-
-| Trigger               | When                                                       |
-| --------------------- | ---------------------------------------------------------- |
-| Application start     | `FlushOnStartup` (default `true`), if the device is online |
-| Connectivity restored | While the app is running                                   |
-
-You can also call this explicitly, for example if certain lifecycle events in your app warrant it, or for a user-facing "sync now" control (something you should do if you expose queued writes to your users):
+| Trigger               | When                                                                     |
+| --------------------- | ------------------------------------------------------------------------ |
+| Connectivity restored | Automatic, while the app is running                                      |
+| Application start     | Only if you set `FlushOnStartup`, which defaults to `false`. Needs a host |
+| `FlushAsync()`        | Whenever you call it                                                     |
 
 ```csharp
 await hyperwyc.FlushAsync();   // IHyperwyc, resolved from DI
+```
+
+Call it for a user-facing "sync now" control — something you should offer if you expose queued writes to your users — and for any lifecycle event in your app that warrants one.
+
+**And call it at startup, once you have subscribed to [`Events`](events.md).** That is what `FlushOnStartup` would have done for you, and it is off by default for a reason: it runs inside host startup, so anything that subscribes later misses whatever it delivered — and since Hyperwyc keeps nothing about a delivered write, that outcome is simply gone. Turning it on is fine if your subscriber is in place before the host starts. Note also that it is an `IHostedService`, so in an app built on a bare `ServiceCollection` it does nothing at all.
+
+```csharp
+hyperwyc.Events.Subscribe(new MyObserver());
+await hyperwyc.FlushAsync();
 ```
 
 ## You don't need to hook app lifecycle events
@@ -33,31 +39,26 @@ Not *what* it answered. [Hyperwyc succeeds or fails at delivery](design.md#deliv
 
 | | What happens |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| The server answered — with anything at all | The delivery is complete. The status, reason phrase and body are recorded and reported on [`Events`](events.md). The request reached the API, which was the job |
+| The server answered — with anything at all | The delivery is complete. `OnDelivered` carries the status, reason phrase and body, and the envelope is discarded. The request reached the API, which was the job |
 | No response at all — the connection failed            | Left queued. The flush stops and nothing is held against the remaining writes; the network being down says nothing about them |
 
 ```mermaid
 stateDiagram-v2
     state "queued in the outbox" as queued
-    state "delivered" as done
-    state "delivered, answer kept" as kept
+    state "delivered, and discarded" as done
     [*] --> queued : could not be sent — OnQueued
     queued --> queued : transport failed — no event
-    queued --> done : server answered 2xx — OnDelivered
-    queued --> kept : server answered anything else — OnFailed
+    queued --> done : server answered, whatever it said — OnDelivered
     done --> [*]
-    kept --> [*]
 ```
 
 Every transition raises an event except one. A delivery attempt that fails at the transport records its outcome on the envelope and stops the flush, and publishes nothing at all — so from the event stream, a write that cannot be delivered simply goes quiet until it can be.
 
-**The two right-hand states differ in what is kept, not in whether Hyperwyc did its job.** A `2xx` leaves the outbox and nothing is retained, because there is nothing you need from it. Any other answer is retained along with what the server said, so your application can still find out after a restart. Both are complete: the request reached your API, which is the whole of what Hyperwyc promised.
+**One right-hand state, not two.** A `409` and a `201` are the same event from Hyperwyc's side, so they are treated the same way: the envelope goes, request body and headers with it, and what the server said reaches you on the event. Hyperwyc used to keep the non-`2xx` ones in a "dead-letter" store, indefinitely — which was it holding your data on the strength of a distinction it had already said was not its business. [ADR 0010](decisions/0010-retain-only-outstanding-work.md) removed it.
 
-> **A note on "dead-letter", which is on its way out.** The API calls that second state dead-lettered — `IHyperwycStore.MoveToDeadLetterAsync`, `Envelope.IsDeadLettered`, the `OnFailed` event — borrowing a term from message queues where it means *we gave up on this*. Here it does not: the write was delivered, and what is kept is your API's answer to it.
->
-> The retention itself is under review. Keeping the answer is arguably not Hyperwyc's job either — it is an ordinary HTTP response, and the only Hyperwyc-shaped part of it is the [event](events.md) telling you it arrived for a request whose caller had already moved on. Expect this to get smaller rather than better named.
+> **So subscribe before you flush.** The event is the *only* report of a delivery, and absence from the outbox does not distinguish accepted from rejected. If a `409`'s body is the thing you need, read it when the event arrives and file it under your own correlation id, in your own store — which is [the record you were keeping anyway](design.md).
 
-**Any answer is a final outcome, including a `500`, a `429` or a `503`.** Remember that Hyperwyc's job is to make sure your request reaches your back end, and a response, any response, means it has succeeded. Hyperwyc is not responsible for retrying failed requests; it has exactly three triggers — application start, connectivity restored, and an explicit `FlushAsync()` — and none of them correlates with a change to the condition under which the request failed. Requeuing a `503` schedules a retry on an unrelated event, and for a device that never goes offline again it schedules one that never arrives. A write kept on that promise is kept forever.
+**Any answer is a final outcome, including a `500`, a `429` or a `503`.** Remember that Hyperwyc's job is to make sure your request reaches your back end, and a response, any response, means it has succeeded. Hyperwyc is not responsible for retrying failed requests; it has exactly three triggers — connectivity restored, an explicit `FlushAsync()`, and application start if you opt into it — and none of them correlates with a change to the condition under which the request failed. Requeuing a `503` schedules a retry on an unrelated event, and for a device that never goes offline again it schedules one that never arrives. A write kept on that promise is kept forever.
 
 Other approaches handle these failures, and can be wired into your pipeline with a resilience handler such as [Polly](https://github.com/App-vNext/Polly), which retries on a schedule that tracks the actual failure before Hyperwyc ever sees the result. [Why Hyperwyc does not retry](design.md#hyperwyc-does-not-retry) has the rest.
 
@@ -96,5 +97,5 @@ The same rule the rest of the library follows: connectivity is a *hint* about wh
 
 ## Interrupted deliveries
 
-If a flush is cut short, e.g. the app is backgrounded mid-replay, or the process is killed, the envelopes it hadn't delivered stay queued and go out on the next trigger. They are not marked as failed, and they are not dead-lettered. Only a request the server actually rejected ends up in the dead-letter queue.
+If a flush is cut short, e.g. the app is backgrounded mid-replay, or the process is killed, the envelopes it hadn't delivered stay queued and go out on the next trigger. Nothing is held against them: only a delivery removes an envelope, and an interrupted flush delivered nothing.
 

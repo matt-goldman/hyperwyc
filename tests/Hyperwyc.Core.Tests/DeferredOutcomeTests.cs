@@ -11,13 +11,14 @@ using Xunit;
 namespace Hyperwyc.Tests;
 
 /// <summary>
-/// Covers issue #40: when a queued write is eventually delivered or rejected, the application
-/// can see which write it was and what the server said.
+/// Covers issue #40: when a queued write is eventually delivered, the application can see which
+/// write it was and what the server said — whatever it said.
 /// </summary>
 /// <remarks>
-/// The persisted record is the primary artefact here and the event is a view of it, so these
-/// assert against both — an outcome that only reaches a live subscriber is one a backgrounded
-/// mobile app never hears about.
+/// Since ADR 0010 the event is the <em>only</em> report of a delivery: the envelope is discarded
+/// along with what came back, because an ordinary HTTP response is the application's to keep.
+/// The one outcome still written to the store is a transport failure, where the envelope is
+/// still there to carry it.
 /// </remarks>
 public class DeferredOutcomeTests
 {
@@ -120,9 +121,12 @@ public class DeferredOutcomeTests
         await using var orchestrator = Orchestrator(store, transport, stream);
         await orchestrator.FlushAsync();
 
-        var failed = Assert.Single(events, e => e.Type == HyperwycEventType.OnFailed);
-        Assert.Equal("sale-2", failed.CorrelationId);
-        Assert.Equal(2, events.Count(e => e.Type == HyperwycEventType.OnDelivered));
+        // All three raise the same event; the correlation id and the status are what tell them
+        // apart, which is the whole point of issue 40.
+        var rejected = Assert.Single(
+            events, e => e.Type == HyperwycEventType.OnDelivered && e.Outcome?.StatusCode == 409);
+        Assert.Equal("sale-2", rejected.CorrelationId);
+        Assert.Equal(3, events.Count(e => e.Type == HyperwycEventType.OnDelivered));
     }
 
     // -------------------------------------------------------------------------
@@ -151,10 +155,10 @@ public class DeferredOutcomeTests
         await using var orchestrator = Orchestrator(store, transport, stream);
         await orchestrator.FlushAsync();
 
-        var failed = Assert.Single(events, e => e.Type == HyperwycEventType.OnFailed);
-        var outcome = Assert.IsType<DeliveryOutcome>(failed.Outcome);
+        var delivered = Assert.Single(events, e => e.Type == HyperwycEventType.OnDelivered);
+        var outcome = Assert.IsType<DeliveryOutcome>(delivered.Outcome);
 
-        Assert.Equal(DeliveryOutcomeKind.Rejected, outcome.Kind);
+        Assert.Equal(DeliveryOutcomeKind.Delivered, outcome.Kind);
         Assert.Equal(409, outcome.StatusCode);
         Assert.Equal("Conflict", outcome.ReasonPhrase);
         Assert.Equal(ServerSaid, outcome.GetBodyAsText());
@@ -186,7 +190,7 @@ public class DeferredOutcomeTests
         // record against what the server actually stored.
         var synced = Assert.Single(events, e => e.Type == HyperwycEventType.OnDelivered);
         var outcome = Assert.IsType<DeliveryOutcome>(synced.Outcome);
-        Assert.Equal(DeliveryOutcomeKind.Succeeded, outcome.Kind);
+        Assert.Equal(DeliveryOutcomeKind.Delivered, outcome.Kind);
         Assert.Equal(201, outcome.StatusCode);
         Assert.Equal(Created, outcome.GetBodyAsText());
     }
@@ -239,15 +243,15 @@ public class DeferredOutcomeTests
         await using var orchestrator = Orchestrator(store, transport, stream);
         await orchestrator.FlushAsync();
 
-        var failures = events.Where(e => e.Type == HyperwycEventType.OnFailed).ToList();
-        Assert.Equal(2, failures.Count);
+        var delivered = events.Where(e => e.Type == HyperwycEventType.OnDelivered).ToList();
+        Assert.Equal(2, delivered.Count);
 
-        var refused = Assert.Single(failures, e => e.CorrelationId == "refused");
-        Assert.Equal(DeliveryOutcomeKind.Rejected, refused.Outcome?.Kind);
+        var refused = Assert.Single(delivered, e => e.CorrelationId == "refused");
+        Assert.Equal(DeliveryOutcomeKind.Delivered, refused.Outcome?.Kind);
         Assert.Equal(409, refused.Outcome?.StatusCode);
 
-        var unwell = Assert.Single(failures, e => e.CorrelationId == "unwell");
-        Assert.Equal(DeliveryOutcomeKind.Rejected, unwell.Outcome?.Kind);
+        var unwell = Assert.Single(delivered, e => e.CorrelationId == "unwell");
+        Assert.Equal(DeliveryOutcomeKind.Delivered, unwell.Outcome?.Kind);
         Assert.Equal(503, unwell.Outcome?.StatusCode);
 
         // Neither is left in the outbox waiting for a flush that may never come.
@@ -283,7 +287,7 @@ public class DeferredOutcomeTests
         await orchestrator.FlushAsync();
 
         var outcome = Assert.IsType<DeliveryOutcome>(
-            Assert.Single(events, e => e.Type == HyperwycEventType.OnFailed).Outcome);
+            Assert.Single(events, e => e.Type == HyperwycEventType.OnDelivered).Outcome);
 
         // Clipped rather than dropped: half an error message is still actionable.
         Assert.True(outcome.BodyTruncated);
@@ -314,7 +318,7 @@ public class DeferredOutcomeTests
         await orchestrator.FlushAsync();
 
         var outcome = Assert.IsType<DeliveryOutcome>(
-            Assert.Single(events, e => e.Type == HyperwycEventType.OnFailed).Outcome);
+            Assert.Single(events, e => e.Type == HyperwycEventType.OnDelivered).Outcome);
 
         Assert.Null(outcome.Body);
         Assert.False(outcome.BodyTruncated);
@@ -322,14 +326,43 @@ public class DeferredOutcomeTests
     }
 
     // -------------------------------------------------------------------------
-    // The record has to outlive the process
+    // The record that does have to outlive the process
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task DeadLetteredEnvelope_CarriesItsOutcomeThroughSerialisation()
+    public async Task TransportFailure_CarriesItsOutcomeThroughSerialisation()
     {
         var captured = new OutcomeCapturingStore(new InMemoryStore());
         await captured.UpsertAsync(Outbox("sale-42"));
+
+        var transport = new StubHttpMessageHandler(
+            (Func<HttpRequestMessage, HttpResponseMessage>)(
+                _ => throw new HttpRequestException("No such host is known.")));
+
+        await using var orchestrator = Orchestrator(captured, transport, new HyperwycEventStream());
+        await orchestrator.FlushAsync();
+
+        // Round-tripped through JSON as a durable store would, which is the real test of the
+        // decision to keep exceptions out of the record: an Exception would not survive this.
+        // This is the only outcome still written down — a delivery leaves nothing behind, and
+        // that is what the event is for. See ADR 0010.
+        var restored = captured.LastSnapshotAsRestored();
+        var outcome = Assert.IsType<DeliveryOutcome>(restored.LastOutcome);
+
+        Assert.Equal("sale-42", restored.CorrelationId);
+        Assert.Equal(DeliveryOutcomeKind.TransportFailure, outcome.Kind);
+        Assert.Null(outcome.StatusCode);
+        Assert.Contains("No such host", outcome.Error);
+    }
+
+    [Fact]
+    public async Task DeliveredEnvelope_IsNotWrittenBackToTheStore()
+    {
+        // The counterpart, and the change ADR 0010 actually makes: a rejection used to be
+        // upserted with its outcome and then flagged. Now nothing is written at all.
+        var captured = new OutcomeCapturingStore(new InMemoryStore());
+        await captured.UpsertAsync(Outbox("sale-42"));
+        captured.ForgetSnapshot();
 
         var transport = new StubHttpMessageHandler(_ =>
             new HttpResponseMessage(HttpStatusCode.Conflict)
@@ -340,15 +373,8 @@ public class DeferredOutcomeTests
         await using var orchestrator = Orchestrator(captured, transport, new HyperwycEventStream());
         await orchestrator.FlushAsync();
 
-        // Round-tripped through JSON as a durable store would, which is the real test of the
-        // decision to keep exceptions out of the record: an Exception would not survive this.
-        var restored = captured.LastSnapshotAsRestored();
-        var outcome = Assert.IsType<DeliveryOutcome>(restored.LastOutcome);
-
-        Assert.Equal("sale-42", restored.CorrelationId);
-        Assert.Equal(DeliveryOutcomeKind.Rejected, outcome.Kind);
-        Assert.Equal(409, outcome.StatusCode);
-        Assert.Contains("Only 20 left", outcome.GetBodyAsText());
+        Assert.Null(captured.LastSnapshot);
+        Assert.Empty(await captured.GetPendingOutboxAsync());
     }
 
     // -------------------------------------------------------------------------
@@ -425,6 +451,10 @@ public class DeferredOutcomeTests
     {
         private string? _lastSnapshot;
 
+        public string? LastSnapshot => _lastSnapshot;
+
+        public void ForgetSnapshot() => _lastSnapshot = null;
+
         public Envelope LastSnapshotAsRestored() =>
             JsonSerializer.Deserialize<Envelope>(_lastSnapshot!)!;
 
@@ -440,11 +470,8 @@ public class DeferredOutcomeTests
         public Task<IReadOnlyList<Envelope>> GetPendingOutboxAsync(CancellationToken ct = default) =>
             inner.GetPendingOutboxAsync(ct);
 
-        public Task MarkDeliveredAsync(string id, CancellationToken ct = default) =>
-            inner.MarkDeliveredAsync(id, ct);
-
-        public Task MoveToDeadLetterAsync(string id, CancellationToken ct = default) =>
-            inner.MoveToDeadLetterAsync(id, ct);
+        public Task RemoveDeliveredAsync(string id, CancellationToken ct = default) =>
+            inner.RemoveDeliveredAsync(id, ct);
 
         public Task InvalidateCacheForPrefixAsync(string urlPrefix, CancellationToken ct = default) =>
             inner.InvalidateCacheForPrefixAsync(urlPrefix, ct);

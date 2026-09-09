@@ -124,7 +124,7 @@ public sealed class CabinetStore : IHyperwycStore
         try
         {
             var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
-            var match = all.FirstOrDefault(e => e.Url == url && e.Response is not null && !e.IsDeadLettered);
+            var match = all.FirstOrDefault(e => e.Url == url && e.Response is not null);
 
             // Hydrated after the filter, never before: loading the record set decrypts no bodies
             // at all, and this reads exactly the one body that is about to be served.
@@ -144,7 +144,7 @@ public sealed class CabinetStore : IHyperwycStore
         {
             var all = await _records.GetAllAsync(ct).ConfigureAwait(false);
             var pending = all
-                .Where(e => !e.IsSynced && !e.IsDeadLettered)
+                .Where(e => !e.IsSynced)
                 .OrderBy(e => e.CreatedUtc)
                 .ToList();
 
@@ -196,34 +196,16 @@ public sealed class CabinetStore : IHyperwycStore
     }
 
     /// <inheritdoc/>
-    public async Task MarkDeliveredAsync(string id, CancellationToken ct = default)
+    public async Task RemoveDeliveredAsync(string id, CancellationToken ct = default)
     {
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var envelope = await _records.GetByIdAsync(id, ct).ConfigureAwait(false);
-            if (envelope is null) return;
-
-            envelope.IsSynced = true;
-            await _records.UpdateAsync(id, envelope, ct).ConfigureAwait(false);
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-
-    /// <inheritdoc/>
-    public async Task MoveToDeadLetterAsync(string id, CancellationToken ct = default)
-    {
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            var envelope = await _records.GetByIdAsync(id, ct).ConfigureAwait(false);
-            if (envelope is null) return;
-
-            envelope.IsDeadLettered = true;
-            await _records.UpdateAsync(id, envelope, ct).ConfigureAwait(false);
+            // RemoveAsync deletes the record's attachments too, which is where the request body
+            // lives (issue #70). That matters more here than anywhere else: the body and the
+            // captured headers are the most sensitive bytes in the store, and delivery is the
+            // moment they stop being needed. See ADR 0010.
+            await _records.RemoveAsync(id, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -411,7 +393,6 @@ public sealed class CabinetStore : IHyperwycStore
             RequestBody     = request,
             CreatedUtc      = source.CreatedUtc,
             IsSynced        = source.IsSynced,
-            IsDeadLettered  = source.IsDeadLettered,
             Response        = source.Response is null ? null : new CachedResponse
             {
                 StatusCode  = source.Response.StatusCode,

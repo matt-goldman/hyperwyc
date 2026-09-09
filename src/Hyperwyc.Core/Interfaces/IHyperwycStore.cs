@@ -41,22 +41,28 @@ public interface IHyperwycStore
     Task UpsertAsync(Envelope envelope, CancellationToken ct = default);
 
     /// <summary>
-    /// Marks the envelope identified by <paramref name="id"/> as delivered and removes it
-    /// from the outbox.
-    /// </summary>
-    Task MarkDeliveredAsync(string id, CancellationToken ct = default);
-
-    /// <summary>
-    /// Moves the envelope identified by <paramref name="id"/> to the dead-letter queue.
+    /// <b>Removes</b> the delivered envelope identified by <paramref name="id"/>, request and all.
     /// </summary>
     /// <remarks>
-    /// Not the end of a retry sequence — there is no retry budget to exhaust. An envelope is
-    /// dead-lettered as soon as the server answers with a non-success status, because any
-    /// answer means the request reached the API and Hyperwyc's work is done. Only a transport
-    /// failure leaves an envelope in the outbox. See
+    /// <para>
+    /// Removes rather than flags, and the name says so because the distinction is the contract.
+    /// A write is delivered as soon as the server answers — with anything at all, a <c>409</c> as
+    /// much as a <c>201</c> — and at that point Hyperwyc is finished with it. What the server said
+    /// goes out on <see cref="IHyperwyc.Events"/> and is not retained: it is an ordinary HTTP
+    /// response, and keeping one is the application's business. See
+    /// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/docs/decisions/0010-retain-only-outstanding-work.md">ADR 0010</see>.
+    /// </para>
+    /// <para>
+    /// The request goes with it, deliberately: its body and headers are the largest and most
+    /// sensitive things in the store, and holding them past delivery extends that exposure for
+    /// nothing. An implementation backed by files should delete the bytes, not just the record.
+    /// </para>
+    /// <para>
+    /// Only a transport failure leaves an envelope in the store — see
     /// <see cref="Models.DeliveryOutcomeKind"/>.
+    /// </para>
     /// </remarks>
-    Task MoveToDeadLetterAsync(string id, CancellationToken ct = default);
+    Task RemoveDeliveredAsync(string id, CancellationToken ct = default);
 
     /// <summary>
     /// Removes all cached GET responses whose URL begins with
@@ -79,8 +85,7 @@ public interface IHyperwycStore
     Task InvalidateCacheForPrefixAsync(string urlPrefix, CancellationToken ct = default);
 
     /// <summary>
-    /// Clears all data from the store, including the outbox, cache, and
-    /// dead-letter queue.
+    /// Clears all data from the store — the outbox and the cache alike.
     /// </summary>
     Task ResetAsync(CancellationToken ct = default);
 }

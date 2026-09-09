@@ -9,6 +9,8 @@ outbox, envelope, replay, flush, dead-letter, correlation id, synthetic response
 
 ⬜ Open. Filed 2026-09-08, from the author's TODO in `docs/offline-writes.md`.
 
+> **The dead-letter entry dissolved rather than getting written**, which is the outcome this item's own analysis predicted. [66](66-dead-letter-store-fails-the-scope-test.md) removed the concept, and [69](69-expiring-queued-writes.md) may later reclaim the word for what a message bus means by it — *could not be delivered* — at which point the entry gets written for that instead. The rest of the glossary is unaffected and still wanted.
+
 ## The term that prompted it
 
 **Dead-lettered.** The word is borrowed from message queues, where it means roughly "we gave up

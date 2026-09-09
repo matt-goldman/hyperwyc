@@ -207,16 +207,6 @@ public class OutboxProcessorTests
         Assert.Equal("acme", captured.Headers.GetValues("X-Tenant").Single());
     }
 
-    // -------------------------------------------------------------------------
-    // FlushAsync — failure → retry → dead-letter
-    // -------------------------------------------------------------------------
-
-
-
-    // A transient failure is not retried inside the flush; the envelope is deferred and
-    // a follow-up pass picks it up. This covers that whole path, which is what replaced
-    // the in-flush backoff loop.
-
     /// <summary>Polls <paramref name="condition"/> until it holds or the timeout expires.</summary>
     private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)
     {
@@ -231,16 +221,16 @@ public class OutboxProcessorTests
     }
 
     // -------------------------------------------------------------------------
-    // Dead-lettered envelopes not re-sent
+    // Delivered envelopes not re-sent
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task FlushAsync_DeadLetteredEnvelope_NotSentAgain()
+    public async Task FlushAsync_DeliveredEnvelope_NotSentAgain()
     {
         var store = new InMemoryStore();
         var envelope = MakeOutboxEnvelope();
         await store.UpsertAsync(envelope);
-        await store.MoveToDeadLetterAsync(envelope.Id);
+        await store.RemoveDeliveredAsync(envelope.Id);
 
         var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
         await using var orchestrator = BuildOrchestrator(store, transport);
@@ -251,8 +241,66 @@ public class OutboxProcessorTests
     }
 
     // -------------------------------------------------------------------------
+    // Cache invalidation on a replayed write
+    //
+    // The one place a status code is still read after ADR 0010, and deliberately so: this is a
+    // freshness judgement about Hyperwyc's own cache, not a judgement about whether Hyperwyc
+    // succeeded. It follows RFC 9111 §4.4, which invalidates on a non-error response to an
+    // unsafe method.
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task FlushAsync_SuccessfulWrite_InvalidatesTheCacheForItsPrefix()
+    {
+        var store = new InMemoryStore();
+        await store.UpsertAsync(CachedGet("https://example.com/api/orders"));
+        await store.UpsertAsync(MakeOutboxEnvelope("https://example.com/api/orders"));
+
+        var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
+        await using var orchestrator = BuildOrchestrator(store, transport);
+
+        await orchestrator.FlushAsync();
+
+        Assert.Null(await store.GetCachedResponseAsync("https://example.com/api/orders"));
+    }
+
+    [Fact]
+    public async Task FlushAsync_RejectedWrite_LeavesTheCacheAlone()
+    {
+        // A 422 says the write did not happen, so the cached reads under it are still good.
+        // Dropping them would cost an offline read for nothing.
+        var store = new InMemoryStore();
+        await store.UpsertAsync(CachedGet("https://example.com/api/orders"));
+        await store.UpsertAsync(MakeOutboxEnvelope("https://example.com/api/orders"));
+
+        var transport = new StubHttpMessageHandler(
+            new HttpResponseMessage(HttpStatusCode.UnprocessableEntity));
+        await using var orchestrator = BuildOrchestrator(store, transport);
+
+        await orchestrator.FlushAsync();
+
+        Assert.NotNull(await store.GetCachedResponseAsync("https://example.com/api/orders"));
+
+        // Still delivered, though: the envelope is gone either way.
+        Assert.Empty(await store.GetPendingOutboxAsync());
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    private static Envelope CachedGet(string url)
+    {
+        var envelope = new Envelope { Url = url, Method = "GET", IsSynced = true };
+        envelope.Response = new CachedResponse
+        {
+            StatusCode = 200,
+            Headers = [],
+            Body = "cached"u8.ToArray(),
+            CachedAt = DateTimeOffset.UtcNow,
+        };
+        return envelope;
+    }
 
     private sealed class DelegateObserver<T>(Action<T> onNext) : IObserver<T>
     {

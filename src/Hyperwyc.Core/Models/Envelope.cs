@@ -66,26 +66,18 @@ public sealed class Envelope
     /// Whether this envelope is <b>excluded from the outbox</b>. Not what the name says.
     /// </summary>
     /// <remarks>
-    /// A queued write carries <see langword="false"/> until it is delivered. A cached response
+    /// A queued write carries <see langword="false"/> for its whole life; a cached response
     /// carries <see langword="true"/> from the moment it is created, having been "synced"
-    /// nowhere — it is simply not a pending write, and the outbox is defined by the negation of
-    /// this flag.
+    /// nowhere. The outbox is defined by the negation of this flag.
     /// <para>
-    /// The name is wrong and there is no honest replacement for what it currently does:
-    /// <c>IsDelivered</c> would be actively false on a cached response where this is merely
-    /// vague. That is the tell that the model rather than the name is the problem, and it is
-    /// tracked as issue 55 — <see cref="Envelope"/> is two kinds of record wearing one type.
-    /// Deliberately left alone by the vocabulary pass rather than renamed into something worse.
+    /// Nothing sets it after construction any more. Delivery removes the envelope rather than
+    /// flagging it (ADR 0010), so the only thing this now distinguishes is <em>cache entry</em>
+    /// from <em>queued write</em> — which is issue 55's thesis with the camouflage removed:
+    /// <see cref="Envelope"/> is two kinds of record wearing one type, and this is the
+    /// discriminator, wearing a status name.
     /// </para>
     /// </remarks>
     public bool IsSynced { get; set; }
-
-    /// <summary>
-    /// Whether the envelope has been moved to the dead-letter store, which happens as soon as
-    /// the server answers with a non-success status. There are no retry attempts to exhaust.
-    /// </summary>
-    public bool IsDeadLettered { get; set; }
-
 
 
     /// <summary>
@@ -104,9 +96,11 @@ public sealed class Envelope
     /// has been made.
     /// </summary>
     /// <remarks>
-    /// Persisted so a dead-lettered envelope can still explain itself after a restart, which
-    /// an event cannot. Only failures are retained: a successful envelope leaves the outbox,
-    /// so there is nowhere for its outcome to live — see issue 40.
+    /// In practice only ever a <see cref="DeliveryOutcomeKind.TransportFailure"/>. A delivered
+    /// envelope is discarded, so there is nowhere for its outcome to live and no reason for
+    /// Hyperwyc to hold one — the event carries it and the application keeps what it needs. See
+    /// ADR 0010. What is left is the record that lets an outbox which is not draining explain
+    /// itself after a restart, which is issue 23's read path.
     /// </remarks>
     public DeliveryOutcome? LastOutcome { get; set; }
 

@@ -6,6 +6,14 @@ Hyperwyc has no numbers for its own storage layer. Build a benchmark harness tha
 
 The output is **metrics and options**: evidence that Hyperwyc's performance — which is currently Cabinet's performance — is good enough, and a defensible answer to "why Cabinet and not the thing I already use". Most likely the alternatives are then kept as reference implementations rather than shipped as packages; see below.
 
+## `IHyperwycStore` may move under this
+
+**Not a dependency in either direction, and this item is not on anyone's critical path.** A caveat only: [66](66-dead-letter-store-fails-the-scope-test.md) would remove `MoveToDeadLetterAsync`, and [55](55-envelope-kind-discriminator.md) may split `Envelope` in two and `UpsertAsync` with it.
+
+That matters for the *alternative implementations* rather than the benchmarks — writing LiteDB and SQLite stores against a shape that is about to change means writing them twice. If this is picked up while either of those is live, do the harness and leave the implementations, or accept the rework knowingly.
+
+The conformance-suite idea this is sometimes confused with is a different artefact and belongs to [51](Done/51-cabinet-store-not-thread-safe.md), where it is already recorded. That one is about verifying the contract; this one is about measuring performance.
+
 ## Status
 
 ⬜ Open. Filed 2026-09-09. Inherits the benchmark criterion from [52](Done/52-store-rewrites-whole-set-per-write.md), which passed through [70](Done/70-move-bodies-to-cabinet-attachments.md) without being met.

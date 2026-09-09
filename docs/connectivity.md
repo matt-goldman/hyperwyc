@@ -92,8 +92,8 @@ It is not as destructive as it once was: a write attempted against a dead networ
 transport and is [queued from there](offline-writes.md#writes-are-queued-on-transport-failure-too-not-just-when-you-are-offline),
 so writes are not lost. What you give up is everything that depends on *knowing* — every offline
 read pays a full transport timeout before degrading, and **nothing is replayed automatically,
-because no connectivity signal ever fires**. Under it, `FlushOnStartup` and an explicit
-`FlushAsync()` are your only delivery triggers.
+because no connectivity signal ever fires**. Under it, `FlushOnStartup` — which is off by
+default — and an explicit `FlushAsync()` are your only delivery triggers.
 
 Choose it because your host really is always connected.
 

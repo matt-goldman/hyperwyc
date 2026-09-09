@@ -50,10 +50,10 @@ Both shipped implementations now serialise every operation behind a single `Sema
 
 |                 | `IsSynced`               | `Response`          | `Id`                         |
 | --------------- | ------------------------ | ------------------- | ---------------------------- |
-| Queued write    | `false` until delivered  | `null`              | a generated id               |
+| Queued write    | `false`                  | `null`              | a generated id               |
 | Cached response | **`true` from creation** | the stored response | `cache:{url}`, deterministic |
 
-A cached response is marked synced because it is *not a pending write* — it was never "synced" anywhere. The name is wrong and is being dealt with; what matters for you is that **the outbox is defined by the negation of that flag**, so your `GetPendingOutboxAsync` must filter on it.
+A cached response is marked synced because it is *not a pending write* — it was never "synced" anywhere. Nothing ever flips the flag: a delivered write is removed from the store rather than marked, so in practice this says nothing but *which kind of record this is*. The name is wrong and is being dealt with; what matters for you is that **the outbox is defined by the negation of that flag**, so your `GetPendingOutboxAsync` must filter on it.
 
 The deterministic `cache:{url}` id is what stops cached responses accumulating one per fetch — a second fetch of the same URL upserts over the first. Do not key on anything else.
 
@@ -61,11 +61,10 @@ The deterministic `cache:{url}` id is what stops cached responses accumulating o
 
 | Method                          | The part that is not obvious                                                                                                                                                                                                              |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GetPendingOutboxAsync`         | Return **only** envelopes that are neither synced nor dead-lettered, **ordered by `CreatedUtc` ascending**. The ordering is yours to provide — the processor does not sort, and delivery order is a promise Hyperwyc makes to its callers |
+| `GetPendingOutboxAsync`         | Return **only** envelopes that are not synced, **ordered by `CreatedUtc` ascending**. The ordering is yours to provide — the processor does not sort, and delivery order is a promise Hyperwyc makes to its callers |
 | `GetCachedResponseAsync`        | Match the URL exactly, and return only an envelope that actually has a `Response`. TTL is not your concern — the handler decides staleness                                                                                                |
 | `UpsertAsync`                   | Keyed on `Envelope.Id`. Insert or replace; never append                                                                                                                                                                                   |
-| `MarkDeliveredAsync`            | Takes an id, and must tolerate one it does not recognise. A crash between two writes can mean it is called twice                                                                                                                          |
-| `MoveToDeadLetterAsync`         | Same, and see the note above — it does not mean the delivery failed                                                                                                                                                                       |
+| `RemoveDeliveredAsync`          | **Delete the record**, do not flag it — request body and headers included. Hyperwyc holds outstanding work and nothing else ([ADR 0010](decisions/0010-retain-only-outstanding-work.md)), and a delivery is any answer from the server, a `409` as much as a `201`. Takes an id and must tolerate one it does not recognise |
 | `InvalidateCacheForPrefixAsync` | **Removes the record**, and only records that actually have a `Response`. An ordinal `StartsWith` on the URL. The filter matters twice: a queued write under the same prefix must not be touched, and an entry with no response is not yours to reclaim here |
 | `ResetAsync`                    | Must work **when the store cannot be read** — clear the underlying files rather than enumerating records, because enumerating means deserialising, which is the thing that just failed                                                    |
 

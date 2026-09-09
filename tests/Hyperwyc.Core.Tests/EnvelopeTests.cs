@@ -88,7 +88,6 @@ public class EnvelopeTests
         var envelope = Envelope.ForRequest(request);
 
         Assert.False(envelope.IsSynced);
-        Assert.False(envelope.IsDeadLettered);
         Assert.Null(envelope.Response);
     }
 

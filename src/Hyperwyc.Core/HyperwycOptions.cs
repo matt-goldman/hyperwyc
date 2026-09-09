@@ -127,16 +127,15 @@ public sealed class HyperwycOptions
 
     /// <summary>
     /// Maximum response body size (in bytes) captured onto a <see cref="Models.DeliveryOutcome"/>
-    /// when a queued write is delivered or rejected. Longer bodies are clipped and flagged
+    /// when a queued write is delivered. Longer bodies are clipped and flagged
     /// with <see cref="Models.DeliveryOutcome.BodyTruncated"/>. Defaults to 16 384 bytes (16 KB).
     /// Set to zero to capture no bodies at all.
     /// </summary>
     /// <remarks>
     /// Deliberately separate from — and far smaller than — <see cref="MaxCachedResponseBodyBytes"/>.
-    /// That one sizes a payload being cached for later reads; this one sizes an explanation of
-    /// why a write failed, which is persisted per dead-lettered envelope and is usually a
-    /// sentence. Clipping rather than dropping because half an error message is still
-    /// actionable and a missing one is not.
+    /// That one sizes a payload being cached for later reads; this one sizes what the server said
+    /// about a write, which is usually a sentence explaining a rejection. Clipping rather than
+    /// dropping because half an error message is still actionable and a missing one is not.
     /// </remarks>
     public int MaxOutcomeBodyBytes { get; set; } = 16 * 1024;
 
@@ -146,11 +145,32 @@ public sealed class HyperwycOptions
 
 
     /// <summary>
-    /// When <see langword="true"/>, the <see cref="OutboxProcessor"/> triggers
-    /// an outbox flush immediately on startup if the device is currently online.
-    /// Defaults to <see langword="true"/>.
+    /// When <see langword="true"/>, an outbox flush is triggered on startup if the device is
+    /// currently online. Defaults to <see langword="false"/>: subscribe to
+    /// <see cref="Interfaces.IHyperwyc.Events"/> first, then call
+    /// <see cref="Interfaces.IHyperwyc.FlushAsync"/> yourself.
     /// </summary>
-    public bool FlushOnStartup { get; set; } = true;
+    /// <remarks>
+    /// <para>
+    /// <b>Off by default because the event is the only report of a delivery.</b> Nothing is
+    /// retained once a write goes out (ADR 0010), so an outcome published to nobody is an outcome
+    /// nobody ever learns. This flush runs inside host startup, and anything that subscribes later
+    /// — a page loading, a view model constructing, a lazily-resolved service — would miss what it
+    /// delivered, because the event stream is hot and does not replay.
+    /// </para>
+    /// <para>
+    /// Turning it on is fine where the subscriber is in place before the host starts. Where it is
+    /// not, the cost of leaving it off is a flush that waits for the next connectivity change or
+    /// an explicit call, which is visible; the cost of turning it on is a delivery nobody hears
+    /// about, which is not.
+    /// </para>
+    /// <para>
+    /// Note also that it is implemented as an <see cref="Microsoft.Extensions.Hosting.IHostedService"/>,
+    /// so it never fires at all in an application built on a bare <c>ServiceCollection</c> — see
+    /// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/Backlog/65-startup-flush-requires-a-host.md">issue 65</see>.
+    /// </para>
+    /// </remarks>
+    public bool FlushOnStartup { get; set; }
 
     /// <summary>
     /// Whether the store's encryption key was derived by Hyperwyc rather than supplied by the

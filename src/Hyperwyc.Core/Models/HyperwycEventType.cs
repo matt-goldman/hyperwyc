@@ -10,14 +10,18 @@ public enum HyperwycEventType
     OnQueued,
 
 
-    /// <summary>A queued request was successfully delivered to the server.</summary>
-    OnDelivered,
-
     /// <summary>
-    /// A queued request failed permanently and has been moved to the dead-letter
-    /// queue.
+    /// A queued request reached the server, which answered.
     /// </summary>
-    OnFailed,
+    /// <remarks>
+    /// Raised whatever the status. A <c>201</c> and a <c>409</c> are the same event from
+    /// Hyperwyc's side — the request reached the API and the API answered — so what it said is
+    /// carried on <see cref="HyperwycEvent.Outcome"/> for the application to judge. The envelope
+    /// is gone by the time this is published, and nothing about it is retained, which makes this
+    /// event the <b>only</b> report of what happened: see
+    /// <see href="https://github.com/mattgoldman/hyperwyc/blob/main/docs/decisions/0010-retain-only-outstanding-work.md">ADR 0010</see>.
+    /// </remarks>
+    OnDelivered,
 
     /// <summary>
     /// A cached GET response has been updated with a fresh response from the
