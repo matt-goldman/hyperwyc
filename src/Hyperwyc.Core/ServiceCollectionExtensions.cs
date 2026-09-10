@@ -150,11 +150,14 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<HyperwycEventStream>(),
             sp.GetService<ILogger<StoreHealth>>()));
 
-        services.TryAddSingleton<IHyperwyc>(sp => new HyperwycService(
+        // HyperwycService is the single implementation behind both consumer interfaces.
+        // Registered as itself so both interface aliases resolve to the same instance —
+        // resolving one via a factory that news up another would give two, and each would
+        // hold its own view of what the outbox looks like.
+        services.TryAddSingleton<HyperwycService>(sp => new HyperwycService(
             sp.GetRequiredService<HyperwycEventStream>(),
             sp.GetRequiredService<OutboxProcessor>()));
-
-        // HyperwycService implements both interfaces
+        services.TryAddSingleton<IHyperwyc>(sp => sp.GetRequiredService<HyperwycService>());
         services.TryAddSingleton<IHyperwycDiagnostics>(sp => sp.GetRequiredService<HyperwycService>());
 
         // Replays go back through the named client they were queued on, so downstream

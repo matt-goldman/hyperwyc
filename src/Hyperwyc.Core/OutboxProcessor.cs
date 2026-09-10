@@ -196,14 +196,29 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets the pending outbox items and returns a read only list of PendingItem derived from them
+    /// Reads the outbox and projects each entry to its diagnostic view.
     /// </summary>
-    /// <returns></returns>
+    /// <remarks>
+    /// Guards the store read the same way <see cref="FlushAsync"/> does: an unreadable store is
+    /// reported through <see cref="StoreHealth"/> and the caller gets an empty list, matching the
+    /// "Hyperwyc quietly stands aside when the store is broken" behaviour every other read path
+    /// takes. The <see cref="HyperwycEventType.OnStoreUnreadable"/> event is how a diagnostics UI
+    /// learns the store itself is the problem.
+    /// </remarks>
     internal async Task<IReadOnlyList<PendingItem>> GetDiagnosticViewAsync(CancellationToken ct = default)
     {
-        var outbox = await _store.GetPendingOutboxAsync(ct);
+        IReadOnlyList<QueuedWrite> outbox;
+        try
+        {
+            outbox = await _store.GetPendingOutboxAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (StoreHealth.IsStoreFailure(ex))
+        {
+            _health.ReportUnreadable(ex, _options.UsesDerivedEncryptionKey);
+            return [];
+        }
 
-        return [.. outbox.Select(qw => qw.GetDiagnosticView())];
+        return [.. outbox.Select(PendingItem.From)];
     }
 
     // -------------------------------------------------------------------------

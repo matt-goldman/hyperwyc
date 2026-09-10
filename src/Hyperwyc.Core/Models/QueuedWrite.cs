@@ -164,29 +164,4 @@ public sealed class QueuedWrite
     /// </remarks>
     public string? GetRequestBodyAsText() =>
         RequestBody is null ? null : System.Text.Encoding.UTF8.GetString(RequestBody);
-
-    public PendingItem GetDiagnosticView() =>
-        new PendingItem(Id, CorrelationId, Method, Url, CreatedUtc, 0, LastOutcome);
 }
-
-/// <summary>
-/// Provides a diagnostic view of a <see cref="QueuedWrite"/> in the outbox
-/// </summary>
-/// <param name="Id">Hyperwyc's unique internal identifier for the item</param>
-/// <param name="CorrelationId">
-/// A correlation ID used for diagnostic tracing; an automatically generated
-/// GUID if not user supplied
-/// </param>
-/// <param name="Method">The HTTP verb used to send the request</param>
-/// <param name="Url">The URL the request was sent to</param>
-/// <param name="CreatedUtc">
-/// The date and time of the ORIGINAL request (does not get updated on retries)
-/// </param>
-/// <param name="RetryCount">
-/// The number of times Hyperwyc has attempted to send the request (does not include
-/// the original attempt made by the calling code)
-/// </param>
-/// <param name="LastOutcome">The <see cref="DeliveryOutcome"/> of the most recent send attempt</param>
-public record PendingItem(
-    string Id, string CorrelationId, string Method, string Url,
-    DateTimeOffset CreatedUtc, int RetryCount, DeliveryOutcome? LastOutcome);
