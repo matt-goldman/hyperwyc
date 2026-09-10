@@ -35,7 +35,7 @@ public record PendingItem(
     string Url,
     DateTimeOffset CreatedUtc,
     int RetryCount,
-    DeliveryOutcome? LastOutcome)
+    DeliveryOutcome LastOutcome)
 {
     /// <summary>
     /// Projects a <see cref="QueuedWrite"/> into its diagnostic view.
@@ -55,6 +55,6 @@ public record PendingItem(
             write.Url,
             write.CreatedUtc,
             write.RetryCount,
-            write.LastOutcome);
+            write.LastOutcome ?? new DeliveryOutcome());
     }
 }

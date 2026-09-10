@@ -22,6 +22,10 @@
         <ShellContent Title="Live Events"
                       ContentTemplate="{DataTemplate pages:LiveEventsPage}"
                       Route="Live"/>
+
+        <ShellContent Title="Diagnostics"
+                      ContentTemplate="{DataTemplate pages:DiagnosticsPage}"
+                      Route="Diag"/>
     </FlyoutItem>
 
     <MenuItem Text="Login"
