@@ -154,6 +154,9 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<HyperwycEventStream>(),
             sp.GetRequiredService<OutboxProcessor>()));
 
+        // HyperwycService implements both interfaces
+        services.TryAddSingleton<IHyperwycDiagnostics>(sp => sp.GetRequiredService<HyperwycService>());
+
         // Replays go back through the named client they were queued on, so downstream
         // handlers (auth above all) apply to them. ReplayTransport is the fallback for
         // envelopes with no client name — see issue #37.
