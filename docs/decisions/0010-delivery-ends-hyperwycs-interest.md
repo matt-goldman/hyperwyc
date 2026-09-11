@@ -40,7 +40,7 @@ Concretely, and this is the part that is a public API change:
 - `DeliveryOutcomeKind.Succeeded` and `Rejected` collapse into `Delivered`, leaving delivery versus `TransportFailure` — which is the distinction that was doing real work all along.
 - `DeliveryOutcome` itself stays. It is what the event carries, and the event is the part that passes question 4.
 
-**The request is discarded too, not only the outcome.** The request body and its headers are the largest *and* most sensitive things in the store ([issue 30](../../Backlog/30-sensitive-header-exclusion.md)); keeping them past delivery extends that exposure for nothing.
+**The request is discarded too, not only the outcome.** The request body and its headers are the largest *and* most sensitive things in the store ([issue 30](../../Backlog/Done/30-sensitive-header-exclusion.md)); keeping them past delivery extends that exposure for nothing.
 
 ### The rejection body: the cost is accepted, not overlooked
 

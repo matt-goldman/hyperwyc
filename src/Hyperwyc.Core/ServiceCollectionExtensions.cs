@@ -94,6 +94,53 @@ public static class ServiceCollectionExtensions
     // -------------------------------------------------------------------------
 
     /// <summary>
+    /// Rejects a negative body cap at registration time, on the options and on every
+    /// registered <see cref="Models.RoutePolicy"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Here rather than in a property setter, because this is the moment the consumer has
+    /// finished configuring.</b> A setter can only see the value in front of it; the route
+    /// policies are values the consumer composed separately and handed over, and the first point
+    /// at which all of them exist is after <c>configure</c> returns.
+    /// </para>
+    /// <para>
+    /// It throws rather than clamping. A negative cap is not a preference Hyperwyc can honour
+    /// approximately — it says "cache nothing" through a value that reads as a size, and silently
+    /// treating it as zero would leave a consumer wondering for a long time why a route never
+    /// caches. Zero is the supported way to say that, and it says it legibly.
+    /// </para>
+    /// </remarks>
+    private static void ValidateBodyCaps(HyperwycOptions options)
+    {
+        ThrowIfNegative(options.MaxCachedResponseBodyBytes, $"options.{nameof(HyperwycOptions.MaxCachedResponseBodyBytes)}");
+        ThrowIfNegative(options.MaxOutcomeBodyBytes, $"options.{nameof(HyperwycOptions.MaxOutcomeBodyBytes)}");
+
+        ThrowIfNegative(
+            options.Routes.Default.MaxCachedResponseBodyBytes,
+            $"options.Routes.Default.{nameof(Models.RoutePolicy.MaxCachedResponseBodyBytes)}");
+
+        foreach (var (pattern, policy) in options.Routes.Registrations)
+        {
+            ThrowIfNegative(
+                policy.MaxCachedResponseBodyBytes,
+                $"options.Routes[\"{pattern}\"].{nameof(Models.RoutePolicy.MaxCachedResponseBodyBytes)}");
+        }
+
+        static void ThrowIfNegative(int? value, string paramName)
+        {
+            if (value < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    paramName,
+                    value,
+                    "A body cap is a size in bytes and cannot be negative. Use 0 to cache no bodies; "
+                    + "there is no unlimited sentinel, because int.MaxValue already exceeds any body that could be cached.");
+            }
+        }
+    }
+
+    /// <summary>
     /// Registers everything except the <see cref="IHyperwycStore"/>, which each public
     /// entry point supplies in its own way.
     /// </summary>
@@ -103,6 +150,8 @@ public static class ServiceCollectionExtensions
     {
         var options = new HyperwycOptions();
         configure?.Invoke(options);
+
+        ValidateBodyCaps(options);
 
         // No TTL reconciliation. A resolved RoutePolicy carries its own concrete TTL, so
         // there is nothing to reconcile at registration — which is what issue #29 was: two

@@ -123,6 +123,25 @@ public sealed class HyperwycOptions
     /// Responses larger than this are returned to the caller but not stored.
     /// Defaults to 524 288 bytes (512 KB).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The application-wide bound. A route that needs a different one sets
+    /// <see cref="Models.RoutePolicy.MaxCachedResponseBodyBytes"/>, which takes precedence where
+    /// it is set and defers to this everywhere else — so raising the cap for one endpoint that
+    /// returns a document does not raise it for every other endpoint in the application.
+    /// </para>
+    /// <para>
+    /// <b>A cap on a single body, not on the store.</b> Nothing bounds the total, and nothing
+    /// evicts — see <see href="https://github.com/mattgoldman/hyperwyc/blob/main/Backlog/42-cache-eviction.md">issue 42</see>.
+    /// Setting this generously is the easiest way to grow a store that never shrinks.
+    /// </para>
+    /// <para>
+    /// Zero caches no bodies at all. There is no "unlimited" sentinel: a body is a
+    /// <see cref="byte"/> array, so <see cref="int.MaxValue"/> already exceeds anything that
+    /// could be cached. A negative value throws <see cref="ArgumentOutOfRangeException"/> when
+    /// Hyperwyc is registered, rather than silently caching nothing.
+    /// </para>
+    /// </remarks>
     public int MaxCachedResponseBodyBytes { get; set; } = 512 * 1024;
 
     /// <summary>

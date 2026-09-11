@@ -242,6 +242,74 @@ public sealed class ServiceCollectionExtensionsTests
     }
 
     // -------------------------------------------------------------------------
+    // Body caps are validated at registration time (issue #20)
+    //
+    // A size that cannot be a size is a configuration mistake, and the moment the
+    // consumer has finished configuring is the last one at which it can be reported
+    // as such. Left alone it would surface much later as a route that silently
+    // never caches.
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void ANegativeGlobalBodyCap_ThrowsAtRegistration()
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(
+            () => BuildProvider(o => o.MaxCachedResponseBodyBytes = -1));
+
+        Assert.Contains(nameof(HyperwycOptions.MaxCachedResponseBodyBytes), ex.ParamName);
+    }
+
+    [Fact]
+    public void ANegativeOutcomeBodyCap_ThrowsAtRegistration()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => BuildProvider(o => o.MaxOutcomeBodyBytes = -1));
+    }
+
+    [Fact]
+    public void ANegativeCapOnARegisteredRoute_ThrowsAtRegistration()
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(
+            () => BuildProvider(o => o.Routes.For(
+                "/api/reports/*", RoutePolicy.CacheFirst() with { MaxCachedResponseBodyBytes = -1 })));
+
+        // The pattern is in the parameter name, because "a route" is not enough to find it
+        // in a map with a dozen registrations.
+        Assert.Contains("/api/reports/*", ex.ParamName);
+    }
+
+    [Fact]
+    public void ANegativeCapOnTheDefaultRoute_ThrowsAtRegistration()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => BuildProvider(o => o.Routes.Default =
+                RoutePolicy.CacheFirst() with { MaxCachedResponseBodyBytes = -1 }));
+    }
+
+    [Fact]
+    public void ZeroIsAValidCap()
+    {
+        // Zero says "cache no bodies" and is honoured rather than rejected. There is no
+        // unlimited sentinel to confuse it with.
+        var sp = BuildProvider(o => o.MaxCachedResponseBodyBytes = 0);
+
+        Assert.Equal(0, sp.GetRequiredService<HyperwycOptions>().MaxCachedResponseBodyBytes);
+    }
+
+    [Fact]
+    public void ARouteCapSurvivesRegistration()
+    {
+        var sp = BuildProvider(o => o.Routes.For(
+            "/api/reports/*", RoutePolicy.CacheFirst() with { MaxCachedResponseBodyBytes = 4 * 1024 * 1024 }));
+
+        var routes = sp.GetRequiredService<HyperwycOptions>().Routes;
+
+        Assert.Equal(4 * 1024 * 1024,
+            routes.PolicyFor(new Uri("https://example.com/api/reports/annual")).MaxCachedResponseBodyBytes);
+        Assert.Null(routes.PolicyFor(new Uri("https://example.com/api/products")).MaxCachedResponseBodyBytes);
+    }
+
+    // -------------------------------------------------------------------------
     // Connectivity is required
     //
     // There is no safe default: silently assuming "always online" produces a

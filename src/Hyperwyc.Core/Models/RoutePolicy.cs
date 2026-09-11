@@ -58,6 +58,32 @@ public sealed record RoutePolicy
     /// </remarks>
     public bool InvalidateCacheOnWrite { get; init; } = true;
 
+    /// <summary>
+    /// Maximum response body size (in bytes) written to the cache on this route.
+    /// <see langword="null"/> — the default — defers to
+    /// <see cref="HyperwycOptions.MaxCachedResponseBodyBytes"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The global cap is one number for an application whose routes return payloads of very
+    /// different sizes: raise it for a route that returns a document and every other route
+    /// gains headroom it never needed. This is the per-route escape hatch — set it where one
+    /// route's payloads justify a different bound, and leave the rest on the global default.
+    /// </para>
+    /// <para>
+    /// Unlike <see cref="Ttl"/> this <em>is</em> inherited when unset, and deliberately so. A TTL
+    /// has no safe fallback — issue #29 was two sources for one validity bound — whereas a size
+    /// cap has exactly one: the application-wide number the consumer already chose. Making it
+    /// concrete on every policy would mean restating 512 KB on each route that does not care.
+    /// </para>
+    /// <para>
+    /// Zero caches no bodies at all on this route. There is no "unlimited" sentinel because none
+    /// is needed: a body is a <see cref="byte"/> array, so <see cref="int.MaxValue"/> is already
+    /// larger than anything that could be cached. Negative values throw at configuration time.
+    /// </para>
+    /// </remarks>
+    public int? MaxCachedResponseBodyBytes { get; init; }
+
     /// <summary>Serve a fresh stored response without touching the network; otherwise fetch.</summary>
     public static RoutePolicy CacheFirst() => new();
 

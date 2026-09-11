@@ -23,6 +23,30 @@ Request and response bodies are held as separate encrypted files rather than ins
 Cached responses and queued writes are kept in separate documents, so a burst of cache writes does not rewrite the outbox and a flush does not rewrite the cache.
 
 
+## What ends up on disk
+
+Hyperwyc stores the request the application made, **including every header that was on it when Hyperwyc saw it** — `Authorization` and any API key among them. There is no deny-list and no redaction.
+
+That is deliberate rather than an oversight. A replay has to reproduce the request, and a credential that is still valid at replay time is part of the request: an API key, basic auth, or an HMAC over stable request content all still work a day later, so dropping them would turn a replay that would have succeeded into one that cannot. Deciding which headers are "sensitive" is a judgement about your threat model, and Hyperwyc does not know it — the same reasoning as [ADR 0001](decisions/0001-idempotency-is-not-hyperwycs-remit.md), which declined to make that kind of decision on your behalf over idempotency.
+
+**How long it stays is not the same for the two record kinds.**
+
+| | What it keeps | For how long |
+| --- | --- | --- |
+| A queued write | The headers of the request you made | Only while the write is outstanding. A delivered write is deleted outright, headers with it — a delivery being any answer from the server, refusal included ([ADR 0010](decisions/0010-delivery-ends-hyperwycs-interest.md)) |
+| A cached response | The headers of the `GET` that populated it | The life of the entry — which nothing bounds, since nothing evicts. It goes when a write invalidates its URL prefix, or when the store is reset |
+
+So the cache is the one to think about. A queued write's exposure is measured against how long you are offline; a cached entry's is not measured against anything.
+
+### The two levers
+
+**Add credentials in a handler registered after `AddHyperwycHandler()`.** Then they are never captured at all — Hyperwyc has already serialised the envelope by the time that handler runs — and a fresh one is minted at replay time. This is [the ordering already recommended](pipeline.md); keeping credentials out of the store is its second reason. Cookies are never captured either, for the same reason: the primary handler's `CookieContainer` attaches them below Hyperwyc.
+
+**Supply your own encryption key** for what does get stored, rather than relying on the path-derived default described above. That is the whole of the mitigation for a credential a caller sets directly on the request, which is the one case the ordering cannot help with.
+
+There is no option to exclude headers from what is persisted. If one is ever added it will be opt-in — you naming the headers you want dropped, and accepting what that does to replay — rather than Hyperwyc choosing for you.
+
+
 ## Implementing your own
 
 Install `Hyperwyc.Core` instead of `Hyperwyc`, implement `IHyperwycStore`, and register it as a type parameter:
@@ -129,7 +153,9 @@ A secondary reason on Android: Auto Backup caps an app at 25 MB, and exceeding i
 
 ## One thing to know before you ship
 
-**The cache is not bounded.** Individual response bodies are capped at 512 KB, but the store as a whole grows without limit and nothing evicts. On a long-lived mobile app that is the number to watch — and it is the same problem as the 25 MB Android quota above, seen from the other end rather than a separate concern.
+**The cache is not bounded.** Individual response bodies are capped — `HyperwycOptions.MaxCachedResponseBodyBytes`, 512 KB by default, and settable [per route](delivery.md#how-big-a-response-may-be) — but the store as a whole grows without limit and nothing evicts. On a long-lived mobile app that is the number to watch — and it is the same problem as the 25 MB Android quota above, seen from the other end rather than a separate concern.
+
+Which is why the per-route cap is the one to reach for. Raising the global cap to fit one endpoint's payloads raises it for every endpoint, and on a store nothing evicts from, that headroom is what eventually fills the disk.
 
 Cached entries are removed when a write invalidates their URL prefix, so the cache does shrink; what it has no answer for is an entry that is simply never invalidated and never re-read.
 

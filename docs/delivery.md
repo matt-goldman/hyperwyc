@@ -53,19 +53,43 @@ It's the same model as `.gitignore` and the CSS cascade: state the general rule,
 
 Patterns match on the URL **path** only — scheme, host, port and query string are ignored, so a pattern works whatever your `BaseAddress` is. `/api/sales/*` covers `/api/sales` and everything beneath it; `*` matches everything; matching is case-insensitive.
 
-A policy carries three things:
+A policy carries four things:
 
-| Member                   | Default      |                                                                               |
-| ------------------------ | ------------ | ----------------------------------------------------------------------------- |
-| `Strategy`               | `CacheFirst` | How reads are served                                                          |
-| `Ttl`                    | 1 day        | How old a stored response may be and still be served, online or offline       |
-| `InvalidateCacheOnWrite` | `true`       | Whether a successful write clears stored responses under the same path prefix |
+| Member                        | Default          |                                                                                            |
+| ----------------------------- | ---------------- | ------------------------------------------------------------------------------------------ |
+| `SourcePriority`              | `CacheFirst`     | How reads are served                                                                       |
+| `Ttl`                         | 1 day            | How old a stored response may be and still be served, online or offline                    |
+| `InvalidateCacheOnWrite`      | `true`           | Whether a successful write clears stored responses under the same path prefix              |
+| `MaxCachedResponseBodyBytes`  | unset — inherits | The largest response body cached on this route. Unset defers to the application-wide cap    |
 
 Use the factory methods (as per [Route Policies](#route-policies)) and compose with `with` for anything the factories don't cover:
 
 ```csharp
 .For("/api/audit/*", RoutePolicy.CacheFirst(TimeSpan.FromDays(7)) with { InvalidateCacheOnWrite = false })
 ```
+
+### How big a response may be
+
+`HyperwycOptions.MaxCachedResponseBodyBytes` is the application-wide cap, 512 KB by default. A response larger than it is returned to the caller in full and simply not stored.
+
+One number rarely fits a whole API. Raise the global cap for the one endpoint that returns a document and every other route gains headroom it never needed — on a store that [nothing evicts from](storage.md#one-thing-to-know-before-you-ship), that headroom is what fills the disk. So set the cap per route instead, and leave the global one where it is:
+
+```csharp
+services.AddHyperwyc(options =>
+{
+    options.MaxCachedResponseBodyBytes = 256 * 1024;         // the rest of the app
+
+    options.Routes
+        .For("/api/reports/*", RoutePolicy.CacheFirst(TimeSpan.FromDays(1))
+            with { MaxCachedResponseBodyBytes = 4 * 1024 * 1024 })   // this one returns documents
+        .For("/api/feed/*",    RoutePolicy.NetworkFirst()
+            with { MaxCachedResponseBodyBytes = 0 });                // and this one stores nothing
+});
+```
+
+Unlike `Ttl`, this **is** inherited when you leave it unset — a TTL has no safe fallback, whereas a size cap has exactly one, the number you already chose for the application. So a policy that doesn't mention it gets the global value rather than a fresh default.
+
+`0` caches no bodies at all on that route, which is the narrow version of `NetworkOnly` — the route is still fetched, still invalidated on write, and just stores nothing. There is no "unlimited" value and none is needed: a body is a `byte[]`, so `int.MaxValue` already exceeds anything that could be cached. A negative cap throws `ArgumentOutOfRangeException` when Hyperwyc is registered, naming the route that set it, rather than silently behaving as `0`.
 
 > **`NetworkOnly` governs writes as well as reads.** It's the one strategy that does. A write to
 > a `NetworkOnly` route is **never queued** — not when offline, and not when the transport fails

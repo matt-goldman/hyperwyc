@@ -306,20 +306,22 @@ public sealed class HyperwycHandler : DelegatingHandler
 
         // NetworkOnly neither reads nor writes the store, so there is nothing to record.
         if (strategy != SourcePriority.NetworkOnly)
-            await CacheResponseIfEligibleAsync(request, response, url, ct).ConfigureAwait(false);
+            await CacheResponseIfEligibleAsync(request, response, url, policy, ct).ConfigureAwait(false);
 
         return response;
     }
 
     /// <summary>
-    /// Writes a successful read response to the cache, unless its body exceeds
-    /// <see cref="HyperwycOptions.MaxCachedResponseBodyBytes"/>. Oversized responses
-    /// are still returned to the caller; they are simply not stored.
+    /// Writes a successful read response to the cache, unless its body exceeds the route's
+    /// body cap — <see cref="RoutePolicy.MaxCachedResponseBodyBytes"/> where the matched policy
+    /// sets one, otherwise <see cref="HyperwycOptions.MaxCachedResponseBodyBytes"/>. Oversized
+    /// responses are still returned to the caller; they are simply not stored.
     /// </summary>
     private async Task CacheResponseIfEligibleAsync(
         HttpRequestMessage request,
         HttpResponseMessage response,
         string url,
+        RoutePolicy policy,
         CancellationToken ct)
     {
         if (!response.IsSuccessStatusCode)
@@ -330,8 +332,10 @@ public sealed class HyperwycHandler : DelegatingHandler
         if (response.Content is not null)
             await response.Content.LoadIntoBufferAsync(ct).ConfigureAwait(false);
 
+        var maxBodyBytes = policy.MaxCachedResponseBodyBytes ?? _options.MaxCachedResponseBodyBytes;
+
         var bodyLength = response.Content?.Headers.ContentLength ?? 0;
-        if (bodyLength > _options.MaxCachedResponseBodyBytes)
+        if (bodyLength > maxBodyBytes)
             return;
 
         var cached = CachedResponse.For(url, response);

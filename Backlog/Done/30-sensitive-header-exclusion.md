@@ -2,11 +2,11 @@
 
 > **Reversed: this is now a documentation item, not a deny-list.** Stripping caller-set headers
 > would violate the fidelity obligation in
-> [ADR 0001](../docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md) and break replay for
+> [ADR 0001](../../docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md) and break replay for
 > anyone whose credential is still valid at replay time. See "Why a deny-list is the wrong
 > answer" below.
 
-> **[66](66-dead-letter-store-fails-the-scope-test.md) shortens the exposure this documents, for one of the two kinds.** If a delivered write is discarded rather than retained, an outbox entry's headers persist only while the write is *outstanding*, instead of indefinitely. Cache entries are unaffected — they still carry the request headers of the `GET` that populated them, for as long as the entry lives. Whatever this item ends up saying should distinguish the two.
+> **[66](../66-dead-letter-store-fails-the-scope-test.md) shortens the exposure this documents, for one of the two kinds.** If a delivered write is discarded rather than retained, an outbox entry's headers persist only while the write is *outstanding*, instead of indefinitely. Cache entries are unaffected — they still carry the request headers of the `GET` that populated them, for as long as the entry lives. Whatever this item ends up saying should distinguish the two.
 
 ## Summary
 
@@ -35,41 +35,39 @@ actually goes on the wire during a flush.
 
 ## Behaviour
 
-- Maintain a default deny-list of headers excluded from persisted envelopes:
-  `Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`.
-- Make the list configurable via `HyperwycOptions` — additive, and with an opt-out for
-  developers who deliberately want full request persistence (the old TECHNICAL_PLAN already
-  promises this flag).
-- Excluded headers are dropped at envelope-construction time, not at replay time, so they
-  never reach the store.
-- Document that replayed requests acquire auth from the pipeline, and confirm the
-  orchestrator's transport can pick up whatever the app's auth handler provides — see
-  Notes.
+*The deny-list spec that stood here was removed on 11th September 2026 — see "Why a deny-list is the wrong answer" below. What shipped instead is documentation.*
+
+- [docs/storage.md](../../docs/storage.md#what-ends-up-on-disk) gains a "What ends up on disk" section: every header on the request as Hyperwyc saw it is persisted, why that is necessary rather than incidental, how long each of the two record kinds keeps it, and the two levers.
+- [docs/pipeline.md](../../docs/pipeline.md) gains the handler-ordering recommendation's second reason — a credential added after `AddHyperwycHandler()` is never captured at all.
+- The root README's ordering paragraph says the same in one sentence and links on.
+- `RequestHeaderFidelityTests.CallerSuppliedAuthorization_SurvivesQueueingAndReplayUnchanged` pins the fidelity guarantee, so a future "security fix" cannot quietly break replay.
 
 ## Acceptance Criteria
 
-- [ ] README states that headers set before Hyperwyc sees the request — credentials included —
-      are persisted with the envelope, and why that is necessary rather than incidental.
-- [ ] That guidance sits alongside, and links to, the encryption-key documentation, so the
-      exposure and its mitigation are read together.
-- [ ] The handler-ordering recommendation gains its second reason: credentials added after
-      Hyperwyc are never stored at all.
-- [ ] [docs/storage.md](../docs/storage.md) states the same, replacing the claim that sensitive headers are excluded.
-- [ ] Unit test: a caller-set `Authorization` survives queueing and replay unchanged — the
-      fidelity guarantee, pinned so a future "security fix" cannot quietly break replay.
-- [ ] Decision recorded on whether an opt-in deny-list ships at all.
+- [x] README states that headers set before Hyperwyc sees the request — credentials included — are persisted with the envelope, and why that is necessary rather than incidental.
+- [x] That guidance sits alongside, and links to, the encryption-key documentation, so the exposure and its mitigation are read together. Both are on `storage.md`, the new section directly below the key.
+- [x] The handler-ordering recommendation gains its second reason: credentials added after Hyperwyc are never stored at all.
+- [x] [docs/storage.md](../../docs/storage.md#what-ends-up-on-disk) states the same, replacing the claim that sensitive headers are excluded.
+- [x] Unit test: a caller-set `Authorization` survives queueing and replay unchanged — the fidelity guarantee, pinned so a future "security fix" cannot quietly break replay.
+- [x] Decision recorded on whether an opt-in deny-list ships at all. See Decision below.
+
+## Decision — 11th September 2026
+
+**No deny-list ships, opt-in or otherwise, and none is filed.** Not declined on the merits — the inverted, opt-in form described below is still the right shape if it is ever wanted — but deferred until there is a caller for it. It is not in the backlog, because a backlog item for a capability nobody has asked for is a commitment dressed as a record.
+
+**No `Security` page either.** Considered and rejected for now: everything such a page would carry already has a home — what is persisted and the encryption key on `storage.md`, handler ordering on `pipeline.md`, ADR 0001 for why the judgement is not Hyperwyc's to make. Lifting them onto a new page buys a reader an entry point at the cost of duplicating three sections or gutting two pages, which is the trade ADR 0004 answers. The trigger to revisit is a third security-shaped topic with nowhere to live — an opt-in exclusion list being the obvious candidate, since a policy would want `delivery.md` and the surrounding reasoning would want somewhere else.
 
 ## Why a deny-list is the wrong answer
 
 Two things changed the conclusion.
 
-**[ADR 0002](../docs/decisions/0002-replays-traverse-the-pipeline.md) removed most of the
+**[ADR 0002](../../docs/decisions/0002-replays-traverse-the-pipeline.md) removed most of the
 exposure.** With the recommended ordering, a credential added by a *handler* is never captured —
 the handler runs after Hyperwyc has serialised the envelope. `Cookie` is never captured either,
 since cookies are attached by the primary handler's `CookieContainer`, below Hyperwyc. What is
 left is the credential a caller sets directly on the request.
 
-**And that one must be persisted.** [ADR 0001](../docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md)
+**And that one must be persisted.** [ADR 0001](../../docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md)
 commits Hyperwyc to fidelity: *"Being naive must not mean being lossy. If Hyperwyc declines to
 add anything, it must faithfully carry everything the application did set."* A deny-list that
 silently drops a caller-set header is exactly the lossiness that obligation rules out.
@@ -90,7 +88,7 @@ decision the consumer made deliberately.
 
 There is a deeper point. Deciding which headers are "sensitive" is a judgement about the
 application's threat model, made by a transport library that knows nothing about it. That is the
-same imposition [ADR 0001](../docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md) declined
+same imposition [ADR 0001](../../docs/decisions/0001-idempotency-is-not-hyperwycs-remit.md) declined
 over idempotency, and the answer is the same: surface the fact, do not decide on their behalf.
 
 ## What this becomes instead
@@ -105,7 +103,7 @@ the application made. Consumers should know that, and should know the two levers
   never captured at all and are minted fresh at replay time. This is already the recommended
   ordering, now with a second reason behind it.
 - Supply their own encryption key via `CabinetStoreOptions.EncryptionKey` if what does get stored
-  warrants better than the path-derived default ([issue 32](32-default-encryption-key.md)).
+  warrants better than the path-derived default ([issue 32](../32-default-encryption-key.md)).
 
 The deterministic default key is the sharper end of this, and the documentation should connect
 the two rather than treating them as unrelated topics: *these are the circumstances in which
@@ -123,10 +121,4 @@ Worth doing only if someone asks for it. The documentation is the part that is a
 ## Notes
 
 - Discovered while reconciling the docs against the code; not previously tracked.
-- **Resolved by issue #37.** This item's hardest question — how replayed requests acquire
-  credentials once the persisted `Authorization` header is dropped — is answered: replays now
-  traverse the originating client's pipeline, so the application's auth handler stamps a fresh
-  token at replay time. Excluding sensitive headers is therefore straightforwardly correct
-  rather than a change that breaks replay. Note that with the recommended ordering the header
-  was never captured in the first place, so the exclusion is mostly a defence against
-  consumers who register auth *before* Hyperwyc.
+- **Issue #37 answered the hard question, and then the answer dissolved the item.** How a replayed request acquires credentials once the persisted `Authorization` header is dropped: replays traverse the originating client's pipeline, so the application's auth handler stamps a fresh token at replay time. That made exclusion look straightforwardly correct — until the same fact showed it was mostly unnecessary. With the recommended ordering the header is never captured at all, so a deny-list would only ever defend consumers who register auth *before* Hyperwyc, and it would do so by breaking replay for everyone whose credential is a long-lived one. The remaining exposure is real but narrow, and the answer to it is documentation and an encryption key.

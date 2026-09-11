@@ -12,6 +12,8 @@ services.AddHttpClient("MyApi")
 
 This works because **a replayed write goes back through the same pipeline it was made on.** Hyperwyc steps aside for replays, it doesn't re-queue them, and every handler after it runs normally. So a write queued on Monday and replayed on Tuesday is authenticated with Tuesday's token, not the one that was current when it was queued.
 
+**There is a second reason, and it is about what reaches the disk.** Hyperwyc persists the request as it sees it, every header included, because a replay has to reproduce it — see [what ends up on disk](storage.md#what-ends-up-on-disk). A handler registered *after* `AddHyperwycHandler()` runs once the envelope has already been serialised, so a credential it adds is never captured at all. Register your auth handler first instead and the token it stamped goes into the store with the write, and sits there until the write is delivered.
+
 The same applies to anything else you put in the pipeline: logging, correlation IDs, telemetry, custom retry. Register it after `AddHyperwycHandler()` and replays get it too.
 
 > **Use `AddHyperwycHandler()`, not `AddHttpMessageHandler<HyperwycHandler>()`.** The former
