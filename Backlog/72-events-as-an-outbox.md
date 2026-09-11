@@ -63,5 +63,5 @@ Worth holding open from the start, because it is the cheapest outcome and would 
 
 - [65](65-startup-flush-requires-a-host.md) — the trigger timing that makes the current gap reachable.
 - [67](67-configurable-response-retention.md) — the other retention question, and possibly the same one.
-- [23](23-v1-diagnostics-view.md) — a read path over the outbox; a read path over undelivered events would be its sibling.
+- [23](done/23-v1-d0agnostics-view.md) — a read path over the outbox; a read path over undelivered events would be its sibling.
 - [50](50-resilient-applications-guide.md) — where the do-it-yourself answer would be written up.

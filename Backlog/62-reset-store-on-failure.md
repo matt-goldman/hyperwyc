@@ -100,7 +100,7 @@ at 2×.
 - **Where does the orphan live?** A sibling directory keeps `CabinetStoreOptions.DefaultDirectoryPath()`
   meaningful as the thing to exclude from OS backup ([48](Done/48-exclude-store-from-os-backup.md)); a
   suffix on the same directory means the exclusion path needs a wildcard or a second entry.
-- **What does the event carry?** [23](23-v1-diagnostics-view.md) is the surface where a
+- **What does the event carry?** [23](done/23-v1-d0agnostics-view.md) is the surface where a
   quarantined store would actually be visible. Sequence with it, or at least do not design the
   event without it in mind.
 

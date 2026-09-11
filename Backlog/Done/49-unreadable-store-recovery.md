@@ -261,7 +261,7 @@ compatibility cost; nothing is released.
 - Sequencing: settle [32](../32-default-encryption-key.md)'s derivation first.
 - **This item is captured, not scheduled.** The remaining open questions are deliberately open:
   the shape of a store-level event is a design decision worth taking with the diagnostics work
-  ([23](../23-v1-diagnostics-view.md)) in view rather than in isolation, and the `ResetStoreAsync`
+  ([23](23-v1-d0agnostics-view.md)) in view rather than in isolation, and the `ResetStoreAsync`
   question belongs to [16](16-reset-store-async.md). Nothing here needs solving before v1.0
   except the boundary fix.
 - Guidance for applications that need genuine delivery guarantees — which generally means an

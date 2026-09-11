@@ -79,7 +79,7 @@ injection achieves.
   on request options so a consumer's *handler* could stamp a stable key. That was reasoning about
   the wrong layer: a handler cannot tell a replay from a first attempt, but the call site can and
   already sets whatever it likes. Exposing an ID for diagnostics may still be worth doing, but
-  that belongs with [issue 23](../23-v1-diagnostics-view.md), not here.
+  that belongs with [issue 23](23-v1-d0agnostics-view.md), not here.
 
 ## Acceptance Criteria
 
