@@ -12,6 +12,11 @@ namespace Hyperwyc.Tests;
 /// Covers issue #49: a store Hyperwyc cannot read is reported and stepped around, not repaired,
 /// destroyed, or allowed to escape into the caller's HTTP call.
 /// </summary>
+/// <remarks>
+/// Still the behaviour, and now the fallback rather than the first move — every store here
+/// declines to be set aside, which is what the default <c>TryQuarantineAsync</c> does. The stores
+/// that can are <see cref="StoreQuarantineTests"/>.
+/// </remarks>
 public class UnreadableStoreTests
 {
     private const string Url = "https://example.com/api/products";
@@ -61,7 +66,7 @@ public class UnreadableStoreTests
         var collected = new List<HyperwycEvent>();
         events.Subscribe(new Collector(collected));
 
-        var health = new StoreHealth(events);
+        var health = new StoreHealth(store, new HyperwycOptions(), events);
         var handler = new HyperwycHandler(
             store, new FakeConnectivityService(connected), events, new HyperwycOptions(), health)
         { InnerHandler = inner };
@@ -152,8 +157,9 @@ public class UnreadableStoreTests
         var (handler, health, _) = Build(store, transport, connected: false);
         using var client = new HttpClient(handler);
 
-        // The read that trips the latch.
-        health.ReportUnreadable(new CryptographicException(), usingDerivedKey: true);
+        // The read that trips the latch. The store cannot be quarantined — it is one of the
+        // many that have nowhere to put their contents — so this is the terminal state.
+        await health.ReportUnreadableAsync(new CryptographicException(), health.Generation);
 
         // A 202 would promise delivery Hyperwyc has no way to keep, so the write passes through
         // and fails as it would without Hyperwyc installed.
@@ -204,11 +210,12 @@ public class UnreadableStoreTests
     }
 
     [Fact]
-    public void Recovered_ClearsTheLatchSoTheStoreIsUsedAgain()
+    public async Task Recovered_ClearsTheLatchSoTheStoreIsUsedAgain()
     {
-        var health = new StoreHealth(new HyperwycEventStream());
+        var health = new StoreHealth(
+            new AlwaysFailingStore(), new HyperwycOptions(), new HyperwycEventStream());
 
-        health.ReportUnreadable(new CryptographicException(), usingDerivedKey: false);
+        await health.ReportUnreadableAsync(new CryptographicException(), health.Generation);
         Assert.False(health.IsUsable);
 
         health.Recovered();

@@ -335,6 +335,13 @@ public sealed class CabinetStore : IHyperwycStore
 
             Directory.CreateDirectory(attachments);
 
+            // The quarantine goes too. Reset means discard, and the case it exists for is logout:
+            // leaving the previous user's queued writes on disk is the opposite of what was
+            // asked. It also clears the counter, so a later failure may quarantine again. See 62.
+            var quarantine = Path.Combine(_root, QuarantineDirectory);
+            if (Directory.Exists(quarantine))
+                Directory.Delete(quarantine, recursive: true);
+
             // Each RecordSet holds its own in-memory copy, which the file deletion knows nothing
             // about. Refreshing drops them so the next read loads from an empty directory.
             await _cache.RefreshAsync(ct).ConfigureAwait(false);
@@ -346,6 +353,102 @@ public sealed class CabinetStore : IHyperwycStore
         }
     }
 
+    /// <inheritdoc/>
+    public async Task<bool> TryQuarantineAsync(CancellationToken ct = default)
+    {
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var quarantine = Path.Combine(_root, QuarantineDirectory);
+
+            // The existence of the directory is the counter, and that is the whole bound on
+            // accumulation: no configuration, no sweep, no scheduler, storage bounded at 2×. A
+            // store that becomes unreadable twice is a systemic fault rather than an incident,
+            // so the second failure is reported instead of churning another copy onto the
+            // device — and the first orphan, usually the more diagnostic one, survives. See 62.
+            if (Directory.Exists(quarantine)) return false;
+
+            Directory.CreateDirectory(quarantine);
+
+            // Moved rather than copied, so nothing is read — which is the point, because reading
+            // is what just failed. A directory rename also costs nothing on a full disk, which is
+            // one of the ways a store gets into this state.
+            foreach (var directory in StoreDirectories)
+            {
+                var source = Path.Combine(_root, directory);
+                if (Directory.Exists(source))
+                    Directory.Move(source, Path.Combine(quarantine, directory));
+
+                Directory.CreateDirectory(source);
+            }
+
+            // As in ResetAsync: each RecordSet holds its own in-memory copy that the move knows
+            // nothing about, and a set that failed to load has latched that failure.
+            await _cache.RefreshAsync(ct).ConfigureAwait(false);
+            await _outbox.RefreshAsync(ct).ConfigureAwait(false);
+
+            return true;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Reaching a quarantined store (issue 62)
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Opens the store set aside by <see cref="TryQuarantineAsync"/>, or <see langword="null"/>
+    /// if there is not one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This exists because the obvious way to do it is wrong.</b> With no explicit
+    /// <see cref="CabinetStoreOptions.EncryptionKey"/> the key is derived from the store's own
+    /// directory path, and the quarantined bytes were written under the key derived from the
+    /// <em>original</em> path — so opening the quarantine directory as an ordinary store derives
+    /// a different key and finds it unreadable, which looks exactly like the damage that caused
+    /// the quarantine in the first place.
+    /// </para>
+    /// <para>
+    /// Pass the same <see cref="CabinetStoreOptions"/> the live store was configured with.
+    /// Nothing is created if there is no quarantine: probing must not leave a directory behind,
+    /// because its existence is what stops a second quarantine.
+    /// </para>
+    /// <para>
+    /// The result is a fully functional store, so <see cref="GetPendingOutboxAsync"/> returns
+    /// whatever was queued when it stopped being readable. What to do with those writes is the
+    /// application's decision — Hyperwyc will not replay them, because they were queued under a
+    /// <c>202</c> that has long since been answered.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The options the live store was configured with.</param>
+    public static CabinetStore? OpenQuarantined(CabinetStoreOptions options)
+    {
+        var path = QuarantinePath(options);
+        return Directory.Exists(path) ? new CabinetStore(path, KeyFrom(options)) : null;
+    }
+
+    /// <summary>
+    /// Where <see cref="TryQuarantineAsync"/> puts a store it sets aside, whether or not one is
+    /// there yet.
+    /// </summary>
+    /// <remarks>
+    /// A directory inside the store's own, so that
+    /// <see cref="CabinetStoreOptions.DefaultDirectoryPath"/> stays the single path to exclude
+    /// from OS backup — a quarantined store is exactly as unwelcome in a restore as a live one.
+    /// Delete it once you have recovered what you want from it; until it is gone, a second
+    /// failure cannot be quarantined.
+    /// </remarks>
+    /// <param name="options">The options the live store was configured with.</param>
+    public static string QuarantinePath(CabinetStoreOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return Path.Combine(options.DirectoryPath, QuarantineDirectory);
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
@@ -353,6 +456,13 @@ public sealed class CabinetStore : IHyperwycStore
     private static byte[] DeriveKey(string path) =>
         System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(path));
+
+    // The three directories Cabinet's FileOfflineStore writes under the root, and therefore the
+    // whole of what a reset clears and a quarantine moves. Anything else under the root — the
+    // quarantine included — is not Cabinet's and is left alone.
+    private static readonly string[] StoreDirectories = ["records", "index", "attachments"];
+
+    private const string QuarantineDirectory = "quarantine";
 
     // -------------------------------------------------------------------------
     // Bodies (issue #70)

@@ -112,13 +112,15 @@ Any retry can deliver the same request twice: if a response is lost after the se
 
 It sends no headers of its own on the wire and asks nothing of your API. Duplicate suppression is between your application and your backend, using a client-generated domain identity, an `Idempotency-Key` you set at the call site, or a correlation id you already emit. Which one fits, or whether the concern applies at all, depends on your solution.
 
-## An unreadable store is reported, not repaired
+## An unreadable store is set aside, not repaired and not deleted
 
-> **Note:** [backlog item 62](../Backlog/62-reset-store-on-failure.md) is under consideration and will change this scenario, but it is true at time of writing.
+If the store cannot be read, Hyperwyc moves it aside once, starts a clean one, and carries on — logging it and publishing `OnStoreQuarantined`. Nothing is deleted and nothing is thrown, and caching and queueing keep working from the next request onward.
 
-If the store cannot be read, Hyperwyc logs it, publishes `OnStoreUnreadable` once, and passes every request straight through as though it were not installed. Nothing is deleted and nothing is thrown.
+Moved rather than deleted, because a damaged store is still your data and deleting it is irreversible — and the usual cause is a key or path change rather than damage, so the bytes are generally intact and merely unopenable. They stay reachable by whoever holds the key. See [storage.md](storage.md#when-the-store-cant-be-read).
 
-A damaged store is still your data, and deleting it is irreversible. Refusing to start is a decision your application might reasonably make, but Hyperwyc has no standing to make it for you.
+Once, because a store that becomes unreadable a second time is a systemic fault rather than an incident. If a second store becomes unreadable, Hyperwyc falls passthrough: it logs the error, publishes an `OnStoreUnreadable` event, and passes every request straight through as though it were not installed. That also bounds what accumulates on the device, without a sweep or a setting — the existence of the first orphan is the counter.
+
+Refusing to start is a decision your application might reasonably make, but Hyperwyc has no standing to make it for you.
 
 Offline writes are *declined* rather than accepted in that state: with no store to hold them, a `202` would promise delivery Hyperwyc cannot keep, so the request goes to the transport and fails as it would without Hyperwyc there. That failure is visible and recoverable; a lost `202` is neither.
 

@@ -126,7 +126,45 @@ public interface IHyperwycStore
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Clears all data from the store — the outbox and the cache alike.
+    /// Clears all data from the store — the outbox and the cache alike, and any store set aside
+    /// by <see cref="TryQuarantineAsync"/>.
     /// </summary>
+    /// <remarks>
+    /// An explicit reset is the consumer saying <em>discard</em>, so it takes the quarantine with
+    /// it. Leaving one behind would keep the previous user's writes on disk through the logout
+    /// this method exists for, which is the opposite of what was asked.
+    /// </remarks>
     Task ResetAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Moves the unreadable store aside and starts a clean one, returning whether it did.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Called once per session, when a store operation has just failed. Returning
+    /// <see langword="true"/> means the store is now empty and usable, and Hyperwyc resumes
+    /// caching and queueing; returning <see langword="false"/> means it is not, and Hyperwyc
+    /// reports <see cref="Models.HyperwycEventType.OnStoreUnreadable"/> and passes every request
+    /// through for the rest of the session.
+    /// </para>
+    /// <para>
+    /// <b>Move, do not delete.</b> The usual cause of an unreadable store is a key or path
+    /// change rather than damage, so the bytes are generally intact and merely unopenable — and
+    /// they are a user's queued writes. An implementation with nowhere to put them says so by
+    /// returning <see langword="false"/>, which is what the default does.
+    /// </para>
+    /// <para>
+    /// <b>Return <see langword="false"/> if a quarantined store already exists.</b> That is the
+    /// whole of the bound on accumulation: a store that becomes unreadable twice is a systemic
+    /// fault rather than an incident, and the second failure should surface rather than churn
+    /// another copy onto the device. It also means the second orphan never overwrites the first,
+    /// which is usually the more diagnostic one.
+    /// </para>
+    /// <para>
+    /// Whatever is moved aside must stay readable by whoever holds the key — see
+    /// <c>CabinetStore.OpenQuarantined</c> for the trap that lies in wait when the key is derived
+    /// from the store's own path.
+    /// </para>
+    /// </remarks>
+    Task<bool> TryQuarantineAsync(CancellationToken ct = default) => Task.FromResult(false);
 }

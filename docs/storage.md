@@ -58,7 +58,7 @@ services.AddHyperwycCore(sp => new MyStore(...));   // or supply a factory
 
 It is a type parameter rather than an option so that forgetting it is a compile error rather than a silent fall back to in-memory storage that loses everything on restart.
 
-The interface is seven methods and most of them are obvious. What follows is the part that is not.
+The interface is eight methods, one of which has a default implementation, and most of them are obvious. What follows is the part that is not.
 
 ### It must be safe for concurrent use
 
@@ -79,7 +79,7 @@ Hyperwyc stores two things and they have nothing in common but a URL:
 | `QueuedWrite`              | a generated `Id` | the captured request — method, headers, body, client name — and the outcome of the last delivery attempt |
 | `CachedResponse`           | its `Url`        | the stored response — status, headers, body — and when it was cached |
 
-Three methods are the cache's, three are the outbox's, and `ResetAsync` clears both. Nothing crosses: a queued write is never returned by a cache method and a cached response is never returned by an outbox one.
+Three methods are the cache's, three are the outbox's, and `ResetAsync` and `TryQuarantineAsync` are about the store as a whole. Nothing crosses: a queued write is never returned by a cache method and a cached response is never returned by an outbox one.
 
 These were one `Envelope` type until [issue 55](https://github.com/mattgoldman/hyperwyc/blob/main/Backlog/Done/55-envelope-kind-discriminator.md), told apart by an `IsSynced` boolean set `true` on responses that had been synced nowhere. If you wrote a store against that shape, the port is mechanical — the flag becomes the choice of which method is being called — and your queries get simpler, because every "is this the other kind?" filter goes.
 
@@ -95,7 +95,8 @@ A cached response is keyed by the URL it caches, which is what stops the cache a
 | `GetPendingOutboxAsync`         | Return every queued write, **ordered by `CreatedUtc` ascending**. The ordering is yours to provide — the processor does not sort, and delivery order is a promise Hyperwyc makes to its callers |
 | `UpsertQueuedWriteAsync`        | Keyed on `QueuedWrite.Id`. Both an insert and a replace are real — the handler queues, and the processor writes back a failed attempt's outcome                                                                                            |
 | `RemoveDeliveredAsync`          | **Delete the record**, do not flag it — request body and headers included. Hyperwyc is finished with a write once it has been delivered ([ADR 0010](decisions/0010-delivery-ends-hyperwycs-interest.md)), and a delivery is any answer from the server, refusal included. Takes an id and must tolerate one it does not recognise |
-| `ResetAsync`                    | Must work **when the store cannot be read** — clear the underlying files rather than enumerating records, because enumerating means deserialising, which is the thing that just failed                                                    |
+| `ResetAsync`                    | Must work **when the store cannot be read** — clear the underlying files rather than enumerating records, because enumerating means deserialising, which is the thing that just failed. Takes any quarantine with it: reset means discard |
+| `TryQuarantineAsync`            | Optional — the default returns `false`, which gets you the report-and-step-aside behaviour below. Implement it if you have somewhere to put an unreadable store. **Move, do not delete**, and **return `false` if you already have one**: that is the whole bound on how much can pile up |
 
 ### Throwing is how you report failure
 
@@ -109,25 +110,51 @@ If you take one thing from this section: the defect above existed because `InMem
 
 ## When the store can't be read
 
-A local store can become unreadable, e.g. a wrong encryption key, a directory that moved, files damaged. Hyperwyc's response is to **report it and get out of the way**:
+A local store can become unreadable, e.g. a wrong encryption key, a directory that moved, files damaged. Hyperwyc **moves it aside once and starts a clean one**, so that caching and queueing carry on:
 
 - it logs, through an `ILogger` if your IoC container has one;
-- it publishes `OnStoreUnreadable` once (not once per request);
-- and every request from then on passes straight through, as though Hyperwyc weren't installed.
+- it renames the store's contents into a `quarantine` directory inside the store directory — nothing is deleted;
+- it publishes `OnStoreQuarantined` once (not once per request);
+- and every request from the next one onward behaves as though the device had simply never held a store.
 
-Nothing is deleted and nothing is thrown. A damaged store is still your data, and deleting it is irreversible; refusing to start is a decision your application might reasonably make but Hyperwyc has no standing to make for you.
+There is no setting for this and no way to turn it off. A setting would not help: a default nobody changes is the behaviour that ships, so the question is only which behaviour is right.
 
-**Offline writes are declined rather than accepted.** With no store to hold them, a `202` would promise delivery Hyperwyc cannot keep, so the request goes to the transport and fails as it would without Hyperwyc there. That failure is visible and recoverable; a lost `202` is neither.
+**Moved, not deleted.** The usual cause is a changed key or path rather than corruption, so the bytes are generally intact and merely unopenable, and they are your users' queued writes. Destroying them on a failed read would foreclose a recovery that is often still possible.
 
-The simplest approach is to just reset the store. `IHyperwyc` provides a method for this:
+**The request that discovered the problem still degrades.** A read falls through to the network and a write is declined rather than accepted — with no store to hold it, a `202` would promise delivery Hyperwyc cannot keep, so the request goes to the transport and fails as it would without Hyperwyc there. That failure is visible and recoverable; a lost `202` is neither. The *next* request is served from the clean store as normal.
+
+**It happens at most once per session.** If the new store also becomes unreadable, Hyperwyc does not set that one aside as well. It publishes `OnStoreUnreadable`, and every request from then on passes straight through as though Hyperwyc weren't installed.
+
+A store that breaks twice is a systemic fault rather than an incident, and churning stores through it would mask the underlying issue. It also bounds what piles up on the device, at 2× and with no sweep, no scheduler and nothing to configure, as the existence of the quarantine directory is the counter. On Android that matters for the 25 MB Auto Backup quota; the quarantine sits inside the store directory, so the one path you already exclude from backup covers both.
+
+You can still discard everything explicitly, which is the way back to a clean slate after a second failure:
 
 ```csharp
-await hyperwyc.ResetStoreAsync();   // discards the store; caching and queueing resume
+await hyperwyc.ResetStoreAsync();   // discards the store and any quarantine; caching and queueing resume
 ```
 
-That works even when the store cannot be read — it clears the files rather than enumerating records, which would need to decrypt them first.
+That works even when the store cannot be read; it clears the files rather than enumerating records, which would need to decrypt them first. It deletes the quarantine as well as the primary store, because reset means discard: the case it exists for is logout, and leaving the previous user's queued writes on disk is the opposite of what was asked. Resetting also re-arms the quarantine, so the next failure is treated as a first one again.
 
-There is deliberately no option to do this for you. Discarding queued writes is the failure Hyperwyc exists to prevent, and the usual cause of an unreadable store is a changed key or path rather than corruption — so the bytes are generally intact, and destroying them on the first failed read forecloses recovery. Whether Hyperwyc should instead move a bad store aside and start a clean one, keeping both, is an open question rather than a settled no.
+### Getting at a quarantined store
+
+Assuming you are using the default implementation, the quarantined store is an ordinary Cabinet store, and `CabinetStore.OpenQuarantined` returns it (or `null` if there isn't one):
+
+```csharp
+var quarantined = CabinetStore.OpenQuarantined(storeOptions);
+if (quarantined is not null)
+{
+    foreach (var write in await quarantined.GetPendingOutboxAsync())
+    {
+        // Whatever you want to do with it. Hyperwyc will not replay these itself: they were
+        // queued under a 202 that was answered long ago, and re-sending them is a decision
+        // about your API rather than about storage.
+    }
+}
+```
+
+**Use that rather than opening the directory yourself.** With no explicit `EncryptionKey` the key is derived from the store's own path, and the quarantined bytes were written under the key derived from the *original* path — so opening `…/Hyperwyc/quarantine` as an ordinary store derives a different key and finds it unreadable, which looks exactly like the damage that caused the quarantine in the first place. `OpenQuarantined` carries the derivation across the move; pass it the same `CabinetStoreOptions` the live store was configured with.
+
+`CabinetStore.QuarantinePath(storeOptions)` gives you the directory, if you want to delete it once you have what you need. Until it is gone, a second failure cannot be quarantined.
 
 ## Excluding the store from OS backup
 

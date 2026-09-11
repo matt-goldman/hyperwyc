@@ -116,15 +116,17 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
         try
         {
             IReadOnlyList<QueuedWrite> ready;
+            var generation = _health.Generation;
             try
             {
                 ready = await _store.GetPendingOutboxAsync(token).ConfigureAwait(false);
             }
             catch (Exception ex) when (StoreHealth.IsStoreFailure(ex))
             {
-                // Nothing to flush if the outbox cannot be read, and nothing to be done about
-                // it here — reported once, and the handler stops queueing from now on.
-                _health.ReportUnreadable(ex, _options.UsesDerivedEncryptionKey);
+                // Nothing to flush if the outbox cannot be read, and nothing to be done about it
+                // here. Reporting may set the store aside and start a clean one, and there is
+                // still nothing to flush — the new one is empty.
+                await _health.ReportUnreadableAsync(ex, generation, token).ConfigureAwait(false);
                 return;
             }
 
@@ -202,19 +204,22 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     /// Guards the store read the same way <see cref="FlushAsync"/> does: an unreadable store is
     /// reported through <see cref="StoreHealth"/> and the caller gets an empty list, matching the
     /// "Hyperwyc quietly stands aside when the store is broken" behaviour every other read path
-    /// takes. The <see cref="HyperwycEventType.OnStoreUnreadable"/> event is how a diagnostics UI
-    /// learns the store itself is the problem.
+    /// takes. <see cref="HyperwycEventType.OnStoreQuarantined"/> and
+    /// <see cref="HyperwycEventType.OnStoreUnreadable"/> are how a diagnostics UI learns the
+    /// store itself is the problem — and, in the first case, that the outbox it is showing is
+    /// empty because the previous one was set aside rather than because nothing was queued.
     /// </remarks>
     internal async Task<IReadOnlyList<PendingItem>> GetDiagnosticViewAsync(CancellationToken ct = default)
     {
         IReadOnlyList<QueuedWrite> outbox;
+        var generation = _health.Generation;
         try
         {
             outbox = await _store.GetPendingOutboxAsync(ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (StoreHealth.IsStoreFailure(ex))
         {
-            _health.ReportUnreadable(ex, _options.UsesDerivedEncryptionKey);
+            await _health.ReportUnreadableAsync(ex, generation, ct).ConfigureAwait(false);
             return [];
         }
 
