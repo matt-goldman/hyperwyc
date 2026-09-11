@@ -44,7 +44,7 @@ What each part does, in tables. Read a page when you need a fact from it.
 | **[Events](events.md)** | Finding out what the server eventually said about a deferred write |
 | **[Connectivity](connectivity.md)** | The interface, the two shipped implementations, and when to write your own |
 | **[Pipeline placement](pipeline.md)** | Where the handler sits, and what that means for auth |
-| **[Storage](storage.md)** | Location, encryption at rest, what happens when the store cannot be read, and how to implement your own |
+| **[Storage](storage.md)** | Location, encryption at rest, what ends up on disk — credentials included — what happens when the store cannot be read, and how to implement your own |
 | **[Testing an app that uses Hyperwyc](testing.md)** | Faking connectivity, stubbing the replay transport, and a store per test |
 
 ## Why it works this way

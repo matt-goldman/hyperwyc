@@ -46,7 +46,7 @@ var response = await client.PostAsJsonAsync("/sales", sale);
 // 202 Accepted, X-Hyperwyc-Status: Queued
 ```
 
-Register `AddHyperwycHandler()` first, before your own handlers. Everything after it also runs on replayed writes, which is how a write queued on Monday goes out with Tuesday's token.
+Register `AddHyperwycHandler()` first, before your own handlers. Everything after it also runs on replayed writes, which is how a write queued on Monday goes out with Tuesday's token. It also keeps credentials out of the store: a queued write is persisted with every header that was on it when Hyperwyc saw it, so anything your auth handler adds afterwards is never written to disk — see [what ends up on disk](docs/storage.md#what-ends-up-on-disk).
 
 That is the whole setup. Hyperwyc's default behaviour:
 

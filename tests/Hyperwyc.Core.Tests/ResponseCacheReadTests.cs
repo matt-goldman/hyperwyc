@@ -196,6 +196,44 @@ public class ResponseCacheReadTests
         Assert.Null(cached);
     }
 
+    /// <summary>
+    /// A response the server sent without a <c>Content-Length</c> is still measured against the
+    /// cap, rather than passing it as a zero-length body.
+    /// </summary>
+    /// <remarks>
+    /// The cap is read from <c>Content.Headers.ContentLength</c>, which is <see langword="null"/>
+    /// on a chunked response — and null reads as 0, which would let exactly the largest responses
+    /// through the check. What saves it is ordering: the body is buffered first, so by the time
+    /// the length is read it is computed from the buffer. That ordering is load-bearing and not
+    /// obvious from the two lines involved, so it is pinned here.
+    /// </remarks>
+    [Fact]
+    public async Task OversizedBodyWithNoContentLength_IsStillNotCached()
+    {
+        var store = new InMemoryStore();
+        var big = System.Text.Encoding.UTF8.GetBytes(new string('x', 100_000));
+
+        var stub = new Fakes.StubHttpMessageHandler(
+            (Func<HttpRequestMessage, HttpResponseMessage>)(_ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StreamContent(new UnmeasurableStream(big)),
+            }));
+
+        using var client = new HttpClient(BuildHandler(store, stub, cacheIsStale: true, maxBodyBytes: 10));
+
+        var response = await client.GetAsync("https://example.com/api/items");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Null(await store.GetCachedResponseAsync("https://example.com/api/items"));
+    }
+
+    /// <summary>A stream that cannot report its length, as a chunked response body cannot.</summary>
+    private sealed class UnmeasurableStream(byte[] data) : MemoryStream(data)
+    {
+        public override bool CanSeek => false;
+        public override long Length => throw new NotSupportedException();
+    }
+
     // Write requests bypass cache logic
     [Fact]
     public async Task WriteRequest_DoesNotReadOrWriteCache()

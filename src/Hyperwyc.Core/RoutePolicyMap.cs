@@ -62,6 +62,12 @@ public sealed class RoutePolicyMap
     }
 
     /// <summary>
+    /// Every registration, in the order it was made. Used at registration time to validate
+    /// policies the consumer configured, before anything is resolved against them.
+    /// </summary>
+    internal IReadOnlyList<(string Pattern, RoutePolicy Policy)> Registrations => _routes;
+
+    /// <summary>
     /// The most recently registered policy whose pattern matches <paramref name="url"/>, or
     /// <see cref="Default"/>.
     /// </summary>

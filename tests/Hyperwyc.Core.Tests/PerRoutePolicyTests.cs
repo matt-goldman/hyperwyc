@@ -166,4 +166,82 @@ public class PerRoutePolicyTests
 
         Assert.NotNull(await store.GetCachedResponseAsync("https://example.com/api/log"));
     }
+
+    // -------------------------------------------------------------------------
+    // The body cap varies per route (issue #20)
+    // -------------------------------------------------------------------------
+
+    private static StubHttpMessageHandler BodyOf(int bytes) =>
+        new(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(new string('x', bytes)),
+        });
+
+    [Fact]
+    public async Task ARouteCapRaisesTheGlobalOneForThatRouteAlone()
+    {
+        // The point of the override: one endpoint returns a document, and the rest of the
+        // application should not gain the headroom it needed.
+        var store = new InMemoryStore();
+
+        var options = new HyperwycOptions { MaxCachedResponseBodyBytes = 10 };
+        options.Routes.For("/api/reports/*", RoutePolicy.CacheFirst() with { MaxCachedResponseBodyBytes = 1000 });
+
+        using var client = new HttpClient(Handler(store, BodyOf(100), options, connected: true));
+
+        await client.GetAsync("https://example.com/api/reports/annual");
+        await client.GetAsync("https://example.com/api/products");
+
+        Assert.NotNull(await store.GetCachedResponseAsync("https://example.com/api/reports/annual"));
+        Assert.Null(await store.GetCachedResponseAsync("https://example.com/api/products"));
+    }
+
+    [Fact]
+    public async Task ARouteCapLowersTheGlobalOneToo()
+    {
+        var store = new InMemoryStore();
+
+        var options = new HyperwycOptions { MaxCachedResponseBodyBytes = 1000 };
+        options.Routes.For("/api/feed/*", RoutePolicy.CacheFirst() with { MaxCachedResponseBodyBytes = 10 });
+
+        using var client = new HttpClient(Handler(store, BodyOf(100), options, connected: true));
+
+        await client.GetAsync("https://example.com/api/feed/latest");
+
+        Assert.Null(await store.GetCachedResponseAsync("https://example.com/api/feed/latest"));
+    }
+
+    [Fact]
+    public async Task ARouteWithNoCapOfItsOwnUsesTheGlobalOne()
+    {
+        // Unset means inherit, which is what keeps 512 KB from having to be restated on every
+        // policy that does not care about it.
+        var store = new InMemoryStore();
+
+        var options = new HyperwycOptions { MaxCachedResponseBodyBytes = 1000 };
+        options.Routes.For("/api/*", RoutePolicy.CacheFirst(TimeSpan.FromHours(1)));
+
+        using var client = new HttpClient(Handler(store, BodyOf(100), options, connected: true));
+
+        await client.GetAsync("https://example.com/api/products");
+
+        Assert.NotNull(await store.GetCachedResponseAsync("https://example.com/api/products"));
+    }
+
+    [Fact]
+    public async Task ARouteCapOfZeroCachesNoBody()
+    {
+        // Zero is the supported way to say "store nothing here" on a route that should still be
+        // fetched and invalidated normally. NetworkOnly is the blunter instrument.
+        var store = new InMemoryStore();
+
+        var options = new HyperwycOptions();
+        options.Routes.For("/api/feed/*", RoutePolicy.CacheFirst() with { MaxCachedResponseBodyBytes = 0 });
+
+        using var client = new HttpClient(Handler(store, BodyOf(100), options, connected: true));
+
+        await client.GetAsync("https://example.com/api/feed/latest");
+
+        Assert.Null(await store.GetCachedResponseAsync("https://example.com/api/feed/latest"));
+    }
 }

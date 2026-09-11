@@ -34,7 +34,7 @@ Retention and `DeliveryOutcome.Headers` are therefore the same decision, and thi
 
 ### And it couples to the request being discarded
 
-[66](66-dead-letter-store-fails-the-scope-test.md) also discards the request once delivered — correct, and not only for size: the request body and its headers are the most sensitive things in the store ([30](30-sensitive-header-exclusion.md)), and keeping them after delivery extends that exposure for no benefit.
+[66](66-dead-letter-store-fails-the-scope-test.md) also discards the request once delivered — correct, and not only for size: the request body and its headers are the most sensitive things in the store ([30](Done/30-sensitive-header-exclusion.md)), and keeping them after delivery extends that exposure for no benefit.
 
 The consequence is that a retained `400` says *"field X is invalid"* about a request Hyperwyc no longer holds. That is fine, because the application has its own record and its own correlation id, and joining them is the [application-owned-store pattern](50-resilient-applications-guide.md) it was going to build anyway. But it is a real coupling and should be stated rather than discovered.
 

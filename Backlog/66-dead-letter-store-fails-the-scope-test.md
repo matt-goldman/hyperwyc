@@ -17,7 +17,7 @@ That retention is Hyperwyc holding application data on the basis of a distinctio
 | Removed | `IHyperwycStore.MoveToDeadLetterAsync`, `Envelope.IsDeadLettered`, `HyperwycEventType.OnFailed`, and `DeliveryOutcomeKind.Succeeded`/`Rejected` — which collapse into `Delivered`                        |
 | Renamed | `MarkDeliveredAsync` → `RemoveDeliveredAsync`. It deletes the record now, request body and headers included, and a method called *Mark* that deletes is the kind of name this repo files items about     |
 | Changed | `FlushOnStartup` defaults to `false`. See below — it is the condition this item put on itself                                                                                                            |
-| Kept    | `DeliveryOutcome`, and `Envelope.LastOutcome`, which now only ever holds a transport failure. That is [23](done/23-v1-d0agnostics-view.md)'s read path and the only account of an outbox that is not draining |
+| Kept    | `DeliveryOutcome`, and `Envelope.LastOutcome`, which now only ever holds a transport failure. That is [23](Done/23-v1-diagnostics-view.md)'s read path and the only account of an outbox that is not draining |
 
 **One place still reads the status code**, and it is worth knowing about rather than discovering: `InvalidateCacheOnWrite` drops cached reads only on a `2xx`. That is a cache-freshness judgement about Hyperwyc's own data and it follows RFC 9111 §4.4, which invalidates on a *non-error* response to an unsafe method. Invalidating on a `422` would throw away good cached reads for nothing. The line is who owns the data: the cache is ours, the response is the application's.
 
@@ -90,7 +90,7 @@ Do not decide the storage question on the strength of a problem that costs one l
 ### Three things that push toward B
 
 1. **The motivating scenario presupposes its own answer.** A list of inspection reports showing delivered-versus-pending requires the app to have its own store — Hyperwyc cannot render a list, it is not a local database. So the case where Hyperwyc's record looks necessary is the case where the application already holds the fact, and is already updating it from the event.
-2. **"Query on demand" survives either option.** A consumer should be able to ask about a request that is still *outstanding* — that is [23](done/23-v1-d0agnostics-view.md), and it passes Q4, which names "the contents of the outbox" explicitly. B removes history from the queryable set, not the ability to query.
+2. **"Query on demand" survives either option.** A consumer should be able to ask about a request that is still *outstanding* — that is [23](Done/23-v1-diagnostics-view.md), and it passes Q4, which names "the contents of the outbox" explicitly. B removes history from the queryable set, not the ability to query.
 3. **Bounded versus unbounded.** B's store is bounded by work in progress and empties by construction. A's grows with usage and needs a retention policy Hyperwyc has no basis to choose — and unlike the response cache, a delivery record cannot be evicted safely, because eviction loses the only copy.
 
 ### The argument for A that has to be answered
@@ -102,7 +102,7 @@ What genuinely does not survive B is **the body of a non-`2xx` answer**. A `409`
 ## Settled while reasoning it through
 
 - **The current path is B**: remove dead-lettering, keep only what still needs sending. Retention comes back later, deliberately, as [67](67-configurable-response-retention.md) — filed rather than remembered.
-- **Discard the request once delivered**, not only the outcome. The request body and its headers are the largest *and* most sensitive things in the store ([30](30-sensitive-header-exclusion.md)); keeping them past delivery extends that exposure for nothing.
+- **Discard the request once delivered**, not only the outcome. The request body and its headers are the largest *and* most sensitive things in the store ([30](Done/30-sensitive-header-exclusion.md)); keeping them past delivery extends that exposure for nothing.
 - **Absence is not an outcome, and that is B's real cost.** "No longer in the outbox" means delivered, and does not distinguish accepted from rejected. An application that missed the event and infers success from absence is silently wrong. So under B the event is not merely the best report, it is the *only* one.
 - **Which makes 66 conditional on [65](65-startup-flush-requires-a-host.md).** Shipping "the event is your only chance" while the startup flush can fire before a subscriber attaches would be shipping a contract the library breaks by default. Fix the race, or move the trigger, first or together — not after.
 
@@ -112,7 +112,7 @@ What genuinely does not survive B is **the body of a non-`2xx` answer**. A `409`
 - `HyperwycEventType.OnFailed` — nothing failed; a delivery raises one event whatever the status
 - `DeliveryOutcomeKind.Succeeded` / `Rejected` collapse into one, leaving delivery versus transport failure
 - [24](24-v1-dead-letter-management.md) dissolves. "Requeue and dismiss" is un-failing a failure; under this model requeuing is the application making a *new* write, which it can already do
-- [23](done/23-v1-d0agnostics-view.md) narrows to the outbox, which is genuinely Hyperwyc's
+- [23](Done/23-v1-diagnostics-view.md) narrows to the outbox, which is genuinely Hyperwyc's
 - [60](60-glossary.md)'s dead-letter entry disappears rather than being written
 
 `DeliveryOutcome` itself stays. It is what the event carries, and the event is the part that passes Q4.
@@ -134,11 +134,11 @@ This item is the hub. Everything below either depends on it or changes shape onc
 | **66** — this item | Decide it, write the ADR | **First.** Nothing else in the cluster can be assessed until the scope question has an answer |
 | [65](65-startup-flush-requires-a-host.md) | Startup flush needs a host, and races late subscribers | **First or together.** Under this item the event becomes the *only* report of an outcome, so shipping it while the startup flush can fire before a subscriber attaches would be shipping a contract the library breaks by default |
 | [55](Done/55-envelope-kind-discriminator.md) | `Envelope.IsSynced` is a kind discriminator wearing a status name | **After.** This removes two of the flag's three jobs and makes the two-types option the cheaper one rather than the more expensive |
-| [23](done/23-v1-d0agnostics-view.md) | Read-only outbox **and dead-letter** queries | **After.** Narrows rather than dissolves — the outbox half is genuinely ours, and is the only place a transport failure, which publishes no event, can be observed |
+| [23](Done/23-v1-diagnostics-view.md) | Read-only outbox **and dead-letter** queries | **After.** Narrows rather than dissolves — the outbox half is genuinely ours, and is the only place a transport failure, which publishes no event, can be observed |
 | [69](69-expiring-queued-writes.md) | Should an undelivered write expire? | **After.** Reclaims the word for its correct meaning; building it while the word still means the other thing would be confusing to implement and worse to document |
 | [67](67-configurable-response-retention.md) | Opt-in retention of delivered responses | **Much later, if ever.** The point of removing retention is to find out whether anyone needs it back |
 | [24](24-v1-dead-letter-management.md) | Requeue and dismiss | **Closed already.** Dissolved rather than superseded; its halves went to 69 and 67 |
-| [30](30-sensitive-header-exclusion.md) | Caller-set headers are persisted | **Documentation follow-on.** This item shortens the exposure it describes, for outbox entries only |
+| [30](Done/30-sensitive-header-exclusion.md) | Caller-set headers are persisted | **Documentation follow-on.** This item shortens the exposure it describes, for outbox entries only |
 
 ## Acceptance Criteria
 

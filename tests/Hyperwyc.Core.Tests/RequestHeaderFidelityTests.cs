@@ -325,6 +325,49 @@ public class RequestHeaderFidelityTests
         Assert.Equal(["order-42", "order-42"], keysSeen);
     }
 
+    /// <summary>
+    /// A caller-set <c>Authorization</c> header is persisted and replayed unchanged (issue #30).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Pinned so a future "security fix" cannot quietly break replay.</b> Stripping the header
+    /// looks like a hardening change and is in fact a lossiness one: an API key, basic auth or an
+    /// HMAC over stable request content is still valid at replay time, so dropping it turns a
+    /// replay that would have succeeded into one that cannot.
+    /// </para>
+    /// <para>
+    /// The lever a consumer has is placement, not exclusion — a credential added by a handler
+    /// registered after <c>AddHyperwycHandler()</c> is never captured in the first place, because
+    /// Hyperwyc has already serialised the envelope by the time that handler runs. Documented in
+    /// <c>docs/storage.md</c> and <c>docs/pipeline.md</c>.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task CallerSuppliedAuthorization_SurvivesQueueingAndReplayUnchanged()
+    {
+        var store = new InMemoryStore();
+        using (var client = new HttpClient(BuildOfflineHandler(store)))
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api/items")
+            {
+                Content = new StringContent("{}"),
+            };
+            request.Headers.TryAddWithoutValidation("Authorization", "Bearer caller-set-token");
+            await client.SendAsync(request);
+        }
+
+        var queued = Assert.Single(await store.GetPendingOutboxAsync());
+        Assert.Equal("Bearer caller-set-token", queued.RequestHeaders["Authorization"]);
+
+        var transport = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
+        await using var orchestrator = BuildOrchestrator(store, transport);
+        await orchestrator.FlushAsync();
+
+        Assert.Equal(
+            "Bearer caller-set-token",
+            transport.LastRequest!.Headers.GetValues("Authorization").Single());
+    }
+
     [Fact]
     public async Task ReadRequests_AreLeftAlone()
     {
