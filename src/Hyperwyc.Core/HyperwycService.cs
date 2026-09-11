@@ -7,7 +7,7 @@ namespace Hyperwyc;
 /// Default implementation of <see cref="IHyperwyc"/>. Exposes the sync event stream and
 /// delegates flushing and store reset to the <see cref="OutboxProcessor"/>.
 /// </summary>
-internal sealed class HyperwycService : IHyperwyc
+internal sealed class HyperwycService : IHyperwyc, IHyperwycDiagnostics
 {
     private readonly HyperwycEventStream _events;
     private readonly OutboxProcessor _processor;
@@ -31,4 +31,8 @@ internal sealed class HyperwycService : IHyperwyc
     /// <inheritdoc/>
     public Task ResetStoreAsync(CancellationToken ct = default) =>
         _processor.ResetStoreAsync(ct);
+
+    /// <inheritdoc/>
+    public Task<IReadOnlyList<PendingItem>> GetPendingOutboxAsync(CancellationToken ct = default) =>
+        _processor.GetDiagnosticViewAsync(ct);
 }

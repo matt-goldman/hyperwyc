@@ -78,6 +78,12 @@ public sealed class QueuedWrite
     public DateTimeOffset CreatedUtc { get; init; }
 
     /// <summary>
+    /// The number of times Hyperwyc has attempted to deliver the request. Does NOT include
+    /// the original attempt made by the caller.
+    /// </summary>
+    public int RetryCount { get; set; } = 0;
+
+    /// <summary>
     /// What happened on the most recent delivery attempt, or <see langword="null"/> if none
     /// has been made.
     /// </summary>

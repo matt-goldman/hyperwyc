@@ -75,12 +75,14 @@ public static class MauiProgram
         builder.Services.AddSingleton<NewSaleViewModel>();
         builder.Services.AddSingleton<SalesViewModel>();
         builder.Services.AddSingleton<LiveEventsViewModel>();
+        builder.Services.AddSingleton<DiagnosticsViewModel>();
 
         builder.Services.AddSingleton<CataloguePage>();
         builder.Services.AddSingleton<LoginPage>();
         builder.Services.AddSingleton<NewSalePage>();
         builder.Services.AddSingleton<SalesPage>();
         builder.Services.AddSingleton<LiveEventsPage>();
+        builder.Services.AddSingleton<DiagnosticsPage>();
 
 #if DEBUG
         builder.Logging.AddDebug();

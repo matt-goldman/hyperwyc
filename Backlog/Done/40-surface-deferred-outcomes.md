@@ -65,7 +65,7 @@ never hears about.
 
 The outcome must therefore also be **persisted on the envelope**, so a dead-lettered record can
 still explain itself hours later. That is also what would let the diagnostics view
-([issue 23](../23-v1-diagnostics-view.md)) show *why* something failed rather than merely that it
+([issue 23](23-v1-d0agnostics-view.md)) show *why* something failed rather than merely that it
 did — its `DeadLetteredItem` record currently carries no failure detail either.
 
 ## Success needs this too
@@ -252,12 +252,12 @@ correlation), one assumption checked and found to be ahead of the model. Worth t
 - [x] Unit test: a transport failure surfaces as such, distinguishably from an HTTP error.
 - [x] Unit test: failure detail survives serialisation — the envelope a durable store is handed
       round-trips through JSON with its outcome intact. A true end-to-end restart assertion needs
-      a read path for dead-lettered envelopes, which is [issue 23](../23-v1-diagnostics-view.md).
+      a read path for dead-lettered envelopes, which is [issue 23](23-v1-d0agnostics-view.md).
 - [x] README documents how to respond to a deferred failure, framed as "here is what you are
       given", not "here is what to do with it".
 - [x] TECHNICAL_PLAN §6 updated with payloads, correlation and the `SyncOutcome` design.
 - [x] README's "once sync-status inspection lands" caveat removed.
-- [x] [Issue 23](../23-v1-diagnostics-view.md) updated: `DeadLetteredItem` should carry the failure
+- [x] [Issue 23](23-v1-d0agnostics-view.md) updated: `DeadLetteredItem` should carry the failure
       detail this issue persists.
 
 ## Still open
@@ -265,7 +265,7 @@ correlation), one assumption checked and found to be ahead of the model. Worth t
 - **Binary bodies.** `Envelope.RequestBody` and `CachedResponse.Body` remain strings until
   [issue 25](25-binary-request-response-bodies.md). `SyncOutcome.Body` is already `byte[]`.
 - **No read path for dead-lettered envelopes.** The failure detail is persisted and correct, but
-  nothing can enumerate it yet; that is [issue 23](../23-v1-diagnostics-view.md), which should now
+  nothing can enumerate it yet; that is [issue 23](23-v1-d0agnostics-view.md), which should now
   surface `LastOutcome` on its `DeadLetteredItem`.
 
 ## A framing note for the documentation

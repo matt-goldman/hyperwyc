@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Hyperwyc.Sample.Maui.ViewModels"
+             xmlns:models="clr-namespace:Hyperwyc.Models;assembly=Hyperwyc.Core"
+             x:Class="Hyperwyc.Sample.Maui.Pages.DiagnosticsPage">
+    <VerticalStackLayout VerticalOptions="Fill"
+                         HorizontalOptions="Fill">
+        <Label Text="Diagnostics"
+               FontSize="24"
+               VerticalOptions="Center"
+               HorizontalOptions="Center"
+               HorizontalTextAlignment="Center"
+               Margin="20"/>
+
+        <Button Text="Get outbox"
+                Command="{Binding GetPendingItemsCommand}" />
+
+        <RefreshView IsRefreshing="{Binding IsLoading}"
+                     Command="{Binding GetPendingItemsCommand}">
+            <CollectionView ItemsSource="{Binding Outbox}"
+                            VerticalOptions="Fill"
+                            HorizontalOptions="Fill">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <Border StrokeShape="RoundRectangle 20"
+                                Margin="20,10"
+                                Padding="10">
+                            <Grid HorizontalOptions="Fill"
+                                  VerticalOptions="Fill"
+                                  ColumnDefinitions="*,*,*"
+                                  RowDefinitions="*,*,*">
+                                <HorizontalStackLayout>
+                                    <Label Text="Id:"/>
+                                    <Label Text="{Binding Id}"/>
+                                </HorizontalStackLayout>
+                                <HorizontalStackLayout Grid.Column="1"
+                                                       Grid.Row="2">
+                                    <Label Text="Method:"/>
+                                    <Label Text="{Binding Method}"/>
+                                </HorizontalStackLayout>
+
+                                <HorizontalStackLayout Grid.Row="1"
+                                                       Grid.ColumnSpan="2">
+                                    <Label Text="Url:"/>
+                                    <Label Text="{Binding Url}"/>
+                                </HorizontalStackLayout>
+
+                                <HorizontalStackLayout Grid.Row="2">
+                                    <Label Text="Retry count:"/>
+                                    <Label Text="{Binding RetryCount}"/>
+                                </HorizontalStackLayout>
+
+                                <HorizontalStackLayout Grid.Column="2"
+                                                       Grid.Row="2">
+                                    <Label Text="Last outcome:"/>
+                                    <Label Text="{Binding LastOutcome.StatusCode}"/>
+                                </HorizontalStackLayout>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+    </VerticalStackLayout>
+</ContentPage>

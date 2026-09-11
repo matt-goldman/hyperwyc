@@ -89,7 +89,7 @@ read again.
 ## Notes
 
 - Found while auditing Hyperwyc against Service Worker and Workbox for gaps.
-- Interacts with [issue 23](23-v1-diagnostics-view.md): a diagnostics view showing cache size and
+- Interacts with [issue 23](done/23-v1-d0agnostics-view.md): a diagnostics view showing cache size and
   entry count would make this tractable to reason about, and is most of the work of measuring it.
 - Interacts with [issue 32](32-default-encryption-key.md) only indirectly, but the two together
   are the answer to "how much of my users' data is sitting on this device, and how well is it

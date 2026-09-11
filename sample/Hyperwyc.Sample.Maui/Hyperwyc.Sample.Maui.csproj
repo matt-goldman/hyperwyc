@@ -45,6 +45,8 @@
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">21.0</SupportedOSPlatformVersion>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+      
+      <LangVersion>Preview</LangVersion>
     </PropertyGroup>
 
     <ItemGroup>
@@ -68,10 +70,10 @@
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Maui" Version="15.0.1" />
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-        <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.100" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.11" />
+        <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.101" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.12" />
         <PackageReference Include="Plugin.Maui.SmartNavigation" Version="3.0.7" />
-        <PackageReference Include="SkiaSharp.Views.Maui.Controls" Version="4.151.2" />
+        <PackageReference Include="SkiaSharp.Views.Maui.Controls" Version="4.152.0" />
     </ItemGroup>
 
     <ItemGroup>
