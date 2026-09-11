@@ -193,9 +193,13 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<HyperwycEventStream>();
 
         // Shared because the handler is transient and the processor is a singleton, and they
-        // have to agree about whether the store can be read. Logging is optional: Hyperwyc must
-        // work in a container that has none.
+        // have to agree about whether the store can be read. It holds the store because it is
+        // also what sets an unreadable one aside (issue 62) — resolving it here rather than at
+        // each call site keeps the once-per-session decision in one place. Logging is optional:
+        // Hyperwyc must work in a container that has none.
         services.TryAddSingleton(sp => new StoreHealth(
+            sp.GetRequiredService<IHyperwycStore>(),
+            sp.GetRequiredService<HyperwycOptions>(),
             sp.GetRequiredService<HyperwycEventStream>(),
             sp.GetService<ILogger<StoreHealth>>()));
 

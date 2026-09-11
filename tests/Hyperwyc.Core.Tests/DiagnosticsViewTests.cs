@@ -197,8 +197,8 @@ public class DiagnosticsViewTests
         var received = new List<HyperwycEvent>();
         events.Subscribe(new DelegateObserver<HyperwycEvent>(received.Add));
 
-        var health = new StoreHealth(events);
         var store = new ThrowingStore();
+        var health = new StoreHealth(store, new HyperwycOptions(), events);
         await using var processor = new OutboxProcessor(
             store,
             new FakeConnectivityService(isConnected: true),

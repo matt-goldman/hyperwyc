@@ -77,7 +77,7 @@ either form without correcting it just ports the error into two places instead o
   dependency graph, not the consumer's, and the pages currently blur the two — a reader can
   come away thinking Rx is discouraged for them, which is not the position. Worth a clause
   there while this is being fixed.
-- The snippet in [62](../62-reset-store-on-failure.md)'s earlier draft had the same problem, which
+- The snippet in [62](62-reset-store-on-failure.md)'s earlier draft had the same problem, which
   suggests the Rx form is simply what gets reached for when writing an example. That is the
   argument for having a correct one on the page rather than none.
 

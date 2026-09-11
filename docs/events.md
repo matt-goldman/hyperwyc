@@ -24,7 +24,8 @@ A plain `IObserver<T>`, because `IObservable<T>` is in the BCL and Hyperwyc take
 | `OnQueued`          | Request persisted to the outbox — offline, or after a transport failure                     | No — nothing has been attempted |
 | `OnDelivered`       | The server answered — with anything at all; the status is where the meaning is              | Yes                             |
 | `OnUpdated`         | Cached response refreshed                                                                   | No                              |
-| `OnStoreUnreadable` | The local store could not be read; caching and queueing are off for the rest of the session | No                              |
+| `OnStoreQuarantined` | The local store could not be read, so it was set aside and a clean one started; caching and queueing continue | No                              |
+| `OnStoreUnreadable` | The local store could not be read and could not be set aside; caching and queueing are off for the rest of the session | No                              |
 
 **Nothing is published when a re-delivery attempt fails at the transport.** `OnQueued` is emitted if the initial delivery attempt fails and the request is queued, but for subsequent attempts from the outbox that fail, the outcome is recorded on the queued write and the flush stops. This logic applies **per request**, equally for events and the stopped flush - a failed delivery from the outbox is not retried until the next trigger, but the next request in the queue *is* attempted, and if that fails, it is parked too. And neither raises an event.
 

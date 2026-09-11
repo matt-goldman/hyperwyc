@@ -400,13 +400,16 @@ public sealed class HyperwycHandler : DelegatingHandler
     /// </summary>
     private async Task<CachedResponse?> TryReadAsync(Func<Task<CachedResponse?>> read)
     {
+        // Read before the operation, reported after it. See StoreHealth.Generation: a failure
+        // against contents that have since been set aside must not latch the session off.
+        var generation = _health.Generation;
         try
         {
             return await read().ConfigureAwait(false);
         }
         catch (Exception ex) when (StoreHealth.IsStoreFailure(ex))
         {
-            _health.ReportUnreadable(ex, _options.UsesDerivedEncryptionKey);
+            await _health.ReportUnreadableAsync(ex, generation).ConfigureAwait(false);
             return null;
         }
     }
@@ -416,6 +419,7 @@ public sealed class HyperwycHandler : DelegatingHandler
     /// </summary>
     private async Task<bool> TryStoreAsync(Func<Task> write)
     {
+        var generation = _health.Generation;
         try
         {
             await write().ConfigureAwait(false);
@@ -423,7 +427,13 @@ public sealed class HyperwycHandler : DelegatingHandler
         }
         catch (Exception ex) when (StoreHealth.IsStoreFailure(ex))
         {
-            _health.ReportUnreadable(ex, _options.UsesDerivedEncryptionKey);
+            await _health.ReportUnreadableAsync(ex, generation).ConfigureAwait(false);
+
+            // Not retried, even when the report set the store aside and left a clean one behind.
+            // This request already has an answer it can give — the truth, which is that Hyperwyc
+            // is not holding the write — and that answer is visible and recoverable where a 202
+            // for a write that went into a store mid-failure would not be. The next request
+            // queues normally.
             return false;
         }
     }

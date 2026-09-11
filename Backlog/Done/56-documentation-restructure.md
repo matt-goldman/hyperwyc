@@ -221,4 +221,4 @@ answered here. [60](../60-glossary.md) is independent of both and can be done at
   is a transcript rather than an expectation. Worth repeating for any future guide.
 - Comments and TODOs left in the docs now belong to open items only —
   [59](59-events-without-system-reactive.md) on the Rx snippet,
-  [60](../60-glossary.md) on dead-lettering, [62](../62-reset-store-on-failure.md) on store reset.
+  [60](../60-glossary.md) on dead-lettering, [62](62-reset-store-on-failure.md) on store reset.

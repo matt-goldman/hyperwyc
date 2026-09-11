@@ -9,8 +9,15 @@ namespace Hyperwyc;
 /// where durability is not required.
 /// </summary>
 /// <remarks>
+/// <para>
 /// All state is lost when the process exits. For durable persistence use
 /// <c>Hyperwyc.Cabinet</c> instead.
+/// </para>
+/// <para>
+/// It does not implement <see cref="IHyperwycStore.TryQuarantineAsync"/>, taking the default
+/// that declines. There is nowhere to set anything aside, and nothing to set aside anyway — a
+/// dictionary does not become unreadable. See issue 62.
+/// </para>
 /// </remarks>
 public sealed class InMemoryStore : IHyperwycStore
 {
