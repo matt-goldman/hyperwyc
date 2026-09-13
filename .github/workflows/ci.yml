@@ -17,7 +17,7 @@ on:
       - 'Directory.Build.props'
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
