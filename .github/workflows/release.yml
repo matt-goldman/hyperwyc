@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'sample/**'
+      - 'Directory.Build.props'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+  version-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+
+      - name: compare version numbers
+        id: check
+        run: |
+            set -euo pipefail
+
+            PROPS="Directory.Build.props"
+
+            # Version on the tip commit (this push)
+            CURRENT_VERSION=$(grep -oE '<Version>[^<]+' "$PROPS" | head -n1 | sed 's|<Version>||')
+            
+            # Version on the previous commit
+            mkdir -p "${{ runner.temp }}/prev"
+            git show HEAD~1:"$PROPS" > "${{ runner.temp }}/prev/build.xml"
+
+            PREV_VERSION=$(grep -oE '<Version>[^<]+' "${{ runner.temp }}/prev/build.xml" | head -n1 | sed 's|<Version>||')
+
+            echo "Version now : $CURRENT_VERSION"
+            echo "Version prev: $PREV_VERSION"
+
+            VERSION_CHANGED=false
+            if [ "$CURRENT_VERSION" != "$PREV_VERSION" ]; then
+                VERSION_CHANGED=true
+            fi
+
+            if [ "$VERSION_CHANGED" = "false" ]; then
+                echo "No version change — skipping release."
+                exit 0
+            fi
+
+            echo "✓ Version bumped — release will proceed."
+            # TODO: Verify new version is semantically greater than previous
+            VERSION_CHANGED=true
+            echo "release=true" >> $GITHUB_OUTPUT
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+        
+    outputs:
+        release: ${{ steps.check.outputs.release }}
+        version: ${{ steps.check.outputs.version }}
+
+  release-core:
+    if: needs.version-check.outputs.release == 'true'
+    uses: ./.github/workflows/reusable-publish.yml
+    with:
+      project_path: src/Hyperwyc.Core/Hyperwyc.Core.csproj
+    needs: version-check
+
+  release-main:
+    if: needs.version-check.outputs.release == 'true'
+    uses: ./.github/workflows/reusable-publish.yml
+    with:
+      project_path: src/Hyperwyc/Hyperwyc.csproj
+      wait_for_package_id: Hyperwyc.Core
+      wait_for_package_version: ${{ needs.version-check.outputs.version }}
+    needs: [version-check, release-core]
+
+
+      

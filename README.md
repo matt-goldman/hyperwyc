@@ -1,10 +1,12 @@
 # Hyperwyc
 
+<img src="/assets/tarda-full-light.svg" width=256 />
+
+![NuGet Version](https://img.shields.io/nuget/v/Hyperwyc?style=for-the-badge) ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/:matt-goldman/:hyperwyc/:ci?branch=main&style=for-the-badge)
+
 **HTTP When You Can: A Service Worker for .NET.**
     
 An `HttpClient` handler that caches responses, queues writes it cannot send, and replays them when the network comes back, *without changing your calling code.*
-
-*(**Hyper**text transfer protocol, **w**hen **y**ou **c**an.)*
 
 ## Quick start
 

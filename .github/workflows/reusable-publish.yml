@@ -1,0 +1,67 @@
+name: Reusable Publish Workflow
+
+on:
+  workflow_call:
+    inputs:
+      project_path:
+        required: true
+        type: string
+      wait_for_package_id:
+        required: false
+        type: string
+      wait_for_package_version:
+        required: false
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions: 
+      id-token: write
+      contents: read
+    steps:
+      - name: Wait for ${{ inputs.wait_for_package_id }} version ${{ inputs.wait_for_package_version }} to be available on NuGet
+        if: ${{ inputs.wait_for_package_id && inputs.wait_for_package_version }}
+        run: |
+            PACKAGE_ID_LOWER=$(echo "${{ inputs.wait_for_package_id }}" | tr '[:upper:]' '[:lower:]')
+            PACKAGE_URL="https://api.nuget.org/v3-flatcontainer/$PACKAGE_ID_LOWER/${{ inputs.wait_for_package_version }}/$PACKAGE_ID_LOWER.${{ inputs.wait_for_package_version }}.nupkg"
+
+            echo "Polling for: $PACKAGE_URL"
+            for i in {1..30}; do
+              if curl --head --silent --fail "$PACKAGE_URL" > /dev/null; then
+                echo "Package available!"
+                exit 0
+              fi
+              echo "Not yet available... retrying in 10s"
+              sleep 10
+            done
+
+            echo "::error::${{ inputs.wait_for_package_id }} ${{ inputs.wait_for_package_version }} did not appear on NuGet within 5 minutes. Refusing to publish a package whose dependency is missing."
+            exit 1
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: |
+          dotnet build ${{ inputs.project_path }} --configuration Release
+
+      # Get a short-lived NuGet API key
+      - name: NuGet login (OIDC → temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: matt-goldman
+
+      - name: Push to NuGet
+        run: |
+          PROJECT_DIR=$(dirname "${{ inputs.project_path }}")
+          dotnet nuget push "$PROJECT_DIR/bin/Release/*.nupkg" \
+            --api-key ${{steps.login.outputs.NUGET_API_KEY}} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
