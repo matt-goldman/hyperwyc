@@ -77,6 +77,9 @@ jobs:
 
   release-core:
     if: needs.version-check.outputs.release == 'true'
+    permissions:
+      id-token: write
+      contents: read
     uses: ./.github/workflows/reusable-publish.yml
     with:
       project_path: src/Hyperwyc.Core/Hyperwyc.Core.csproj
@@ -84,6 +87,9 @@ jobs:
 
   release-main:
     if: needs.version-check.outputs.release == 'true'
+    permissions:
+      id-token: write
+      contents: read
     uses: ./.github/workflows/reusable-publish.yml
     with:
       project_path: src/Hyperwyc/Hyperwyc.csproj
