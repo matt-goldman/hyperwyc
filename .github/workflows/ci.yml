@@ -3,8 +3,16 @@ name: CI
 on:
   push:
     branches: ["main"]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'sample/**'
   pull_request:
     branches: ["main"]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'sample/**'
 
 jobs:
   build:
@@ -26,3 +34,4 @@ jobs:
 
       - name: Test
         run: dotnet test --no-build --configuration Release --verbosity normal
+      
