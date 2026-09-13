@@ -17,12 +17,8 @@
     <PackageReference Include="Cabinet" Version="2.0.0" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Hyperwyc.Core\Hyperwyc.Core.csproj" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(Configuration)' == 'Release'">
-    <PackageReference Include="Hyperwyc.Core" Version="$(Version)" />
   </ItemGroup>
 
 </Project>
