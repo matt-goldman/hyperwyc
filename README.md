@@ -2,7 +2,9 @@
 
 <img src="/assets/tarda-full-light.svg" width=512 />
 
-![NuGet Version](https://img.shields.io/nuget/v/Hyperwyc&style=for-the-badge) ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/:matt-goldman/:hyperwyc/ci.yml?branch=main&style=for-the-badge)
+![NuGet Version](https://img.shields.io/nuget/v/Hyperwyc.Core?style=for-the-badge)  ![NuGet Version](https://img.shields.io/nuget/v/Hyperwyc?style=for-the-badge)
+
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/:matt-goldman/:hyperwyc/ci.yml?branch=main&style=for-the-badge)
 
 **HTTP When You Can: A Service Worker for .NET.**
     
