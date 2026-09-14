@@ -6,7 +6,13 @@ namespace Hyperwyc.Tests;
 public class HyperwycEventStreamTests
 {
     private static HyperwycEvent MakeEvent(HyperwycEventType type = HyperwycEventType.OnQueued) =>
-        new(type, "https://example.com/api/orders", "POST", DateTimeOffset.UtcNow);
+        new()
+        {
+            Type      = type,
+            Url       = "https://example.com/api/orders",
+            Method    = "POST",
+            Timestamp = DateTimeOffset.UtcNow,
+        };
 
     // -------------------------------------------------------------------------
     // Helpers

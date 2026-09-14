@@ -385,14 +385,17 @@ internal sealed class OutboxProcessor : IDisposable, IAsyncDisposable
     }
 
     private static HyperwycEvent EventFor(HyperwycEventType type, QueuedWrite write, DeliveryOutcome? outcome) =>
-        new(type,
-            write.Url,
-            write.Method,
-            DateTimeOffset.UtcNow,
-            CorrelationId: write.CorrelationId,
-            RequestId: write.Id,
-            RequestBody: write.RequestBody,
-            Outcome: outcome);
+        new()
+        {
+            Type          = type,
+            Url           = write.Url,
+            Method        = write.Method,
+            Timestamp     = DateTimeOffset.UtcNow,
+            CorrelationId = write.CorrelationId,
+            RequestId     = write.Id,
+            RequestBody   = write.RequestBody,
+            Outcome       = outcome,
+        };
 
     /// <summary>
     /// Discards the delivered write, publishes the outcome, and invalidates the cache if the

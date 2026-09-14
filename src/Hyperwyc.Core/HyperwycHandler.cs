@@ -164,14 +164,16 @@ public sealed class HyperwycHandler : DelegatingHandler
         if (!await TryStoreAsync(() => _store.UpsertQueuedWriteAsync(write, ct)).ConfigureAwait(false))
             return null;
 
-        _events.Publish(new HyperwycEvent(
-            HyperwycEventType.OnQueued,
-            request.RequestUri?.ToString() ?? string.Empty,
-            request.Method.Method,
-            DateTimeOffset.UtcNow,
-            CorrelationId: write.CorrelationId,
-            RequestId: write.Id,
-            RequestBody: write.RequestBody));
+        _events.Publish(new HyperwycEvent
+        {
+            Type          = HyperwycEventType.OnQueued,
+            Url           = request.RequestUri?.ToString() ?? string.Empty,
+            Method        = request.Method.Method,
+            Timestamp     = DateTimeOffset.UtcNow,
+            CorrelationId = write.CorrelationId,
+            RequestId     = write.Id,
+            RequestBody   = write.RequestBody,
+        });
 
         return HyperwycResponseFactory.Queued(write.CorrelationId);
     }
@@ -260,8 +262,13 @@ public sealed class HyperwycHandler : DelegatingHandler
                     .ConfigureAwait(false);
             }
 
-            _events.Publish(new HyperwycEvent(
-                HyperwycEventType.OnDelivered, url, request.Method.Method, DateTimeOffset.UtcNow));
+            _events.Publish(new HyperwycEvent
+            {
+                Type      = HyperwycEventType.OnDelivered,
+                Url       = url,
+                Method    = request.Method.Method,
+                Timestamp = DateTimeOffset.UtcNow,
+            });
         }
 
         return response;
@@ -342,8 +349,13 @@ public sealed class HyperwycHandler : DelegatingHandler
         if (!await TryStoreAsync(() => _store.PutCachedResponseAsync(cached, ct)).ConfigureAwait(false))
             return;
 
-        _events.Publish(new HyperwycEvent(
-            HyperwycEventType.OnUpdated, url, request.Method.Method, DateTimeOffset.UtcNow));
+        _events.Publish(new HyperwycEvent
+        {
+            Type      = HyperwycEventType.OnUpdated,
+            Url       = url,
+            Method    = request.Method.Method,
+            Timestamp = DateTimeOffset.UtcNow,
+        });
     }
 
     // -------------------------------------------------------------------------

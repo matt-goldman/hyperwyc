@@ -4,13 +4,18 @@
 
 `HyperwycRequestOptions.CorrelationId` lets a caller name a write so its outcome can be matched
 back to a local record. It works for a queued write. It does not reach the `OnDelivered` published
-when a write goes out online, which is constructed with four arguments and no correlation id at
-all:
+when a write goes out online, which sets the type, URL, method and timestamp and no correlation id
+at all:
 
 ```csharp
 // HyperwycHandler.HandleOnlineWriteAsync
-_events.Publish(new HyperwycEvent(
-    HyperwycEventType.OnDelivered, url, request.Method.Method, DateTimeOffset.UtcNow));
+_events.Publish(new HyperwycEvent
+{
+    Type      = HyperwycEventType.OnDelivered,
+    Url       = url,
+    Method    = request.Method.Method,
+    Timestamp = DateTimeOffset.UtcNow,
+});
 ```
 
 So an application driving its UI from the event stream has a hole in the happy path: every

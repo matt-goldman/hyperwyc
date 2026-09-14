@@ -19,42 +19,50 @@ namespace Hyperwyc.Models;
 /// <see cref="QueuedWrite.LastOutcome"/>.
 /// </para>
 /// </remarks>
-/// <param name="Type">The kind of lifecycle transition that occurred.</param>
-/// <param name="Url">The URL of the request that triggered the event.</param>
-/// <param name="Method">The HTTP method of the request (e.g. <c>GET</c>, <c>POST</c>).</param>
-/// <param name="Timestamp">The UTC instant at which the event was emitted.</param>
-/// <param name="CorrelationId">
-/// Identifies which queued write this concerns. The value the caller set through
-/// <see cref="HyperwycRequestOptions.CorrelationId"/>, or one Hyperwyc generated and returned
-/// on the <c>202</c>. <see langword="null"/> for events that do not concern a queued write,
-/// such as <see cref="HyperwycEventType.OnUpdated"/>.
-/// </param>
-/// <param name="RequestId">
-/// Hyperwyc's own identifier for the envelope. Unique, unlike
-/// <paramref name="CorrelationId"/>, and the handle a diagnostics view over the outbox uses.
-/// Applications correlating against their own records want <paramref name="CorrelationId"/>.
-/// </param>
-/// <param name="RequestBody">
-/// The body of the queued request as raw bytes, so a consumer can deserialise its own payload
-/// back out without having kept a copy. <see langword="null"/> for bodyless requests. Bytes
-/// rather than a string for the same reason as <see cref="QueuedWrite.RequestBody"/> — a body is
-/// not necessarily text.
-/// </param>
-/// <param name="Outcome">
-/// What the server said, on <see cref="HyperwycEventType.OnDelivered"/> — the status, the reason
-/// phrase and the body, whatever they were. <see langword="null"/> on every other event type,
-/// where no delivery has completed.
-/// </param>
-public record HyperwycEvent(
-    HyperwycEventType Type,
-    string Url,
-    string Method,
-    DateTimeOffset Timestamp,
-    string? CorrelationId = null,
-    string? RequestId = null,
-    byte[]? RequestBody = null,
-    DeliveryOutcome? Outcome = null)
+public record HyperwycEvent
 {
+    /// <summary>The kind of lifecycle transition that occurred.</summary>
+    public required HyperwycEventType Type { get; init; }
+
+    /// <summary>The URL of the request that triggered the event.</summary>
+    public required string Url { get; init; }
+
+    /// <summary>The HTTP method of the request (e.g. <c>GET</c>, <c>POST</c>).</summary>
+    public required string Method { get; init; }
+
+    /// <summary>The UTC instant at which the event was emitted.</summary>
+    public required DateTimeOffset Timestamp { get; init; }
+
+    /// <summary>
+    /// Identifies which queued write this concerns. The value the caller set through
+    /// <see cref="HyperwycRequestOptions.CorrelationId"/>, or one Hyperwyc generated and returned
+    /// on the <c>202</c>. <see langword="null"/> for events that do not concern a queued write,
+    /// such as <see cref="HyperwycEventType.OnUpdated"/>.
+    /// </summary>
+    public string? CorrelationId { get; init; }
+
+    /// <summary>
+    /// Hyperwyc's own identifier for the envelope. Unique, unlike
+    /// <see cref="CorrelationId"/>, and the handle a diagnostics view over the outbox uses.
+    /// Applications correlating against their own records want <see cref="CorrelationId"/>.
+    /// </summary>
+    public string? RequestId { get; init; }
+
+    /// <summary>
+    /// The body of the queued request as raw bytes, so a consumer can deserialise its own payload
+    /// back out without having kept a copy. <see langword="null"/> for bodyless requests. Bytes
+    /// rather than a string for the same reason as <see cref="QueuedWrite.RequestBody"/> — a body is
+    /// not necessarily text.
+    /// </summary>
+    public byte[]? RequestBody { get; init; }
+
+    /// <summary>
+    /// What the server said, on <see cref="HyperwycEventType.OnDelivered"/> — the status, the reason
+    /// phrase and the body, whatever they were. <see langword="null"/> on every other event type,
+    /// where no delivery has completed.
+    /// </summary>
+    public DeliveryOutcome? Outcome { get; init; }
+
     /// <summary>
     /// <see cref="RequestBody"/> decoded as UTF-8, or <see langword="null"/> if there is no body.
     /// </summary>

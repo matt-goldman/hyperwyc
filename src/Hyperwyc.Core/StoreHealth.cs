@@ -196,11 +196,13 @@ public sealed class StoreHealth(
             + "key they were written under. {Cause}",
             CauseText);
 
-        events.Publish(new HyperwycEvent(
-            HyperwycEventType.OnStoreQuarantined,
-            string.Empty,
-            string.Empty,
-            DateTimeOffset.UtcNow));
+        events.Publish(new HyperwycEvent
+        {
+            Type      = HyperwycEventType.OnStoreQuarantined,
+            Url       = string.Empty,
+            Method    = string.Empty,
+            Timestamp = DateTimeOffset.UtcNow,
+        });
 
         lock (_gate)
         {
@@ -232,11 +234,13 @@ public sealed class StoreHealth(
             + "IHyperwyc.ResetStoreAsync() to discard the store and start again.",
             CauseText);
 
-        events.Publish(new HyperwycEvent(
-            HyperwycEventType.OnStoreUnreadable,
-            string.Empty,
-            string.Empty,
-            DateTimeOffset.UtcNow));
+        events.Publish(new HyperwycEvent
+        {
+            Type      = HyperwycEventType.OnStoreUnreadable,
+            Url       = string.Empty,
+            Method    = string.Empty,
+            Timestamp = DateTimeOffset.UtcNow,
+        });
     }
 
     /// <summary>
