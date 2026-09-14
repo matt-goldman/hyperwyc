@@ -104,7 +104,7 @@ Reference: [delivery and route policies](docs/delivery.md) ·
 
 | Package         | Use it when                                                                                      |
 | --------------- | ------------------------------------------------------------------------------------------------ |
-| `Hyperwyc`      | Almost always. Includes durable [Cabinet](https://github.com/mattgoldman/cabinet)-backed storage |
+| `Hyperwyc`      | Almost always. Includes durable [Cabinet](https://github.com/matt-goldman/cabinet)-backed storage |
 | `Hyperwyc.Core` | You are supplying your own `IHyperwycStore`. No storage dependency                               |
 
 ## Licence
